@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="view_employee_form_multi_hr_responsible" model="ir.ui.view">
+        <field name="name">hr.employee.form.multi.hr.responsible</field>
+        <field name="model">hr.employee</field>
+        <field name="inherit_id" ref="hr.view_employee_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='hr_settings']//group[@name='managers']/field[@name='hr_responsible_id']" position="replace">
+                <field name="hr_responsible_ids" widget="many2many_avatar_user" options="{'no_create': True}" />
+            </xpath>
+        </field>
+    </record>
+</odoo>
