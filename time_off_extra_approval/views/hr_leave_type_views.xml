@@ -7,8 +7,6 @@
         <field name="inherit_id" ref="hr_holidays.edit_holiday_status_form"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='responsible_ids']" position="after">
-                <field name="employee_responsible_approval_mode"
-                       invisible="leave_validation_type != 'employee_hr_responsibles'"/>
                 <field name="extra_responsible_user_ids"
                        widget="many2many_tags"
                        placeholder="No extra officers"
@@ -17,6 +15,19 @@
                        widget="many2many_tags"
                        placeholder="No extra offices/departments"
                        invisible="requires_allocation == 'no' or allocation_validation_type not in ['officer','leader']"/>
+            </xpath>
+
+            <!-- Visible block under "Approval" radios (not lost beside Notify HR at top). -->
+            <xpath expr="//group[@id='time_off_requests']/field[@name='leave_validation_type']" position="after">
+                <group string="HR responsibles workflow"
+                       colspan="2"
+                       class="o_inner_group"
+                       invisible="leave_validation_type != 'employee_hr_responsibles'">
+                    <field name="employee_responsible_approval_mode"/>
+                    <field name="employee_responsible_source"/>
+                    <field name="employee_responsible_escalation_hours"
+                           invisible="employee_responsible_approval_mode != 'sequential'"/>
+                </group>
             </xpath>
 
             <!-- Full width directly under Time Off / Allocation approval radios (not beside Negative Cap). -->

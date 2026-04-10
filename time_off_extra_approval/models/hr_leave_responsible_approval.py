@@ -24,11 +24,16 @@ class HrLeaveResponsibleApproval(models.Model):
             ("pending", "Pending"),
             ("approved", "Approved"),
             ("refused", "Refused"),
+            ("skipped", "Skipped (timeout / escalated)"),
         ],
         required=True,
         default="pending",
     )
     action_date = fields.Datetime()
+    pending_since = fields.Datetime(
+        string="Active Since",
+        help="When this step became the current approver (used for sequential timeout escalation).",
+    )
 
     _sql_constraints = [
         (

@@ -1,8 +1,27 @@
+from datetime import timedelta
+
 from odoo import api, fields, models
 from odoo.exceptions import UserError
 from odoo.tools.translate import _
 
+from odoo.addons.hr_job_title_vn.models.hr_version import JOB_TITLE_SELECTION
+
 _MULTI_STEP_RESET_CTX = "time_off_multi_step_reset_skip"
+
+# Order for sequential HR-responsible approval: by job title (keys from hr_job_title_vn), lowest first.
+# Excludes the generic employee tier so approvers map to management chain only.
+_HR_RESPONSIBLE_APPROVAL_JOB_TITLE_ORDER = tuple(
+    key for key, _label in JOB_TITLE_SELECTION if key != "nhân viên"
+)
+
+
+def _job_title_approval_sort_key(user, order_index):
+    """Return (rank, user_id) for sorting approvers by job title."""
+    title = user.employee_id.job_title if user.employee_id else False
+    if title and title in order_index:
+        return (order_index[title], user.id)
+    # Unknown / empty title: after defined chain, stable by user id
+    return (len(order_index) + 1, user.id)
 
 
 class HolidaysRequest(models.Model):
@@ -54,16 +73,29 @@ class HolidaysRequest(models.Model):
         "holiday_status_id.extra_responsible_department_ids",
         "validation_type",
         "multi_step_current",
+        "employee_id",
+        "employee_id.hr_responsible_ids",
+        "employee_id.hr_responsible_id",
         "holiday_status_id.multi_approval_step_ids",
         "holiday_status_id.multi_approval_step_ids.approver_user_id",
         "holiday_status_id.multi_approval_step_ids.approver_user_ids",
         "holiday_status_id.multi_approval_step_ids.approver_department_ids",
+        "holiday_status_id.employee_responsible_source",
+        "employee_id.parent_id",
+        "employee_id.parent_id.parent_id",
+        "employee_id.parent_id.parent_id.parent_id",
+        "employee_id.parent_id.parent_id.parent_id.parent_id",
+        "employee_id.parent_id.parent_id.parent_id.parent_id.parent_id",
     )
     def _compute_extra_approver_user_ids(self):
         for leave in self:
             if leave.validation_type == "multi_step_6":
                 step = leave._get_current_multi_step()
                 leave.extra_approver_user_ids = step and step._get_all_approver_users() or self.env["res.users"]
+                continue
+
+            if leave.validation_type == "employee_hr_responsibles":
+                leave.extra_approver_user_ids = leave._get_responsible_approval_users()
                 continue
 
             users = leave.holiday_status_id.extra_responsible_user_ids
@@ -87,6 +119,47 @@ class HolidaysRequest(models.Model):
         if not users and self.employee_id.hr_responsible_id:
             users = self.employee_id.hr_responsible_id
         return users
+
+    def _get_org_chart_approver_users_ordered(self):
+        """Walk manager chain (parent_id); for each job title tier take the first match (bottom-up)."""
+        self.ensure_one()
+        employee = self.employee_id
+        if not employee:
+            return self.env["res.users"]
+        chain = []
+        cur = employee.parent_id
+        while cur:
+            chain.append(cur)
+            cur = cur.parent_id
+        user_ids = []
+        seen = set()
+        for title in _HR_RESPONSIBLE_APPROVAL_JOB_TITLE_ORDER:
+            match = next(
+                (
+                    e
+                    for e in chain
+                    if e.job_title == title and e.user_id and not e.user_id.share
+                ),
+                None,
+            )
+            if match and match.user_id.id not in seen:
+                user_ids.append(match.user_id.id)
+                seen.add(match.user_id.id)
+        return self.env["res.users"].browse(user_ids)
+
+    def _get_responsible_approval_users(self):
+        self.ensure_one()
+        if self.holiday_status_id.employee_responsible_source == "org_chart":
+            return self._get_org_chart_approver_users_ordered()
+        return self._get_employee_responsible_users()
+
+    def _sort_responsible_users_by_job_title(self, users):
+        """Sequential chain order: trưởng nhóm → trưởng BP → kiểm soát → trưởng phòng HCNS → giám đốc (see hr_job_title_vn)."""
+        self.ensure_one()
+        order_index = {title: idx for idx, title in enumerate(_HR_RESPONSIBLE_APPROVAL_JOB_TITLE_ORDER)}
+        return users.sorted(
+            key=lambda u: _job_title_approval_sort_key(u, order_index)
+        )
 
     def _get_multi_step_approvers(self):
         self.ensure_one()
@@ -133,7 +206,7 @@ class HolidaysRequest(models.Model):
 
     def _get_responsible_for_approval(self):
         if self.validation_type == "employee_hr_responsibles":
-            return self._get_employee_responsible_users()
+            return self._get_responsible_approval_users()
         if self.validation_type == "multi_step_6":
             return self._get_multi_step_approvers()
 
@@ -145,14 +218,27 @@ class HolidaysRequest(models.Model):
             res |= self.extra_approver_user_ids
         return res
 
-    @api.depends("validation_type", "state", "responsible_approval_line_ids.state")
+    @api.depends(
+        "validation_type",
+        "state",
+        "holiday_status_id",
+        "holiday_status_id.leave_validation_type",
+        "holiday_status_id.employee_responsible_approval_mode",
+        "holiday_status_id.employee_responsible_source",
+        "employee_id",
+        "employee_id.hr_responsible_ids",
+        "employee_id.hr_responsible_id",
+        "responsible_approval_line_ids",
+        "responsible_approval_line_ids.state",
+        "responsible_approval_line_ids.user_id",
+    )
     def _compute_can_responsible_approve(self):
         for leave in self:
             can = False
             if leave.validation_type == "employee_hr_responsibles" and leave.state == "confirm":
                 if leave.env.user.has_group("hr_holidays.group_hr_holidays_manager"):
                     can = True
-                elif leave.env.user in leave._get_employee_responsible_users():
+                elif leave.env.user in leave._get_responsible_approval_users():
                     mode = leave.holiday_status_id.employee_responsible_approval_mode
                     if mode == "sequential":
                         user_line = leave.responsible_approval_line_ids.filtered(
@@ -177,23 +263,43 @@ class HolidaysRequest(models.Model):
                 continue
             if leave.responsible_approval_line_ids:
                 continue
-            approvers = leave._get_employee_responsible_users().sorted("id")
+            lt = leave.holiday_status_id
+            approvers = leave._get_responsible_approval_users()
+            if lt.employee_responsible_approval_mode == "sequential" and lt.employee_responsible_source != "org_chart":
+                approvers = leave._sort_responsible_users_by_job_title(approvers)
             if not approvers:
+                if lt.employee_responsible_source == "org_chart":
+                    raise UserError(
+                        _(
+                            "No approver was found from the organization chart. Set managers on the employee "
+                            "and job titles (team lead → dept head → controller → HR head → director) on the hierarchy."
+                        )
+                    )
                 raise UserError(_("This employee has no HR Responsible configured."))
             if len(approvers) > 6:
                 raise UserError(_("This workflow supports up to 6 HR Responsibles per employee."))
+            now = fields.Datetime.now()
             for sequence, user in enumerate(approvers, start=1):
-                line_model.create(
-                    {
-                        "leave_id": leave.id,
-                        "user_id": user.id,
-                        "sequence": sequence,
-                    }
-                )
+                vals = {
+                    "leave_id": leave.id,
+                    "user_id": user.id,
+                    "sequence": sequence,
+                }
+                if sequence == 1 and lt.employee_responsible_approval_mode == "sequential":
+                    vals["pending_since"] = now
+                line_model.create(vals)
 
     def action_confirm(self):
         res = super().action_confirm()
-        self.filtered(lambda l: l.validation_type == "employee_hr_responsibles" and l.state == "confirm")._init_responsible_approval_lines()
+        subset = self.filtered(
+            lambda l: l.validation_type == "employee_hr_responsibles" and l.state == "confirm"
+        )
+        if subset:
+            subset._init_responsible_approval_lines()
+            # Ensure O2M lines and approver M2M refresh (buttons + "Waiting For Me" use computed fields).
+            subset.modified(
+                ["responsible_approval_line_ids", "employee_id", "holiday_status_id"]
+            )
         return res
 
     def _check_approval_update(self, state, raise_if_not_possible=True):
@@ -223,7 +329,7 @@ class HolidaysRequest(models.Model):
 
             if val_type == "employee_hr_responsibles":
                 if state in ("validate", "refuse"):
-                    if not is_manager and self.env.user not in holiday._get_employee_responsible_users():
+                    if not is_manager and self.env.user not in holiday._get_responsible_approval_users():
                         if raise_if_not_possible:
                             raise UserError(_("You are not allowed to approve/refuse this leave for current responsible flow."))
                         return False
@@ -359,7 +465,7 @@ class HolidaysRequest(models.Model):
             raise UserError(_("Time off must be in 'To Approve' state."))
 
         is_manager = self.env.user.has_group("hr_holidays.group_hr_holidays_manager")
-        is_responsible = self.env.user in self._get_employee_responsible_users()
+        is_responsible = self.env.user in self._get_responsible_approval_users()
         if not is_manager and not is_responsible:
             raise UserError(_("You are not allowed to approve this leave."))
 
@@ -382,6 +488,12 @@ class HolidaysRequest(models.Model):
 
         if is_responsible and user_line:
             user_line.write({"state": "approved", "action_date": fields.Datetime.now()})
+            if mode == "sequential":
+                next_pending = self.responsible_approval_line_ids.filtered(
+                    lambda l: l.state == "pending"
+                ).sorted("sequence")[:1]
+                if next_pending:
+                    next_pending.write({"pending_since": fields.Datetime.now()})
 
         if mode == "any":
             return self._action_validate(check_state=False)
@@ -401,7 +513,7 @@ class HolidaysRequest(models.Model):
             raise UserError(_("Time off must be in 'To Approve' state."))
 
         is_manager = self.env.user.has_group("hr_holidays.group_hr_holidays_manager")
-        is_responsible = self.env.user in self._get_employee_responsible_users()
+        is_responsible = self.env.user in self._get_responsible_approval_users()
         if not is_manager and not is_responsible:
             raise UserError(_("You are not allowed to refuse this leave."))
 
@@ -412,4 +524,54 @@ class HolidaysRequest(models.Model):
             user_line.write({"state": "refused", "action_date": fields.Datetime.now()})
 
         return super().action_refuse()
+
+    @api.model
+    def cron_escalate_responsible_approval_timeouts(self):
+        """Sequential Employee HR Responsibles: skip current step after escalation delay (default 2h)."""
+        leaves = self.search(
+            [
+                ("state", "=", "confirm"),
+                ("validation_type", "=", "employee_hr_responsibles"),
+            ]
+        )
+        for leave in leaves:
+            leave._apply_responsible_timeout_escalation()
+
+    def _apply_responsible_timeout_escalation(self):
+        self.ensure_one()
+        if self.holiday_status_id.employee_responsible_approval_mode != "sequential":
+            return
+        if not self.responsible_approval_line_ids:
+            return
+        hours = self.holiday_status_id.employee_responsible_escalation_hours or 2.0
+        threshold = fields.Datetime.now() - timedelta(hours=hours)
+        first_pending = self.responsible_approval_line_ids.filtered(
+            lambda l: l.state == "pending"
+        ).sorted("sequence")[:1]
+        if not first_pending or not first_pending.pending_since:
+            return
+        if first_pending.pending_since > threshold:
+            return
+        skipped_user = first_pending.user_id
+        first_pending.write(
+            {
+                "state": "skipped",
+                "action_date": fields.Datetime.now(),
+            }
+        )
+        self.message_post(
+            body=_(
+                "Approval step for %(user)s was skipped due to timeout (%(hours)s h); escalated to the next level."
+            )
+            % {"user": skipped_user.display_name, "hours": hours},
+            subtype_xmlid="mail.mt_note",
+        )
+        next_pending = self.responsible_approval_line_ids.filtered(
+            lambda l: l.state == "pending"
+        ).sorted("sequence")[:1]
+        if next_pending:
+            next_pending.write({"pending_since": fields.Datetime.now()})
+            self.activity_update()
+        else:
+            self._action_validate(check_state=False)
 

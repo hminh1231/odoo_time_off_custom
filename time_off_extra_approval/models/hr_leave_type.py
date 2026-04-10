@@ -1,6 +1,11 @@
+import logging
+
 from odoo import api, fields, models
 from odoo.exceptions import ValidationError
+from odoo.tools import sql
 from odoo.tools.translate import _
+
+_logger = logging.getLogger(__name__)
 
 
 class HolidaysType(models.Model):
@@ -22,7 +27,28 @@ class HolidaysType(models.Model):
         ],
         string="Employee Responsible Approval Mode",
         default="any",
-        help="Applies when Leave Validation is 'By Employee HR Responsibles'.",
+        help="Applies when Leave Validation is 'By Employee HR Responsibles'. "
+        "For Sequential, approvers are ordered by each responsible user's job title (see Job Title on their employee), "
+        "from Team Lead through Director per company job title configuration.",
+    )
+
+    employee_responsible_source = fields.Selection(
+        selection=[
+            ("manual", "HR Responsibles on Employee"),
+            ("org_chart", "Organization Chart (by job title on manager chain)"),
+        ],
+        string="Employee Responsible Source",
+        default="manual",
+        help="Manual: use HR Responsible users configured on the employee. "
+        "Organization chart: build the approval chain by walking the employee's managers and picking the first "
+        "person at each level (Team Lead → Dept Head → Controller → HR Head → Director).",
+    )
+
+    employee_responsible_escalation_hours = fields.Float(
+        string="Escalation After (hours)",
+        default=2.0,
+        help="Sequential flow only: if the current approver does not act within this time, the request escalates "
+        "to the next level.",
     )
 
     # Extend allocation (Time Off allocation requests) approval options.
@@ -115,6 +141,24 @@ class HolidaysType(models.Model):
     @api.model
     def _default_multi_step_hr_department(self):
         return self.env["hr.department"].search([("name", "ilike", "HR")], limit=1)
+
+    @api.constrains("leave_validation_type", "employee_responsible_source", "employee_responsible_approval_mode")
+    def _check_org_chart_requires_sequential(self):
+        for lt in self:
+            if (
+                lt.leave_validation_type == "employee_hr_responsibles"
+                and lt.employee_responsible_source == "org_chart"
+                and lt.employee_responsible_approval_mode != "sequential"
+            ):
+                raise ValidationError(
+                    _("Organization chart approval requires 'Sequential (In Order)' mode.")
+                )
+
+    @api.onchange("employee_responsible_source")
+    def _onchange_employee_responsible_source(self):
+        for lt in self:
+            if lt.employee_responsible_source == "org_chart":
+                lt.employee_responsible_approval_mode = "sequential"
 
     @api.onchange("leave_validation_type", "allocation_validation_type")
     def _onchange_multi_step_ensure_hr_department(self):
@@ -310,3 +354,35 @@ class HolidaysType(models.Model):
         string="Approved by Additional Offices (Departments)",
         help="Members of these departments can also approve/refuse time off of this type.",
     )
+
+    def _register_hook(self):
+        """If DB was not upgraded, add missing columns so the registry matches Python fields."""
+        super()._register_hook()
+        cr = self.env.cr
+        if sql.table_exists(cr, "hr_leave_type"):
+            if not sql.column_exists(cr, "hr_leave_type", "employee_responsible_source"):
+                _logger.warning(
+                    "time_off_extra_approval: creating missing column hr_leave_type.employee_responsible_source; "
+                    "upgrade module when convenient to sync metadata."
+                )
+                cr.execute("ALTER TABLE hr_leave_type ADD COLUMN employee_responsible_source VARCHAR")
+                cr.execute(
+                    "UPDATE hr_leave_type SET employee_responsible_source = %s WHERE employee_responsible_source IS NULL",
+                    ("manual",),
+                )
+            if not sql.column_exists(cr, "hr_leave_type", "employee_responsible_escalation_hours"):
+                _logger.warning(
+                    "time_off_extra_approval: creating missing column hr_leave_type.employee_responsible_escalation_hours"
+                )
+                cr.execute(
+                    "ALTER TABLE hr_leave_type ADD COLUMN employee_responsible_escalation_hours DOUBLE PRECISION DEFAULT 2.0"
+                )
+        if sql.table_exists(cr, "hr_leave_responsible_approval") and not sql.column_exists(
+            cr, "hr_leave_responsible_approval", "pending_since"
+        ):
+            _logger.warning(
+                "time_off_extra_approval: creating missing column hr_leave_responsible_approval.pending_since"
+            )
+            cr.execute(
+                "ALTER TABLE hr_leave_responsible_approval ADD COLUMN pending_since TIMESTAMP WITHOUT TIME ZONE"
+            )
