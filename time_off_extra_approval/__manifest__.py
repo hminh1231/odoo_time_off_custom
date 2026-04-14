@@ -1,6 +1,6 @@
 {
     "name": "Time Off Extra Approvers (Demo)",
-    "version": "19.0.6.1.1",
+    "version": "19.0.6.1.13",
     "category": "Human Resources",
     "summary": "Allow extra officers/offices to approve time off by leave type",
     "depends": ["hr_holidays", "hr_employee_multi_responsible", "hr_job_title_vn"],
@@ -11,6 +11,8 @@
         "data/ir_cron_data.xml",
         "views/hr_leave_type_views.xml",
         "views/hr_leave_search_views.xml",
+        "views/hr_leave_kanban_extra_approval.xml",
+        "views/hr_leave_list_extra_approval.xml",
         "views/hr_leave_multi_step_views.xml",
     ],
     "assets": {

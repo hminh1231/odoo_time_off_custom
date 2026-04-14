@@ -40,8 +40,8 @@ class HolidaysType(models.Model):
         string="Employee Responsible Source",
         default="manual",
         help="Manual: use HR Responsible users configured on the employee. "
-        "Organization chart: build the approval chain by walking the employee's managers and picking the first "
-        "person at each level (Team Lead → Dept Head → Controller → HR Head → Director).",
+        "Organization chart: walk the employee's manager chain (parent) upward and create one approval step "
+        "per level that has a linked internal user (each reporting line, not one slot per job title).",
     )
 
     employee_responsible_escalation_hours = fields.Float(

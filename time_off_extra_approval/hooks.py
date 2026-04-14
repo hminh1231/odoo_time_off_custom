@@ -27,3 +27,6 @@ def post_init_hook(cr, registry):
 
     env = api.Environment(cr, SUPERUSER_ID, {})
     sync_leave_type_form_view(env)
+    pending = env["hr.leave"].search([("state", "in", ("confirm", "validate1"))])
+    if pending:
+        pending._compute_approval_actionable_user_ids()

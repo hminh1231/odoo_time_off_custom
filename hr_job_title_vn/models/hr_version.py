@@ -21,3 +21,11 @@ class HrVersion(models.Model):
         string="Job Title",
         tracking=True,
     )
+
+    def write(self, vals):
+        res = super().write(vals)
+        if "job_title" in vals:
+            for ver in self:
+                if ver.employee_id:
+                    ver.employee_id._check_manager_job_title_hierarchy()
+        return res
