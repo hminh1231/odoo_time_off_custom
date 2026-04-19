@@ -43,6 +43,9 @@
                     readonly="state != 'confirm'"
                 />
                 <field name="unavailable_handover_employee_ids" invisible="1"/>
+                <field name="handover_replacement_picker_open" invisible="1"/>
+                <field name="handover_refused_recipient_ids" invisible="1"/>
+                <field name="handover_allowed_new_recipient_ids" invisible="1"/>
                 <field
                     name="handover_waiting_label"
                     readonly="1"
@@ -55,6 +58,48 @@
                 >
                     <field name="handover_refused_label" readonly="1" nolabel="1"/>
                     <div class="mt-1">A recipient refused. Do you want to choose another colleague?</div>
+                    <div class="mt-2" invisible="handover_replacement_picker_open">
+                        <button
+                            name="action_handover_replacement_yes"
+                            string="Yes"
+                            type="object"
+                            class="btn-primary me-2"
+                        />
+                        <button
+                            name="action_handover_replacement_no"
+                            string="No"
+                            type="object"
+                            class="btn-secondary"
+                        />
+                    </div>
+                    <div class="mt-2" invisible="not handover_replacement_picker_open">
+                        <field
+                            name="handover_swap_out_employee_id"
+                            domain="[('id', 'in', handover_refused_recipient_ids)]"
+                            options="{'no_create': True, 'no_open': True}"
+                            placeholder="Choose a colleague who refused"
+                        />
+                        <field
+                            name="handover_new_recipient_id"
+                            domain="[('id', 'in', handover_allowed_new_recipient_ids)]"
+                            options="{'no_create': True, 'no_open': True}"
+                            placeholder="Choose the new handover colleague"
+                        />
+                        <div class="mt-2">
+                            <button
+                                name="action_handover_apply_replacement"
+                                string="Apply"
+                                type="object"
+                                class="btn-primary me-2"
+                            />
+                            <button
+                                name="action_handover_replacement_no"
+                                string="Cancel"
+                                type="object"
+                                class="btn-secondary"
+                            />
+                        </div>
+                    </div>
                 </div>
             </xpath>
             <!-- Right column (beside main fields): refusal reasons visible to anyone who can open the form -->
@@ -93,6 +138,9 @@
                 <field name="can_respond_handover" invisible="1"/>
                 <field name="handover_waiting_label" invisible="1"/>
                 <field name="handover_refused_label" invisible="1"/>
+                <field name="handover_replacement_picker_open" invisible="1"/>
+                <field name="handover_refused_recipient_ids" invisible="1"/>
+                <field name="handover_allowed_new_recipient_ids" invisible="1"/>
                 <field name="can_manage_handover_replacement" invisible="1"/>
                 <div
                     class="alert alert-warning mb-2"
@@ -120,6 +168,48 @@
                 >
                     <field name="handover_refused_label" readonly="1" nolabel="1"/>
                     <div class="mt-1">A recipient refused. Do you want to choose another colleague?</div>
+                    <div class="mt-2" invisible="handover_replacement_picker_open">
+                        <button
+                            name="action_handover_replacement_yes"
+                            string="Yes"
+                            type="object"
+                            class="btn btn-primary me-2"
+                        />
+                        <button
+                            name="action_handover_replacement_no"
+                            string="No"
+                            type="object"
+                            class="btn btn-secondary"
+                        />
+                    </div>
+                    <div class="mt-2" invisible="not handover_replacement_picker_open">
+                        <field
+                            name="handover_swap_out_employee_id"
+                            domain="[('id', 'in', handover_refused_recipient_ids)]"
+                            options="{'no_create': True, 'no_open': True}"
+                            placeholder="Choose a colleague who refused"
+                        />
+                        <field
+                            name="handover_new_recipient_id"
+                            domain="[('id', 'in', handover_allowed_new_recipient_ids)]"
+                            options="{'no_create': True, 'no_open': True}"
+                            placeholder="Choose the new handover colleague"
+                        />
+                        <div class="mt-2">
+                            <button
+                                name="action_handover_apply_replacement"
+                                string="Apply"
+                                type="object"
+                                class="btn btn-primary me-2"
+                            />
+                            <button
+                                name="action_handover_replacement_no"
+                                string="Cancel"
+                                type="object"
+                                class="btn btn-secondary"
+                            />
+                        </div>
+                    </div>
                 </div>
                 <div
                     class="alert alert-info mb-2"

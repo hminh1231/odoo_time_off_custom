@@ -135,6 +135,34 @@ class HolidaysRequest(models.Model):
         string="Can manage handover replacement",
         compute="_compute_can_manage_handover_replacement",
     )
+    handover_replacement_picker_open = fields.Boolean(
+        string="Handover replacement picker open",
+        default=False,
+        copy=False,
+        help="UI only: requester chose to replace a refused handover recipient.",
+    )
+    handover_refused_recipient_ids = fields.Many2many(
+        comodel_name="hr.employee",
+        string="Refused handover recipients (technical)",
+        compute="_compute_handover_refused_recipient_ids",
+    )
+    handover_allowed_new_recipient_ids = fields.Many2many(
+        comodel_name="hr.employee",
+        string="Allowed new handover recipients (technical)",
+        compute="_compute_handover_allowed_new_recipient_ids",
+    )
+    handover_swap_out_employee_id = fields.Many2one(
+        comodel_name="hr.employee",
+        string="Replace refused colleague",
+        copy=False,
+        help="Select which refused recipient to remove from work handover.",
+    )
+    handover_new_recipient_id = fields.Many2one(
+        comodel_name="hr.employee",
+        string="New handover colleague",
+        copy=False,
+        help="New colleague to receive work handover (cannot be someone who already accepted).",
+    )
     approval_current_step_label = fields.Char(
         string="Current approval",
         compute="_compute_approval_current_step_label",
@@ -163,6 +191,9 @@ class HolidaysRequest(models.Model):
         for column_name, column_type in (
             ("is_emergency_leave", "boolean"),
             ("emergency_leave_approver_notice", "varchar"),
+            ("handover_replacement_picker_open", "boolean"),
+            ("handover_swap_out_employee_id", "int4"),
+            ("handover_new_recipient_id", "int4"),
         ):
             cr.execute(
                 """
@@ -558,6 +589,40 @@ class HolidaysRequest(models.Model):
                 and leave.employee_id
                 and leave.employee_id.user_id == leave.env.user
             )
+    @api.depends(
+        "handover_acceptance_ids.state",
+        "handover_acceptance_ids.employee_id",
+    )
+    def _compute_handover_refused_recipient_ids(self):
+        for leave in self:
+            refused = leave.handover_acceptance_ids.filtered(lambda l: l.state == "refused").mapped(
+                "employee_id"
+            )
+            leave.handover_refused_recipient_ids = refused
+
+    @api.depends(
+        "employee_id",
+        "handover_employee_ids",
+        "handover_swap_out_employee_id",
+        "unavailable_handover_employee_ids",
+    )
+    def _compute_handover_allowed_new_recipient_ids(self):
+        Employee = self.env["hr.employee"]
+        for leave in self:
+            if not leave.employee_id:
+                leave.handover_allowed_new_recipient_ids = Employee
+                continue
+            blocked = leave.handover_employee_ids
+            if leave.handover_swap_out_employee_id:
+                blocked = blocked - leave.handover_swap_out_employee_id
+            candidates = Employee.search(
+                [
+                    ("id", "!=", leave.employee_id.id),
+                    ("user_id", "!=", False),
+                ]
+            )
+            unavailable = leave.unavailable_handover_employee_ids
+            leave.handover_allowed_new_recipient_ids = candidates - blocked - unavailable
 
     @api.depends(
         "holiday_status_id",
@@ -1017,6 +1082,76 @@ class HolidaysRequest(models.Model):
         self._notify_requester_handover_refusal(emp, reason=reason)
         return True
 
+    def action_handover_replacement_yes(self):
+        """Open the picker: replace one refused recipient with a new colleague."""
+        self.ensure_one()
+        if not self.can_manage_handover_replacement:
+            raise UserError(
+                _("Only the employee who requested this time off can update refused work handover recipients.")
+            )
+        self.write({"handover_replacement_picker_open": True})
+        return True
+
+    def action_handover_replacement_no(self):
+        """Close the replacement picker without applying (user chose not to use it, or cancels)."""
+        self.ensure_one()
+        if not self.can_manage_handover_replacement:
+            raise UserError(
+                _("Only the employee who requested this time off can update refused work handover recipients.")
+            )
+        self.write(
+            {
+                "handover_replacement_picker_open": False,
+                "handover_swap_out_employee_id": False,
+                "handover_new_recipient_id": False,
+            }
+        )
+        return True
+
+    def action_handover_apply_replacement(self):
+        """Remove one refused recipient and add a new colleague who has not already accepted on this request."""
+        self.ensure_one()
+        if not self.can_manage_handover_replacement:
+            raise UserError(
+                _("Only the employee who requested this time off can update refused work handover recipients.")
+            )
+        swap = self.handover_swap_out_employee_id
+        new_emp = self.handover_new_recipient_id
+        if not swap or not new_emp:
+            raise UserError(_("Please select who to replace (refused colleague) and the new colleague."))
+        if swap not in self.handover_refused_recipient_ids:
+            raise UserError(_("You can only replace colleagues who refused the work handover."))
+        if swap not in self.handover_employee_ids:
+            raise UserError(_("The selected colleague is not in the current work handover list."))
+        if new_emp not in self.handover_allowed_new_recipient_ids:
+            raise UserError(
+                _(
+                    "The new colleague cannot be added: they are already on this request, "
+                    "already accepted handover, or are unavailable in this period."
+                )
+            )
+        if swap == new_emp:
+            raise UserError(_("The new colleague must be different from the person being replaced."))
+        new_ids = [e.id for e in self.handover_employee_ids if e != swap]
+        if new_emp.id not in new_ids:
+            new_ids.append(new_emp.id)
+        if len(new_ids) > 5:
+            raise ValidationError(_("You can select at most 5 work handover recipients."))
+        self.write(
+            {
+                "handover_employee_ids": [Command.set(new_ids)],
+                "handover_replacement_picker_open": False,
+                "handover_swap_out_employee_id": False,
+                "handover_new_recipient_id": False,
+            }
+        )
+        return True
+
+    @api.onchange("handover_swap_out_employee_id")
+    def _onchange_handover_swap_out_employee_id(self):
+        allowed = self.handover_allowed_new_recipient_ids
+        if self.handover_new_recipient_id and self.handover_new_recipient_id not in allowed:
+            self.handover_new_recipient_id = False
     def _vals_trigger_emergency_leave_check(self, vals):
         if not vals:
             return False
