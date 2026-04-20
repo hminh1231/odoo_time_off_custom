@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="hr_employee_form_inherit_cccd_scan" model="ir.ui.view">
+        <field name="name">hr.employee.form.inherit.cccd.scan</field>
+        <field name="model">hr.employee</field>
+        <field name="inherit_id" ref="hr.view_employee_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//header/button[@name='action_create_user']" position="after">
+                <button name="action_scan_id_card" type="object" string="Scan ID"
+                        class="btn-secondary" icon="fa-id-card"
+                        groups="hr.group_hr_user"/>
+            </xpath>
+            <!-- Do not use @string in xpath (forbidden for inheritance); first inner group on Personal tab is Private Contact -->
+            <xpath expr="//page[@name='personal_information']/group/group[1]" position="before">
+                <group string="Identity document" groups="hr.group_hr_user">
+                    <button name="action_scan_id_card" type="object" string="Scan ID card"
+                            class="btn-secondary" icon="fa-camera" colspan="2"/>
+                </group>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="hr_employee_form_inherit_id_card_documents" model="ir.ui.view">
+        <field name="name">hr.employee.form.inherit.id.card.documents</field>
+        <field name="model">hr.employee</field>
+        <field name="inherit_id" ref="hr.view_employee_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='personal_information']//group[@name='hr_document_group']/field[@name='id_card']" position="replace">
+                <label for="id_card_front" string="ID Card Front"/>
+                <div class="o_row align-items-center gap-2">
+                    <field name="id_card_front" filename="id_card_front_filename"/>
+                    <button name="action_preview_id_card_front"
+                            type="object"
+                            icon="fa-search-plus"
+                            class="btn btn-link p-0"
+                            string=""
+                            title="Preview ID Card Front"
+                            invisible="not id_card_front"/>
+                </div>
+                <label for="id_card_back" string="ID Card Back"/>
+                <div class="o_row align-items-center gap-2">
+                    <field name="id_card_back" filename="id_card_back_filename"/>
+                    <button name="action_preview_id_card_back"
+                            type="object"
+                            icon="fa-search-plus"
+                            class="btn btn-link p-0"
+                            string=""
+                            title="Preview ID Card Back"
+                            invisible="not id_card_back"/>
+                </div>
+            </xpath>
+        </field>
+    </record>
+</odoo>
