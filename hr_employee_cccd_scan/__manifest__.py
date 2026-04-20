@@ -2,7 +2,7 @@
 
 {
     'name': 'Employee ID Card Scan (CCCD)',
-    'version': '19.0.1.18.0',
+    'version': '19.0.1.18.1',
     'category': 'Human Resources',
     'summary': 'Scan national ID card to fill employee data (UI hook, step 1)',
     'depends': ['hr'],
