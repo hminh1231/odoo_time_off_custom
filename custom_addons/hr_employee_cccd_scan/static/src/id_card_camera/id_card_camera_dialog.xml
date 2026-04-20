@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="hr_employee_cccd_scan.IdCardCameraDialog">
+        <Dialog size="'xl'" title="dialogTitle" modalRef="modalRef" contentClass="'o_cccd_scan_dialog'">
+            <div class="o_cccd_scan_body">
+                <p class="text-muted small mb-3" t-if="state.mode === 'choose' and !isMobileDevice">
+                    <strong>Laptop / desktop:</strong> use <strong>Open webcam</strong> (allow camera if the browser asks),
+                    or <strong>Choose image</strong> to upload a photo.
+                </p>
+                <p class="text-muted small mb-3" t-if="state.mode === 'choose' and isMobileDevice" t-out="mobileChooseHint"/>
+                <input type="file" class="d-none"
+                    accept="image/*,image/heic,image/heif,.heic,.heif"
+                    t-att-capture="isMobileDevice ? 'environment' : undefined"
+                    t-ref="fileInput" t-on-change="onFileChange"/>
+
+                <div t-if="state.mode === 'choose'" class="d-flex flex-column gap-2">
+                    <t t-if="isMobileDevice">
+                        <button type="button" class="btn btn-primary btn-lg w-100 py-3" t-on-click="startLiveCamera">
+                            <i class="fa fa-qrcode me-2"/><t t-out="labelLiveScanContinuous"/>
+                        </button>
+                        <button type="button" class="btn btn-secondary w-100 py-2" t-on-click="onPickFromCamera">
+                            <i class="fa fa-camera me-2"/><t t-out="labelTakePhoto"/>
+                        </button>
+                    </t>
+                    <t t-if="!isMobileDevice">
+                        <button type="button" class="btn btn-primary btn-lg w-100 py-3" t-on-click="startLiveCamera">
+                            <i class="fa fa-video-camera me-2"/><t t-out="labelOpenWebcam"/>
+                        </button>
+                        <button type="button" class="btn btn-secondary w-100 py-2" t-on-click="onPickFromCamera">
+                            <i class="fa fa-folder-open me-2"/><t t-out="labelChooseImage"/>
+                        </button>
+                    </t>
+                </div>
+
+                <div t-if="state.mode === 'live'" class="o_cccd_scan_live">
+                    <div class="o_cccd_scan_video_wrap">
+                        <video t-ref="video" class="o_cccd_scan_video w-100 rounded border" muted="true"/>
+                        <div class="o_cccd_qr_roi_guide" aria-hidden="true"></div>
+                    </div>
+                    <p class="small text-muted mt-2 mb-0" t-out="liveModeAutoHint"/>
+                    <div class="d-flex gap-2 mt-2">
+                        <button type="button" class="btn btn-primary w-100 py-2" t-on-click="captureLiveFrame">
+                            <i class="fa fa-circle me-2"/> Capture frame
+                        </button>
+                        <button type="button" class="btn btn-secondary w-100 py-2" t-on-click="scanQrFromLive">
+                            <i class="fa fa-qrcode me-2"/> Scan QR
+                        </button>
+                    </div>
+                </div>
+
+                <div t-if="state.mode === 'preview'" class="text-center">
+                    <img t-att-src="state.previewUrl" class="img-fluid rounded border o_cccd_scan_preview" alt="Preview"/>
+                    <div class="mt-3 d-flex gap-2 justify-content-center flex-wrap">
+                        <button type="button" class="btn btn-primary" t-on-click="scanQrFromPreview">
+                            <i class="fa fa-qrcode me-2"/> Scan QR from image
+                        </button>
+                        <button type="button" class="btn btn-secondary" t-on-click="retake">Retake</button>
+                    </div>
+                </div>
+
+                <div t-if="state.error" class="alert alert-warning mt-3 mb-0" t-out="state.error"/>
+
+                <div t-if="state.parsedImport" class="o_cccd_import_preview border rounded p-3 mt-3 bg-light">
+                    <h6 class="fw-bold mb-3" t-out="labelDecodedFields"/>
+                    <table class="table table-sm table-borderless mb-0 align-middle">
+                        <tbody>
+                            <tr t-foreach="state.parsedImport.previewRows" t-as="row" t-key="row_index">
+                                <td class="text-muted small text-nowrap pe-3 align-top" style="width: 1%;">
+                                    <t t-out="row.label"/>
+                                </td>
+                                <td class="small fw-medium text-break">
+                                    <t t-out="row.value"/>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <details t-if="state.qrText" class="mt-2 mb-0">
+                        <summary class="small text-muted user-select-none" t-out="labelRawQrToggle"/>
+                        <pre class="small text-break mb-0 mt-2 bg-white border rounded p-2"><t t-out="state.qrText"/></pre>
+                    </details>
+                    <p class="mt-3 mb-2 fw-medium" t-out="labelImportQuestion"/>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="button" class="btn btn-primary" t-on-click="onConfirmImport">
+                            <t t-out="labelYesImport"/>
+                        </button>
+                        <button type="button" class="btn btn-secondary" t-on-click="onDeclineImport">
+                            <t t-out="labelNoImport"/>
+                        </button>
+                    </div>
+                </div>
+
+                <div t-elif="state.qrText" class="alert alert-secondary mt-3 mb-0">
+                    <div class="fw-bold mb-1">QR payload</div>
+                    <div class="small text-break" t-out="state.qrText"/>
+                    <button type="button" class="btn btn-sm btn-primary mt-2" t-on-click="onRetryParseFromPayload">
+                        <t t-out="labelRetryParse"/>
+                    </button>
+                </div>
+            </div>
+            <t t-set-slot="footer">
+                <button type="button" class="btn btn-secondary" t-on-click="onClose" data-hotkey="x">Close</button>
+            </t>
+        </Dialog>
+    </t>
+
+</templates>

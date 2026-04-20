@@ -1,0 +1,29 @@
+.o_cccd_scan_dialog {
+    .o_cccd_scan_body {
+        min-height: 120px;
+    }
+    .o_cccd_scan_video {
+        /* Pass through CSS min(); raw min() breaks libsass (see mail activity_list_view.scss) */
+        max-height: #{"min(70vh, 520px)"};
+        object-fit: contain;
+        background: #000;
+    }
+    .o_cccd_scan_video_wrap {
+        position: relative;
+    }
+    .o_cccd_qr_roi_guide {
+        position: absolute;
+        left: 56%;
+        top: 8%;
+        width: 38%;
+        height: 56%;
+        border: 2px dashed #ffd166;
+        border-radius: 8px;
+        box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.12);
+        pointer-events: none;
+    }
+    .o_cccd_scan_preview {
+        max-height: #{"min(65vh, 480px)"};
+        object-fit: contain;
+    }
+}
