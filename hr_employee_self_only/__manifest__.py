@@ -1,12 +1,12 @@
 {
     "name": "HR Employee Self Only Access",
-    "version": "19.0.1.0.5",
+    "version": "19.0.1.0.6",
     "category": "Human Resources",
-    "summary": "Restrict internal users to read only their own employee profile",
+    "summary": "Employees=No: hide Personal tab on others; full employee list for handover and search",
     "depends": ["hr"],
     "data": [
         "security/hr_employee_privilege_groups.xml",
-        "security/hr_employee_self_only_rules.xml",
+        "views/hr_employee_views.xml",
     ],
     "installable": True,
     "application": True,
