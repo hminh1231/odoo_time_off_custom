@@ -3,7 +3,7 @@
 import base64
 from datetime import date
 
-from odoo import api, models, _
+from odoo import api, fields, models, _
 from odoo.tools.misc import format_date
 
 
@@ -113,6 +113,11 @@ def _try_zxing_on_array(arr):
 class HrEmployee(models.Model):
     _inherit = 'hr.employee'
 
+    id_card_front = fields.Binary(string='ID Card Front', groups='hr.group_hr_user', attachment=True)
+    id_card_front_filename = fields.Char(string='ID Card Front Filename', groups='hr.group_hr_user')
+    id_card_back = fields.Binary(string='ID Card Back', groups='hr.group_hr_user', attachment=True)
+    id_card_back_filename = fields.Char(string='ID Card Back Filename', groups='hr.group_hr_user')
+
     def action_scan_id_card(self):
         """Open the device camera dialog (browser); OCR/autofill comes later.
 
@@ -128,6 +133,33 @@ class HrEmployee(models.Model):
                 'employee_id': employee.id if employee else False,
             },
         }
+
+    def _action_preview_binary_image(self, field_name):
+        employee = self[:1]
+        if not employee or not employee.id:
+            return {
+                'type': 'ir.actions.client',
+                'tag': 'display_notification',
+                'params': {
+                    'title': _('Save Required'),
+                    'message': _('Please save the employee before previewing ID images.'),
+                    'type': 'warning',
+                    'sticky': False,
+                },
+            }
+        if not employee[field_name]:
+            return False
+        return {
+            'type': 'ir.actions.act_url',
+            'url': '/web/image?model=hr.employee&id=%s&field=%s' % (employee.id, field_name),
+            'target': 'new',
+        }
+
+    def action_preview_id_card_front(self):
+        return self._action_preview_binary_image('id_card_front')
+
+    def action_preview_id_card_back(self):
+        return self._action_preview_binary_image('id_card_back')
 
     @api.model
     def action_decode_cccd_qr(self, image_base64=None, **kwargs):
