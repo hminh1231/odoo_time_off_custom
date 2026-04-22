@@ -28,6 +28,17 @@
                     <field name="employee_responsible_escalation_hours"
                            invisible="employee_responsible_approval_mode != 'sequential'"/>
                 </group>
+                <group string="Work handover escalation"
+                       colspan="2"
+                       class="o_inner_group">
+                    <field name="handover_escalation_after_hours"/>
+                    <field name="handover_escalation_max_job_title"/>
+                    <field name="handover_escalation_to_manager_hours"
+                           invisible="handover_escalation_max_job_title != 'trưởng phòng'"/>
+                    <field name="handover_cancel_if_max_unresponsive"/>
+                    <field name="handover_cancel_after_max_hours"
+                           invisible="not handover_cancel_if_max_unresponsive"/>
+                </group>
             </xpath>
 
             <!-- Full width directly under Time Off / Allocation approval radios (not beside Negative Cap). -->

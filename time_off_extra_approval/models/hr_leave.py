@@ -1,3 +1,4 @@
+import logging
 from datetime import date, datetime, time, timedelta
 from numbers import Integral
 
@@ -11,6 +12,8 @@ from odoo.tools.translate import _
 
 from odoo.addons.hr_job_title_vn.models.hr_version import JOB_TITLE_SELECTION
 
+_logger = logging.getLogger(__name__)
+
 _MULTI_STEP_RESET_CTX = "time_off_multi_step_reset_skip"
 
 # Order for sequential HR-responsible approval: by job title (keys from hr_job_title_vn), lowest first.
@@ -23,7 +26,14 @@ _DIRECTOR_JOB_TITLE_KEY = "giám đốc"
 # Manual / sorted-by-title flows; org-chart mode allows one row per manager level (can exceed 6).
 _MAX_EMPLOYEE_HR_RESPONSIBLES = 15
 _HANDOVER_ACTIVITY_XMLID = "time_off_extra_approval.mail_act_leave_work_handover"
+# Handover acknowledgement rows and activities apply while the request awaits approval.
+_HANDOVER_ACTIVE_STATES = ("confirm", "validate1")
 _TODO_ACTIVITY_XMLID = "mail.mail_activity_data_todo"
+# Fallback values when leave type config is missing.
+_HANDOVER_ESCALATION_MINUTES = 5
+_HANDOVER_ESCALATION_TO_MANAGER_HOURS = 2
+_DEPARTMENT_HEAD_JOB_TITLE_KEY = "trưởng BP"
+_DEPARTMENT_MANAGER_JOB_TITLE_KEY = "trưởng phòng"
 
 # Advance notice (calendar days between today and first leave day) by job title (hr_job_title_vn keys).
 _EMERGENCY_LEAVE_CTX = "emergency_leave_confirmed"
@@ -40,6 +50,10 @@ def _job_title_approval_sort_key(user, order_index):
         return (order_index[title], user.id)
     # Unknown / empty title: after defined chain, stable by user id
     return (len(order_index) + 1, user.id)
+
+
+def _normalize_job_title_key(title):
+    return (title or "").strip().casefold()
 
 
 class HolidaysRequest(models.Model):
@@ -131,6 +145,49 @@ class HolidaysRequest(models.Model):
         string="Handover refusal reasons",
         compute="_compute_handover_refusal_reason_label",
     )
+    handover_requested_at = fields.Datetime(
+        string="Handover requested at",
+        copy=False,
+        help="Timestamp when this leave was submitted with work handover recipients.",
+    )
+    handover_escalated = fields.Boolean(
+        string="Handover escalated",
+        default=False,
+        copy=False,
+        help="Set when no recipient accepts handover within timeout and the request is escalated.",
+    )
+    handover_escalated_at = fields.Datetime(
+        string="Handover escalated at",
+        copy=False,
+    )
+    handover_escalation_level = fields.Integer(
+        string="Handover escalation level",
+        default=0,
+        copy=False,
+        help="0: not escalated, 1: escalated to department head, 2: escalated to department manager.",
+    )
+    handover_escalation_user_id = fields.Many2one(
+        comodel_name="res.users",
+        string="Handover escalation owner",
+        copy=False,
+        help="Department head from org chart who can assign a replacement handover recipient.",
+    )
+    handover_escalation_label = fields.Char(
+        string="Handover escalation status",
+        compute="_compute_handover_escalation_label",
+    )
+    handover_escalation_pick_prompt = fields.Char(
+        string="Handover escalation — assign recipient instruction",
+        compute="_compute_handover_escalation_pick_prompt",
+    )
+    handover_assigned_recipient_banner = fields.Char(
+        string="Handover — assigned recipient notice",
+        compute="_compute_handover_assigned_recipient_banner",
+    )
+    handover_recipient_list_readonly = fields.Boolean(
+        string="Handover recipient cannot edit list",
+        compute="_compute_handover_recipient_list_readonly",
+    )
     can_manage_handover_replacement = fields.Boolean(
         string="Can manage handover replacement",
         compute="_compute_can_manage_handover_replacement",
@@ -145,6 +202,11 @@ class HolidaysRequest(models.Model):
         comodel_name="hr.employee",
         string="Refused handover recipients (technical)",
         compute="_compute_handover_refused_recipient_ids",
+    )
+    handover_replaceable_recipient_ids = fields.Many2many(
+        comodel_name="hr.employee",
+        string="Replaceable handover recipients (technical)",
+        compute="_compute_handover_replaceable_recipient_ids",
     )
     handover_allowed_new_recipient_ids = fields.Many2many(
         comodel_name="hr.employee",
@@ -194,6 +256,11 @@ class HolidaysRequest(models.Model):
             ("handover_replacement_picker_open", "boolean"),
             ("handover_swap_out_employee_id", "int4"),
             ("handover_new_recipient_id", "int4"),
+            ("handover_requested_at", "timestamp"),
+            ("handover_escalated", "boolean"),
+            ("handover_escalated_at", "timestamp"),
+            ("handover_escalation_level", "int4"),
+            ("handover_escalation_user_id", "int4"),
         ):
             cr.execute(
                 """
@@ -580,15 +647,33 @@ class HolidaysRequest(models.Model):
                     items.append(_("%(name)s: %(reason)s") % {"name": line.employee_id.name, "reason": line.refusal_reason})
             leave.handover_refusal_reason_label = "\n".join(items) if items else False
 
-    @api.depends("state", "employee_id", "employee_id.user_id", "handover_refused_label")
+    @api.depends(
+        "state",
+        "employee_id",
+        "employee_id.user_id",
+        "handover_refused_label",
+        "handover_escalated",
+        "handover_escalation_user_id",
+    )
     def _compute_can_manage_handover_replacement(self):
         for leave in self:
-            leave.can_manage_handover_replacement = bool(
+            requester_can = bool(
                 leave.state in ("confirm", "validate1")
-                and leave.handover_refused_label
                 and leave.employee_id
                 and leave.employee_id.user_id == leave.env.user
+                and not leave.handover_escalated
             )
+            escalation_owner_can = bool(
+                leave.state in ("confirm", "validate1")
+                and leave.handover_escalated
+                and leave.handover_escalation_user_id
+                and leave.handover_escalation_user_id == leave.env.user
+            )
+            leave.can_manage_handover_replacement = bool(
+                (requester_can and leave.handover_refused_label)
+                or escalation_owner_can
+            )
+
     @api.depends(
         "handover_acceptance_ids.state",
         "handover_acceptance_ids.employee_id",
@@ -599,6 +684,143 @@ class HolidaysRequest(models.Model):
                 "employee_id"
             )
             leave.handover_refused_recipient_ids = refused
+
+    @api.depends(
+        "handover_acceptance_ids.state",
+        "handover_acceptance_ids.employee_id",
+        "handover_escalated",
+        "handover_employee_ids",
+    )
+    def _compute_handover_replaceable_recipient_ids(self):
+        for leave in self:
+            if leave.handover_escalated:
+                replaceable = leave.handover_acceptance_ids.filtered(
+                    lambda l: l.state in ("pending", "refused")
+                ).mapped("employee_id")
+                leave.handover_replaceable_recipient_ids = replaceable
+            else:
+                leave.handover_replaceable_recipient_ids = leave.handover_refused_recipient_ids
+
+    @api.depends(
+        "state",
+        "handover_escalated",
+        "handover_escalated_at",
+        "handover_escalation_user_id",
+    )
+    def _compute_handover_escalation_label(self):
+        for leave in self:
+            leave.handover_escalation_label = False
+            if leave.state not in ("confirm", "validate1") or not leave.handover_escalated:
+                continue
+            owner_name = (
+                leave.handover_escalation_user_id.display_name
+                if leave.handover_escalation_user_id
+                else _("Department Head")
+            )
+            leave.handover_escalation_label = _(
+                "Handover timeout: escalated to %(owner)s for replacement assignment."
+            ) % {"owner": owner_name}
+
+    @api.depends(
+        "state",
+        "handover_employee_ids",
+        "handover_escalation_user_id",
+        "handover_acceptance_ids.state",
+        "handover_acceptance_ids.employee_id",
+        "handover_acceptance_ids.assigned_by_user_id",
+        "handover_acceptance_ids.reassigned_by_escalation_owner",
+        "handover_requested_at",
+        "create_date",
+    )
+    @api.depends_context("uid")
+    def _compute_handover_escalation_pick_prompt(self):
+        """Reminder for requester / manager to assign handover. Not shown to colleagues who must Accept/Refuse."""
+        for leave in self:
+            leave.handover_escalation_pick_prompt = False
+            if leave._current_user_is_pending_handover_recipient():
+                continue
+            if not leave.handover_escalated:
+                continue
+            if not leave.handover_escalation_user_id or leave.handover_escalation_user_id != leave.env.user:
+                continue
+            pending_lines = leave.handover_acceptance_ids.filtered(
+                lambda l: l.employee_id in leave.handover_employee_ids and l.state == "pending"
+            )
+            if pending_lines.filtered(
+                lambda l: l.reassigned_by_escalation_owner
+                or (
+                    l.assigned_by_user_id
+                    and leave.employee_id.user_id
+                    and l.assigned_by_user_id != leave.employee_id.user_id
+                )
+            ):
+                continue
+            if not leave._handover_past_due_without_any_acceptance():
+                continue
+            leave.handover_escalation_pick_prompt = _(
+                "Sau khoảng thời gian quy định, không ai nhận bàn giao công việc. "
+                "Xin vui lòng chọn người nhận bàn giao công việc cho người nộp đơn."
+            )
+
+    @api.depends(
+        "state",
+        "company_id",
+        "employee_id",
+        "employee_id.name",
+        "employee_id.user_id",
+        "employee_id.job_title",
+        "handover_escalated",
+        "handover_escalation_user_id",
+        "handover_employee_ids",
+        "handover_acceptance_ids.state",
+        "handover_acceptance_ids.employee_id",
+        "handover_acceptance_ids.assigned_by_user_id",
+        "handover_acceptance_ids.reassigned_by_escalation_owner",
+    )
+    @api.depends_context("uid")
+    def _compute_handover_assigned_recipient_banner(self):
+        """Handover colleague (not the applicant): who picked them + applicant name."""
+        for leave in self:
+            leave.handover_assigned_recipient_banner = False
+            if leave.state not in ("confirm", "validate1"):
+                continue
+            viewer_emp = leave.env.user.sudo().employee_id
+            if (
+                not viewer_emp
+                or not leave.employee_id
+                or viewer_emp == leave.employee_id
+                or viewer_emp not in leave.handover_employee_ids
+            ):
+                continue
+            line = leave.handover_acceptance_ids.filtered(lambda l: l.employee_id == viewer_emp)[:1]
+            if not line or line.state != "pending":
+                continue
+            who = leave._handover_who_label_for_line(line)
+            applicant = leave.employee_id.name if leave.employee_id else ""
+            if applicant:
+                leave.handover_assigned_recipient_banner = _(
+                    "Bạn được yêu cầu bàn giao công việc khi %(name)s nghỉ."
+                ) % {"name": applicant}
+
+    @api.depends(
+        "state",
+        "employee_id",
+        "handover_escalation_user_id",
+        "handover_acceptance_ids.state",
+        "handover_acceptance_ids.employee_id",
+        "handover_acceptance_ids.assigned_by_user_id",
+    )
+    @api.depends_context("uid")
+    def _compute_handover_recipient_list_readonly(self):
+        for leave in self:
+            leave.handover_recipient_list_readonly = False
+            if leave.state != "confirm":
+                continue
+            viewer_emp = leave.env.user.sudo().employee_id
+            if not viewer_emp or not leave.employee_id or viewer_emp == leave.employee_id:
+                continue
+            if leave._current_user_is_pending_handover_recipient():
+                leave.handover_recipient_list_readonly = True
 
     @api.depends(
         "employee_id",
@@ -855,7 +1077,7 @@ class HolidaysRequest(models.Model):
 
     def _sync_handover_acceptance_lines(self):
         Acceptance = self.env["hr.leave.handover.acceptance"].sudo()
-        for leave in self.filtered(lambda l: l.state == "confirm"):
+        for leave in self.filtered(lambda l: l.state in _HANDOVER_ACTIVE_STATES):
             current = leave.handover_employee_ids
             existing = leave.handover_acceptance_ids.sudo()
             to_remove = existing.filtered(lambda l: l.employee_id not in current)
@@ -871,24 +1093,182 @@ class HolidaysRequest(models.Model):
             existing = leave.handover_acceptance_ids.sudo()
             for emp in current:
                 if not existing.filtered(lambda l: l.employee_id == emp):
-                    Acceptance.create(
-                        {
-                            "leave_id": leave.id,
-                            "employee_id": emp.id,
-                        }
-                    )
+                    line_vals = {
+                        "leave_id": leave.id,
+                        "employee_id": emp.id,
+                    }
+                    requester_user = leave.employee_id.user_id
+                    if requester_user and not requester_user.share:
+                        line_vals["assigned_by_user_id"] = requester_user.id
+                    Acceptance.create(line_vals)
+        return self
+
+    def _handover_employee_for_assigner_user(self, user):
+        """Resolve hr.employee for a user (company-aware; avoids wrong user.employee_id)."""
+        self.ensure_one()
+        if not user:
+            return self.env["hr.employee"]
+        Employee = self.env["hr.employee"].sudo()
+        company = self.company_id or self.env.company
+        if company:
+            emp = Employee.search(
+                [
+                    ("user_id", "=", user.id),
+                    "|",
+                    ("company_id", "=", False),
+                    ("company_id", "=", company.id),
+                ],
+                limit=1,
+            )
+            if emp:
+                return emp
+        return Employee.search([("user_id", "=", user.id)], limit=1)
+
+    def _handover_format_job_name_from_employee(self, emp):
+        if not emp:
+            return ""
+        jt = (emp.job_title or "").strip()
+        nm = (emp.name or "").strip()
+        return f"{jt} {nm}".strip() if jt else nm
+
+    def _handover_format_job_name_from_user(self, user):
+        return self._handover_format_job_name_from_employee(self._handover_employee_for_assigner_user(user))
+
+    def _handover_who_label_for_line(self, line):
+        """Job title + name of the person who assigned this handover (BP, applicant, or other)."""
+        self.ensure_one()
+        leave = self
+        assigner_user = line.assigned_by_user_id
+        if line.reassigned_by_escalation_owner and leave.handover_escalation_user_id:
+            return self._handover_format_job_name_from_user(leave.handover_escalation_user_id)
+        if assigner_user and leave.handover_escalation_user_id and assigner_user == leave.handover_escalation_user_id:
+            return self._handover_format_job_name_from_user(leave.handover_escalation_user_id)
+        if (
+            leave.handover_escalated
+            and leave.handover_escalation_user_id
+            and assigner_user
+            and leave.employee_id
+            and leave.employee_id.user_id
+            and assigner_user == leave.employee_id.user_id
+            and leave.handover_escalation_user_id != leave.employee_id.user_id
+        ):
+            return self._handover_format_job_name_from_user(leave.handover_escalation_user_id)
+        if assigner_user and leave.employee_id and leave.employee_id.user_id and assigner_user == leave.employee_id.user_id:
+            return self._handover_format_job_name_from_employee(leave.employee_id)
+        if assigner_user:
+            return self._handover_format_job_name_from_user(assigner_user)
+        if leave.employee_id:
+            return self._handover_format_job_name_from_employee(leave.employee_id)
+        return ""
+
+    def _handover_is_bp_handover_assignment(self, line):
+        self.ensure_one()
+        if self.handover_escalated and line.state == "pending":
+            return True
+        if line.reassigned_by_escalation_owner:
+            return True
+        if (
+            self.handover_escalated
+            and self.employee_id
+            and self.employee_id.user_id
+            and line.assigned_by_user_id
+            and line.assigned_by_user_id != self.employee_id.user_id
+        ):
+            return True
+        if self.handover_escalation_user_id and line.assigned_by_user_id == self.handover_escalation_user_id:
+            return True
+        if (
+            self.handover_escalated
+            and self.handover_escalation_user_id
+            and self.employee_id
+            and self.employee_id.user_id
+            and line.assigned_by_user_id == self.employee_id.user_id
+            and self.handover_escalation_user_id != self.employee_id.user_id
+        ):
+            return True
+        return False
+
+    def _handover_activity_note_for_line(self, line):
+        """HTML body for clock menu handover activity (differs: requester vs trưởng BP reassignment)."""
+        self.ensure_one()
+        leave = self
+        requester = leave.employee_id
+        requester_name = requester.name if requester else leave.display_name
+        applicant = requester_name
+        leave_type = leave.holiday_status_id.name if leave.holiday_status_id else ""
+        date_from = leave.request_date_from
+        if not date_from and leave.date_from:
+            date_from = leave.date_from.date()
+        date_txt = format_date(self.env, date_from) if date_from else ""
+        footer = _("Mở đơn và chọn Chấp nhận hoặc Từ chối bàn giao công việc.")
+        who = leave._handover_who_label_for_line(line)
+        if requester_name:
+            first = _(
+                "Bạn được yêu cầu bàn giao công việc khi %(name)s nghỉ "
+                "(%(leave_type)s, %(dates)s)."
+            ) % {"name": requester_name, "leave_type": leave_type, "dates": date_txt}
+            return Markup("<p>%s</p><p>%s</p>") % (first, footer)
+        first = _(
+            "You were asked to cover work while %(name)s is away (%(leave_type)s, %(dates)s)."
+        ) % {"name": requester_name, "leave_type": leave_type, "dates": date_txt}
+        second = _("Open this request and choose Accept work handover or Refuse work handover.")
+        return Markup("<p>%s</p><p>%s</p>") % (first, second)
+
+    def _refresh_handover_activity_notes_for_employees(self, employees):
+        """After assigned_by_user_id is updated, rewrite open handover activities so the note matches."""
+        self.ensure_one()
+        today = fields.Date.today()
+        for emp in employees:
+            if not emp:
+                continue
+            user = emp.user_id
+            if not user or user.share:
+                continue
+            line = self.handover_acceptance_ids.filtered(lambda l: l.employee_id == emp)[:1]
+            if not line or line.state != "pending":
+                continue
+            note = self._handover_activity_note_for_line(line)
+            acts = self.activity_search(
+                [_HANDOVER_ACTIVITY_XMLID],
+                user_id=user.id,
+                only_automated=False,
+            )
+            if acts:
+                acts.sudo().write({"note": note})
+            else:
+                self.activity_schedule(
+                    _HANDOVER_ACTIVITY_XMLID,
+                    date_deadline=today,
+                    user_id=user.id,
+                    note=note,
+                )
+        return self
+
+    def _mark_pending_handover_lines_as_escalation_assigned(self):
+        """When escalation owner edits recipients, keep pending lines tagged as BP-assigned."""
+        self.ensure_one()
+        if (
+            not self.handover_escalated
+            or not self.employee_id
+            or not self.employee_id.user_id
+            or self.env.user == self.employee_id.user_id
+        ):
+            return self
+        pending_lines = self.handover_acceptance_ids.sudo().filtered(lambda l: l.state == "pending")
+        if pending_lines:
+            pending_lines.write(
+                {
+                    "assigned_by_user_id": self.env.user.id,
+                    "reassigned_by_escalation_owner": True,
+                }
+            )
         return self
 
     def _schedule_work_handover_activities(self):
         today = fields.Date.today()
-        for leave in self.filtered(lambda l: l.state == "confirm" and l.handover_employee_ids):
-            requester = leave.employee_id
-            requester_name = requester.name if requester else leave.display_name
-            leave_type = leave.holiday_status_id.name if leave.holiday_status_id else ""
-            date_from = leave.request_date_from
-            if not date_from and leave.date_from:
-                date_from = leave.date_from.date()
-            date_txt = format_date(self.env, date_from) if date_from else ""
+        for leave in self.filtered(
+            lambda l: l.state in _HANDOVER_ACTIVE_STATES and l.handover_employee_ids
+        ):
             for line in leave.handover_acceptance_ids.sudo().filtered(lambda l: l.state == "pending"):
                 user = line.employee_id.user_id
                 if not user or user.share:
@@ -900,13 +1280,7 @@ class HolidaysRequest(models.Model):
                 )
                 if open_act:
                     continue
-                note = Markup("<p>%s</p><p>%s</p>") % (
-                    _(
-                        "You were asked to cover work while %(name)s is away (%(leave_type)s, %(dates)s)."
-                    )
-                    % {"name": requester_name, "leave_type": leave_type, "dates": date_txt},
-                    _("Open this request and choose Accept work handover or Refuse work handover."),
-                )
+                note = leave._handover_activity_note_for_line(line)
                 leave.activity_schedule(
                     _HANDOVER_ACTIVITY_XMLID,
                     date_deadline=today,
@@ -914,6 +1288,106 @@ class HolidaysRequest(models.Model):
                     note=note,
                 )
         return self
+
+    def _mark_handover_requested_at(self):
+        now = fields.Datetime.now()
+        target = self.filtered(
+            lambda l: l.state in ("confirm", "validate1")
+            and l.handover_employee_ids
+            and not l.handover_requested_at
+        )
+        if target:
+            target.sudo().write({"handover_requested_at": now})
+        return self
+
+    def _get_org_chart_department_head_user(self):
+        self.ensure_one()
+        employee = self.employee_id
+        expected = _normalize_job_title_key(_DEPARTMENT_HEAD_JOB_TITLE_KEY)
+        while employee and employee.parent_id:
+            manager = employee.parent_id.sudo()
+            if (
+                _normalize_job_title_key(manager.job_title) == expected
+                and manager.user_id
+                and not manager.user_id.share
+            ):
+                return manager.user_id
+            employee = manager
+        return self.env["res.users"]
+
+    def _get_org_chart_department_manager_user_from_user(self, user):
+        self.ensure_one()
+        if not user:
+            return self.env["res.users"]
+        employee = self._handover_employee_for_assigner_user(user)
+        expected = _normalize_job_title_key(_DEPARTMENT_MANAGER_JOB_TITLE_KEY)
+        while employee and employee.parent_id:
+            manager = employee.parent_id.sudo()
+            if (
+                _normalize_job_title_key(manager.job_title) == expected
+                and manager.user_id
+                and not manager.user_id.share
+            ):
+                return manager.user_id
+            employee = manager
+        return self.env["res.users"]
+
+    def _get_next_manager_user_from_user(self, user):
+        """Return the immediate next manager user in org chain."""
+        self.ensure_one()
+        if not user:
+            return self.env["res.users"]
+        employee = self._handover_employee_for_assigner_user(user)
+        while employee and employee.parent_id:
+            manager = employee.parent_id.sudo()
+            if manager.user_id and not manager.user_id.share:
+                return manager.user_id
+            employee = manager
+        return self.env["res.users"]
+
+    def _notify_handover_timeout_escalation(self, dept_head_user):
+        self.ensure_one()
+        if not dept_head_user or not dept_head_user.partner_id:
+            return
+        body = _(
+            "Work handover for %(leave)s has no acceptance after %(hours)s hours. "
+            "You are now assigned to choose a replacement handover recipient."
+        ) % {
+            "leave": self.display_name,
+            "hours": self._handover_escalation_after_hours(),
+        }
+        self.message_post(
+            body=body,
+            message_type="notification",
+            subtype_xmlid="mail.mt_comment",
+            partner_ids=[dept_head_user.partner_id.id],
+        )
+        existing_todo = self.activity_search(
+            [_TODO_ACTIVITY_XMLID],
+            user_id=dept_head_user.id,
+            additional_domain=[("summary", "=", _("Assign handover replacement"))],
+            only_automated=False,
+        )
+        if not existing_todo:
+            self.activity_schedule(
+                _TODO_ACTIVITY_XMLID,
+                user_id=dept_head_user.id,
+                summary=_("Assign handover replacement"),
+                note=Markup("<p>%s</p><p>%s</p>") % (
+                    body,
+                    _("Open this request and assign another colleague in Work Handover To."),
+                ),
+            )
+
+    def _handover_owner_selected_replacement(self):
+        self.ensure_one()
+        owner = self.handover_escalation_user_id
+        if not owner:
+            return False
+        active_lines = self.handover_acceptance_ids.filtered(
+            lambda l: l.employee_id in self.handover_employee_ids and l.state == "pending"
+        )
+        return bool(active_lines.filtered(lambda l: l.assigned_by_user_id == owner))
 
     def _feedback_all_work_handover_activities(self):
         for leave in self:
@@ -964,6 +1438,28 @@ class HolidaysRequest(models.Model):
                 ),
             )
 
+    def _feedback_requester_handover_update_todo(self, feedback_message):
+        """Mark the post-refusal 'Update work handover recipients' todo as done (if still open)."""
+        self.ensure_one()
+        requester_user = self.employee_id.user_id
+        if not requester_user:
+            return
+        open_acts = self.activity_search(
+            [_TODO_ACTIVITY_XMLID],
+            user_id=requester_user.id,
+            additional_domain=[("summary", "=", _("Update work handover recipients"))],
+            only_automated=False,
+        )
+        if open_acts:
+            open_acts.action_feedback(feedback=feedback_message)
+
+    def _action_return_reload_leave_form(self):
+        """call_button only forwards dict actions to the web client; booleans are dropped, so the form must reload explicitly."""
+        return {
+            "type": "ir.actions.client",
+            "tag": "soft_reload",
+        }
+
     def _get_handover_blocking_employees(self):
         """Employees who have not accepted handover yet for current approval stage."""
         self.ensure_one()
@@ -974,6 +1470,111 @@ class HolidaysRequest(models.Model):
             lambda l: l.employee_id in active_recipients and l.state == "accepted"
         ).mapped("employee_id")
         return active_recipients - accepted
+
+    def _handover_past_due_without_any_acceptance(self):
+        """Same time/no-acceptance test as handover escalation cron (UI can show before cron sets handover_escalated)."""
+        self.ensure_one()
+        if self.state not in ("confirm", "validate1") or not self.handover_employee_ids:
+            return False
+        active_lines = self.handover_acceptance_ids.filtered(
+            lambda l: l.employee_id in self.handover_employee_ids
+        )
+        if not active_lines:
+            return False
+        if active_lines.filtered(lambda l: l.state == "accepted"):
+            return False
+        requested_at = self.handover_requested_at or self.create_date
+        if not requested_at:
+            return False
+        threshold = fields.Datetime.now() - timedelta(hours=self._handover_escalation_after_hours())
+        return requested_at <= threshold
+
+    def _handover_escalation_after_hours(self):
+        self.ensure_one()
+        if self.holiday_status_id and self.holiday_status_id.handover_escalation_after_hours:
+            return self.holiday_status_id.handover_escalation_after_hours
+        return _HANDOVER_ESCALATION_MINUTES / 60.0
+
+    def _handover_second_escalation_hours(self):
+        self.ensure_one()
+        if self.holiday_status_id and self.holiday_status_id.handover_escalation_to_manager_hours:
+            return self.holiday_status_id.handover_escalation_to_manager_hours
+        return _HANDOVER_ESCALATION_TO_MANAGER_HOURS
+
+    def _handover_max_escalation_job_title(self):
+        self.ensure_one()
+        if self.holiday_status_id and self.holiday_status_id.handover_escalation_max_job_title:
+            return self.holiday_status_id.handover_escalation_max_job_title
+        return _DEPARTMENT_HEAD_JOB_TITLE_KEY
+
+    def _handover_job_title_rank(self, title_key):
+        if not title_key:
+            return -1
+        rank_map = {_normalize_job_title_key(key): idx for idx, (key, _label) in enumerate(JOB_TITLE_SELECTION)}
+        return rank_map.get(_normalize_job_title_key(title_key), -1)
+
+    def _get_handover_escalation_cap_user_for_max_title(self):
+        """First manager on the requester's chain whose job title rank >= configured max (has internal user)."""
+        self.ensure_one()
+        max_rank = self._handover_job_title_rank(self._handover_max_escalation_job_title())
+        if max_rank < 0:
+            return self.env["res.users"]
+        employee = self.employee_id
+        while employee and employee.parent_id:
+            manager = employee.parent_id.sudo()
+            mgr_rank = self._handover_job_title_rank(manager.job_title)
+            if mgr_rank >= max_rank and manager.user_id and not manager.user_id.share:
+                return manager.user_id
+            employee = manager
+        return self.env["res.users"]
+
+    def _handover_is_max_escalation_reached(self):
+        self.ensure_one()
+        owner = self.handover_escalation_user_id
+        if not owner:
+            return False
+        cap_user = self._get_handover_escalation_cap_user_for_max_title()
+        if cap_user and owner == cap_user:
+            return True
+        owner_emp = self._handover_employee_for_assigner_user(owner)
+        owner_rank = self._handover_job_title_rank(owner_emp.job_title if owner_emp else False)
+        max_rank = self._handover_job_title_rank(self._handover_max_escalation_job_title())
+        if max_rank < 0:
+            return True
+        return owner_rank >= max_rank
+
+    def _handover_should_auto_cancel_at_max_level(self):
+        self.ensure_one()
+        return bool(self.holiday_status_id and self.holiday_status_id.handover_cancel_if_max_unresponsive)
+
+    def _handover_cancel_after_max_hours(self):
+        self.ensure_one()
+        if self.holiday_status_id and self.holiday_status_id.handover_cancel_after_max_hours:
+            return self.holiday_status_id.handover_cancel_after_max_hours
+        return 2.0
+
+    def _current_user_escalation_assigned_handover_recipient_line(self):
+        """Acceptance row for current user if they were designated by handover_escalation_user_id (e.g. trưởng BP)."""
+        self.ensure_one()
+        if not self.handover_escalation_user_id:
+            return self.env["hr.leave.handover.acceptance"]
+        emp = self.env.user.sudo().employee_id
+        if not emp or emp not in self.handover_employee_ids:
+            return self.env["hr.leave.handover.acceptance"]
+        return self.handover_acceptance_ids.filtered(
+            lambda l: l.employee_id == emp
+            and l.assigned_by_user_id
+            and l.assigned_by_user_id == self.handover_escalation_user_id
+        )[:1]
+
+    def _current_user_is_pending_handover_recipient(self):
+        """True if the logged-in user is a handover colleague who still must accept or refuse."""
+        self.ensure_one()
+        emp = self.env.user.sudo().employee_id
+        if not emp or emp not in self.handover_employee_ids:
+            return False
+        line = self.handover_acceptance_ids.filtered(lambda l: l.employee_id == emp)[:1]
+        return bool(line and line.state == "pending")
 
     def _handover_ready_for_approval(self):
         self.ensure_one()
@@ -1090,23 +1691,52 @@ class HolidaysRequest(models.Model):
                 _("Only the employee who requested this time off can update refused work handover recipients.")
             )
         self.write({"handover_replacement_picker_open": True})
-        return True
+        return self._action_return_reload_leave_form()
 
     def action_handover_replacement_no(self):
-        """Close the replacement picker without applying (user chose not to use it, or cancels)."""
+        """Decline replacing refused colleagues: remove them from Work Handover To and continue the flow."""
         self.ensure_one()
         if not self.can_manage_handover_replacement:
             raise UserError(
                 _("Only the employee who requested this time off can update refused work handover recipients.")
             )
+        refused_emps = self.handover_acceptance_ids.filtered(
+            lambda line: line.state == "refused"
+        ).mapped("employee_id")
+        if not refused_emps:
+            self.write(
+                {
+                    "handover_replacement_picker_open": False,
+                    "handover_swap_out_employee_id": False,
+                    "handover_new_recipient_id": False,
+                }
+            )
+            return self._action_return_reload_leave_form()
+        remaining = self.handover_employee_ids - refused_emps
+        if not remaining:
+            raise UserError(
+                _(
+                    "You cannot remove all work handover recipients. "
+                    "Add at least one colleague or use Yes to replace someone."
+                )
+            )
         self.write(
             {
+                "handover_employee_ids": [Command.set(remaining.ids)],
                 "handover_replacement_picker_open": False,
                 "handover_swap_out_employee_id": False,
                 "handover_new_recipient_id": False,
             }
         )
-        return True
+        self._feedback_requester_handover_update_todo(
+            _("Refused colleague(s) removed from work handover; approval can continue.")
+        )
+        self.message_post(
+            body=_("%s removed refused colleague(s) from work handover without replacing them.")
+            % self.env.user.display_name,
+            subtype_xmlid="mail.mt_note",
+        )
+        return self._action_return_reload_leave_form()
 
     def action_handover_apply_replacement(self):
         """Remove one refused recipient and add a new colleague who has not already accepted on this request."""
@@ -1119,8 +1749,13 @@ class HolidaysRequest(models.Model):
         new_emp = self.handover_new_recipient_id
         if not swap or not new_emp:
             raise UserError(_("Please select who to replace (refused colleague) and the new colleague."))
-        if swap not in self.handover_refused_recipient_ids:
-            raise UserError(_("You can only replace colleagues who refused the work handover."))
+        if swap not in self.handover_replaceable_recipient_ids:
+            raise UserError(
+                _(
+                    "You can only replace recipients who are currently replaceable "
+                    "(refused, or pending after timeout escalation)."
+                )
+            )
         if swap not in self.handover_employee_ids:
             raise UserError(_("The selected colleague is not in the current work handover list."))
         if new_emp not in self.handover_allowed_new_recipient_ids:
@@ -1145,13 +1780,26 @@ class HolidaysRequest(models.Model):
                 "handover_new_recipient_id": False,
             }
         )
-        return True
+        new_line = self.handover_acceptance_ids.filtered(lambda l: l.employee_id == new_emp)[:1]
+        if new_line:
+            write_vals = {"assigned_by_user_id": self.env.user.id}
+            if (
+                self.handover_escalated
+                and self.employee_id
+                and self.employee_id.user_id
+                and self.env.user != self.employee_id.user_id
+            ):
+                write_vals["reassigned_by_escalation_owner"] = True
+            new_line.sudo().write(write_vals)
+        self._refresh_handover_activity_notes_for_employees(new_emp)
+        return self._action_return_reload_leave_form()
 
     @api.onchange("handover_swap_out_employee_id")
     def _onchange_handover_swap_out_employee_id(self):
         allowed = self.handover_allowed_new_recipient_ids
         if self.handover_new_recipient_id and self.handover_new_recipient_id not in allowed:
             self.handover_new_recipient_id = False
+
     def _vals_trigger_emergency_leave_check(self, vals):
         if not vals:
             return False
@@ -1169,6 +1817,30 @@ class HolidaysRequest(models.Model):
                     )
                 )
             self._apply_emergency_leave_on_vals(vals, leave=self)
+        if (
+            vals.get("handover_employee_ids") is not None
+            and not self.env.context.get("leave_fast_create")
+            and not self.env.context.get("skip_handover_assignee_list_lock")
+        ):
+            viewer_emp = self.env.user.sudo().employee_id
+            for leave in self:
+                if leave.handover_escalated:
+                    if not leave.handover_escalation_user_id or leave.handover_escalation_user_id != self.env.user:
+                        raise UserError(
+                            _(
+                                "Sau khi quá hạn bàn giao công việc, chỉ người được chỉ định escalate "
+                                "mới có thể thay đổi người nhận bàn giao."
+                            )
+                        )
+                if viewer_emp and leave.employee_id and viewer_emp == leave.employee_id:
+                    continue
+                if leave._current_user_is_pending_handover_recipient():
+                    raise UserError(
+                        _(
+                            "Bạn không thể tự thay đổi người bàn giao. "
+                            "Vui lòng dùng nút Chấp nhận hoặc Từ chối bàn giao công việc."
+                        )
+                    )
         reset_leaves = self.env["hr.leave"]
         if vals.get("state") == "confirm" and not self.env.context.get(_MULTI_STEP_RESET_CTX):
             reset_leaves = self.filtered(
@@ -1188,11 +1860,14 @@ class HolidaysRequest(models.Model):
         if to_timer:
             to_timer._responsible_backfill_pending_since_if_missing()
         if not self.env.context.get("leave_fast_create"):
+            if vals.get("state") in ("confirm", "validate1"):
+                self._mark_handover_requested_at()
             if vals.get("state") in ("validate", "refuse", "cancel"):
                 self._feedback_all_work_handover_activities()
             elif "handover_employee_ids" in vals:
-                self.filtered(lambda l: l.state == "confirm")._sync_handover_acceptance_lines()
-                self.filtered(lambda l: l.state == "confirm")._schedule_work_handover_activities()
+                self.filtered(lambda l: l.state in _HANDOVER_ACTIVE_STATES)._sync_handover_acceptance_lines()
+                self.filtered(lambda l: l.state in _HANDOVER_ACTIVE_STATES)._mark_pending_handover_lines_as_escalation_assigned()
+                self.filtered(lambda l: l.state in _HANDOVER_ACTIVE_STATES)._schedule_work_handover_activities()
         return res
 
     @api.depends(
@@ -1553,6 +2228,7 @@ class HolidaysRequest(models.Model):
                 leave._notify_responsible_approvers_submission()
                 leave._notify_responsible_current_turn()
         self._bootstrap_handover_workflow()
+        self._mark_handover_requested_at()
         return res
 
     @api.model_create_multi
@@ -1563,6 +2239,7 @@ class HolidaysRequest(models.Model):
         records._ensure_responsible_approval_lines()
         records._responsible_backfill_pending_since_if_missing()
         records._bootstrap_handover_workflow()
+        records._mark_handover_requested_at()
         return records
 
     def _check_approval_update(self, state, raise_if_not_possible=True):
@@ -1879,14 +2556,202 @@ class HolidaysRequest(models.Model):
     @api.model
     def cron_escalate_responsible_approval_timeouts(self):
         """Sequential Employee HR Responsibles: skip current step after escalation delay (default 2h)."""
-        leaves = self.search(
+        leaves = self.sudo().search(
             [
                 ("state", "in", ("confirm", "validate1")),
                 ("validation_type", "=", "employee_hr_responsibles"),
             ]
         )
         for leave in leaves:
-            leave._apply_responsible_timeout_escalation()
+            try:
+                leave._apply_responsible_timeout_escalation()
+            except Exception:
+                _logger.exception(
+                    "time_off_extra_approval: responsible-timeout escalation failed for leave id=%s",
+                    leave.id,
+                )
+
+    @api.model
+    def cron_escalate_handover_timeouts(self):
+        leaves = self.sudo().search(
+            [
+                ("state", "in", ("confirm", "validate1")),
+                ("handover_employee_ids", "!=", False),
+            ]
+        )
+        for leave in leaves:
+            if not leave.handover_escalated:
+                leave._apply_handover_timeout_escalation()
+            else:
+                leave._apply_handover_timeout_escalation_to_department_manager()
+            leave._apply_handover_timeout_cancel_at_max_level()
+
+    def _apply_handover_timeout_escalation(self):
+        self.ensure_one()
+        if self.handover_escalated:
+            return
+        if not self._handover_past_due_without_any_acceptance():
+            return
+        dept_head_user = self._get_org_chart_department_head_user()
+        first_hours = self._handover_escalation_after_hours()
+        if not dept_head_user:
+            self.message_post(
+                body=_(
+                    "Handover timeout reached (%(hours)s h), but no '%(title)s' user was found in org chart."
+                )
+                % {"hours": first_hours, "title": _DEPARTMENT_HEAD_JOB_TITLE_KEY},
+                subtype_xmlid="mail.mt_note",
+            )
+            return
+        self.sudo().write(
+            {
+                "handover_escalated": True,
+                "handover_escalated_at": fields.Datetime.now(),
+                "handover_escalation_level": 1,
+                "handover_escalation_user_id": dept_head_user.id,
+            }
+        )
+        self.message_post(
+            body=_(
+                "Handover timeout reached (%(hours)s h). Escalated to %(user)s (%(title)s) to assign replacement."
+            )
+            % {
+                "hours": first_hours,
+                "user": dept_head_user.display_name,
+                "title": _DEPARTMENT_HEAD_JOB_TITLE_KEY,
+            },
+            subtype_xmlid="mail.mt_note",
+        )
+        self._notify_handover_timeout_escalation(dept_head_user)
+
+    def _apply_handover_timeout_escalation_to_department_manager(self):
+        self.ensure_one()
+        if not self.handover_escalated:
+            return
+        if self._handover_is_max_escalation_reached():
+            return
+        if self._handover_owner_selected_replacement():
+            return
+        base_time = self.handover_escalated_at or self.handover_requested_at or self.create_date
+        if not base_time:
+            return
+        second_hours = self._handover_second_escalation_hours()
+        threshold = fields.Datetime.now() - timedelta(hours=second_hours)
+        if base_time > threshold:
+            return
+        manager_user = self._get_next_manager_user_from_user(self.handover_escalation_user_id)
+        if not manager_user or manager_user == self.handover_escalation_user_id:
+            self.message_post(
+                body=_(
+                    "Handover escalation remained unassigned after %(hours)s hours, but no next manager user was found above %(owner)s."
+                )
+                % {
+                    "hours": second_hours,
+                    "owner": self.handover_escalation_user_id.display_name or _("department head"),
+                },
+                subtype_xmlid="mail.mt_note",
+            )
+            return
+        self.sudo().write(
+            {
+                "handover_escalated": True,
+                "handover_escalated_at": fields.Datetime.now(),
+                "handover_escalation_level": (self.handover_escalation_level or 1) + 1,
+                "handover_escalation_user_id": manager_user.id,
+            }
+        )
+        manager_emp = self._handover_employee_for_assigner_user(manager_user)
+        manager_title = manager_emp.job_title if manager_emp and manager_emp.job_title else _("next level")
+        self.message_post(
+            body=_(
+                "Handover still had no replacement after %(hours)s hours at current level. "
+                "Escalated to %(user)s (%(manager_title)s)."
+            )
+            % {
+                "hours": second_hours,
+                "user": manager_user.display_name,
+                "manager_title": manager_title,
+            },
+            subtype_xmlid="mail.mt_note",
+        )
+        self._notify_handover_timeout_escalation(manager_user)
+
+    def _apply_handover_timeout_cancel_at_max_level(self):
+        self.ensure_one()
+        if not self._handover_should_auto_cancel_at_max_level():
+            return
+        if self.state not in ("confirm", "validate1"):
+            return
+        active_lines = self.handover_acceptance_ids.filtered(
+            lambda l: l.employee_id in self.handover_employee_ids
+        )
+        if active_lines.filtered(lambda l: l.state == "accepted"):
+            return
+        if self._handover_owner_selected_replacement():
+            return
+        requested_at = self.handover_requested_at or self.create_date
+        if not requested_at:
+            return
+        max_title = self._handover_max_escalation_job_title()
+        cancel_after = self._handover_cancel_after_max_hours()
+        total_hours = self._handover_escalation_after_hours() + cancel_after
+        now = fields.Datetime.now()
+        if requested_at > now - timedelta(hours=total_hours):
+            return
+        self.sudo().write({"state": "cancel"})
+        self.message_post(
+            body=_(
+                "Handover stayed unresolved after escalation timeout "
+                "and max-level timeout (max title: %(title)s, cancel timeout: %(hours)s h). "
+                "This leave request was canceled automatically; requester must create a new request."
+            )
+            % {"title": max_title, "hours": cancel_after},
+            subtype_xmlid="mail.mt_note",
+        )
+        requester_user = self.employee_id.user_id
+        if requester_user and requester_user.partner_id and not requester_user.share:
+            self.message_notify(
+                partner_ids=requester_user.partner_id.ids,
+                subject=_("Đơn nghỉ phép đã tự động hủy"),
+                body=_(
+                    "Đơn nghỉ phép %(leave)s của bạn đã bị hệ thống tự động hủy vì quá thời gian chờ "
+                    "nhận bàn giao/duyệt theo cấu hình."
+                )
+                % {"leave": self.display_name},
+            )
+            # Send a direct Discuss chat message from OdooBot as well.
+            try:
+                bot_user = self.env.ref("base.user_root")
+                chat = (
+                    self.env["discuss.channel"]
+                    .with_user(bot_user)
+                    .sudo()
+                    ._get_or_create_chat([requester_user.partner_id.id], pin=True)
+                )
+                chat.with_user(bot_user).sudo().message_post(
+                    body=_(
+                        "Đơn nghỉ phép %(leave)s của bạn đã bị tự động hủy do quá thời gian chờ "
+                        "bàn giao công việc/duyệt theo cấu hình. Vui lòng tạo đơn mới nếu vẫn cần nghỉ."
+                    )
+                    % {"leave": self.display_name},
+                    message_type="comment",
+                    subtype_xmlid="mail.mt_comment",
+                )
+            except Exception:
+                _logger.exception(
+                    "time_off_extra_approval: failed to send OdooBot chat for auto-cancel leave id=%s",
+                    self.id,
+                )
+            self.activity_schedule(
+                _TODO_ACTIVITY_XMLID,
+                user_id=requester_user.id,
+                summary=_("Đơn nghỉ phép bị tự động hủy"),
+                note=_(
+                    "Đơn nghỉ phép %(leave)s đã bị tự động hủy do quá thời gian chờ bàn giao công việc. "
+                    "Vui lòng tạo đơn mới nếu vẫn cần nghỉ."
+                )
+                % {"leave": self.display_name},
+            )
 
     def _apply_responsible_timeout_escalation(self):
         self.ensure_one()

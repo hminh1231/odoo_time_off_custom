@@ -32,6 +32,18 @@ class HrLeaveHandoverAcceptance(models.Model):
     )
     responded_at = fields.Datetime(string="Responded On")
     refusal_reason = fields.Text(string="Refusal Reason")
+    assigned_by_user_id = fields.Many2one(
+        comodel_name="res.users",
+        string="Assigned by",
+        copy=False,
+        help="When set, this recipient was picked by this user (e.g. department head after handover timeout).",
+    )
+    reassigned_by_escalation_owner = fields.Boolean(
+        string="Picked by department head after escalation",
+        default=False,
+        copy=False,
+        help="True when the department head (escalation owner) assigned this recipient after timeout.",
+    )
 
     _sql_constraints = [
         (

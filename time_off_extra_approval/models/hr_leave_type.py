@@ -4,8 +4,23 @@ from odoo import api, fields, models
 from odoo.exceptions import ValidationError
 from odoo.tools import sql
 from odoo.tools.translate import _
+from odoo.addons.hr_job_title_vn.models.hr_version import JOB_TITLE_SELECTION
 
 _logger = logging.getLogger(__name__)
+
+_HANDOVER_ESCALATION_MIN_JOB_TITLE_KEY = "trưởng nhóm"
+_HANDOVER_MAX_ESCALATION_JOB_TITLE_SELECTION = []
+_include = False
+for _key, _label in JOB_TITLE_SELECTION:
+    if _key == _HANDOVER_ESCALATION_MIN_JOB_TITLE_KEY:
+        _include = True
+    if _include:
+        _HANDOVER_MAX_ESCALATION_JOB_TITLE_SELECTION.append((_key, _label))
+if not _HANDOVER_MAX_ESCALATION_JOB_TITLE_SELECTION:
+    _HANDOVER_MAX_ESCALATION_JOB_TITLE_SELECTION = [
+        ("trưởng BP", "Trưởng BP"),
+        ("trưởng phòng", "Trưởng phòng"),
+    ]
 
 
 class HolidaysType(models.Model):
@@ -49,6 +64,34 @@ class HolidaysType(models.Model):
         default=2.0,
         help="Sequential flow only: if the current approver does not act within this time, the request escalates "
         "to the next level.",
+    )
+    handover_escalation_after_hours = fields.Float(
+        string="Handover: Escalate After (hours)",
+        default=2.0,
+        help="If nobody accepts work handover within this time, escalation starts.",
+    )
+    handover_escalation_max_job_title = fields.Selection(
+        selection=_HANDOVER_MAX_ESCALATION_JOB_TITLE_SELECTION,
+        string="Handover: Max Escalation Job Title",
+        default="trưởng BP",
+        help="Maximum escalation level for work handover assignment.",
+    )
+    handover_escalation_to_manager_hours = fields.Float(
+        string="Handover: Escalate To Next Level After (hours)",
+        default=2.0,
+        help="When max level is Trưởng phòng: wait this many hours after escalating to Trưởng BP "
+        "before escalating to Trưởng phòng.",
+    )
+    handover_cancel_if_max_unresponsive = fields.Boolean(
+        string="Handover: Auto-cancel At Max Escalation",
+        default=False,
+        help="If enabled, the leave is automatically canceled when the max escalation level does not assign "
+        "a handover recipient within the configured timeout.",
+    )
+    handover_cancel_after_max_hours = fields.Float(
+        string="Handover: Cancel After Max Level Timeout (hours)",
+        default=2.0,
+        help="Only used when auto-cancel at max escalation is enabled.",
     )
 
     # Extend allocation (Time Off allocation requests) approval options.
@@ -376,6 +419,46 @@ class HolidaysType(models.Model):
                 )
                 cr.execute(
                     "ALTER TABLE hr_leave_type ADD COLUMN employee_responsible_escalation_hours DOUBLE PRECISION DEFAULT 2.0"
+                )
+            if not sql.column_exists(cr, "hr_leave_type", "handover_escalation_after_hours"):
+                _logger.warning(
+                    "time_off_extra_approval: creating missing column hr_leave_type.handover_escalation_after_hours"
+                )
+                cr.execute(
+                    "ALTER TABLE hr_leave_type ADD COLUMN handover_escalation_after_hours DOUBLE PRECISION DEFAULT 2.0"
+                )
+            if not sql.column_exists(cr, "hr_leave_type", "handover_escalation_max_job_title"):
+                _logger.warning(
+                    "time_off_extra_approval: creating missing column hr_leave_type.handover_escalation_max_job_title"
+                )
+                cr.execute(
+                    "ALTER TABLE hr_leave_type ADD COLUMN handover_escalation_max_job_title VARCHAR"
+                )
+                cr.execute(
+                    "UPDATE hr_leave_type SET handover_escalation_max_job_title = %s "
+                    "WHERE handover_escalation_max_job_title IS NULL",
+                    ("trưởng BP",),
+                )
+            if not sql.column_exists(cr, "hr_leave_type", "handover_escalation_to_manager_hours"):
+                _logger.warning(
+                    "time_off_extra_approval: creating missing column hr_leave_type.handover_escalation_to_manager_hours"
+                )
+                cr.execute(
+                    "ALTER TABLE hr_leave_type ADD COLUMN handover_escalation_to_manager_hours DOUBLE PRECISION DEFAULT 2.0"
+                )
+            if not sql.column_exists(cr, "hr_leave_type", "handover_cancel_if_max_unresponsive"):
+                _logger.warning(
+                    "time_off_extra_approval: creating missing column hr_leave_type.handover_cancel_if_max_unresponsive"
+                )
+                cr.execute(
+                    "ALTER TABLE hr_leave_type ADD COLUMN handover_cancel_if_max_unresponsive BOOLEAN DEFAULT FALSE"
+                )
+            if not sql.column_exists(cr, "hr_leave_type", "handover_cancel_after_max_hours"):
+                _logger.warning(
+                    "time_off_extra_approval: creating missing column hr_leave_type.handover_cancel_after_max_hours"
+                )
+                cr.execute(
+                    "ALTER TABLE hr_leave_type ADD COLUMN handover_cancel_after_max_hours DOUBLE PRECISION DEFAULT 2.0"
                 )
         if sql.table_exists(cr, "hr_leave_responsible_approval") and not sql.column_exists(
             cr, "hr_leave_responsible_approval", "pending_since"
