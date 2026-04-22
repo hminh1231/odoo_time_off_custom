@@ -7,6 +7,7 @@
         <field name="arch" type="xml">
             <xpath expr="//sheet" position="inside">
                 <field name="personal_tab_hidden_for_privacy" invisible="1"/>
+                <field name="employee_form_force_readonly_ui" invisible="1"/>
             </xpath>
             <xpath expr="//page[@name='personal_information']" position="attributes">
                 <attribute name="invisible">personal_tab_hidden_for_privacy</attribute>
