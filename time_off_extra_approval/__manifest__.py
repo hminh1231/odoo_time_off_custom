@@ -4,7 +4,7 @@
     "category": "Human Resources",
     "summary": "Allow extra officers/offices to approve time off by leave type",
     "depends": ["hr_holidays", "hr_employee_multi_responsible", "hr_job_title_vn"],
-    "post_init_hook": "hooks.post_init_hook",
+    "post_init_hook": "post_init_hook",
     "data": [
         "data/mail_activity_type_data.xml",
         "security/extra_approvers_security.xml",
@@ -29,4 +29,3 @@
     "application": True,
     "license": "LGPL-3"
 }
-
