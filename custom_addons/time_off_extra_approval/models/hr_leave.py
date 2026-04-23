@@ -38,6 +38,8 @@ _DEPARTMENT_MANAGER_JOB_TITLE_KEY = "trưởng phòng"
 # Advance notice (calendar days between today and first leave day) by job title (hr_job_title_vn keys).
 _EMERGENCY_LEAVE_CTX = "emergency_leave_confirmed"
 _SKIP_EMERGENCY_LEAVE_CHECK_CTX = "skip_emergency_leave_check"
+_SKIP_SUBMIT_BOT_NOTIFY_CTX = "skip_handover_submit_bot_notify"
+_SKIP_OUTCOME_BOT_NOTIFY_CTX = "skip_outcome_bot_notify"
 _SHORT_LEAD_JOB_KEYS = frozenset({"nhân viên", "trưởng nhóm"})
 _SHORT_LEAD_DAYS = 3
 _DEFAULT_LEAD_DAYS = 7
@@ -1345,16 +1347,49 @@ class HolidaysRequest(models.Model):
             employee = manager
         return self.env["res.users"]
 
-    def _notify_handover_timeout_escalation(self, dept_head_user):
+    def _notify_requester_handover_escalation_started_via_bot(self, hours):
+        """DM from handover bot to leave requester when handover escalates to upper level."""
+        self.ensure_one()
+        requester_user = self.employee_id.user_id
+        if not requester_user or requester_user.share or not requester_user.partner_id:
+            return
+        body = _(
+            "Do không có ai nhận bàn giao việc cho bạn trong %(hours)s giờ nên phần này đã được chuyển lên cấp trên."
+        ) % {"hours": hours}
+        try:
+            bot_user = (
+                self.env.ref("business_discuss_bots.user_bot_handover", raise_if_not_found=False)
+                or self.env.ref("base.user_root")
+            )
+            chat = (
+                self.env["discuss.channel"]
+                .with_user(bot_user)
+                .sudo()
+                ._get_or_create_chat([requester_user.partner_id.id], pin=True)
+            )
+            chat.with_user(bot_user).sudo().message_post(
+                body=body,
+                message_type="comment",
+                subtype_xmlid="mail.mt_comment",
+            )
+        except Exception:
+            _logger.exception(
+                "time_off_extra_approval: failed to send escalation-notify-requester bot chat leave_id=%s user_id=%s",
+                self.id,
+                requester_user.id,
+            )
+
+    def _notify_handover_timeout_escalation(self, dept_head_user, hours=None):
         self.ensure_one()
         if not dept_head_user or not dept_head_user.partner_id:
             return
+        hours = hours if hours is not None else self._handover_escalation_after_hours()
         body = _(
             "Work handover for %(leave)s has no acceptance after %(hours)s hours. "
             "You are now assigned to choose a replacement handover recipient."
         ) % {
             "leave": self.display_name,
-            "hours": self._handover_escalation_after_hours(),
+            "hours": hours,
         }
         self.message_post(
             body=body,
@@ -1362,6 +1397,37 @@ class HolidaysRequest(models.Model):
             subtype_xmlid="mail.mt_comment",
             partner_ids=[dept_head_user.partner_id.id],
         )
+        requester_name = self.employee_id.name or self.employee_id.display_name or self.display_name
+        bot_body = _(
+            "Sau %(hours)s giờ, do không có ai nhận bàn giao đơn cho %(requester)s, "
+            "vui lòng vào mục Time Off để quyết định."
+        ) % {
+            "hours": hours,
+            "requester": requester_name,
+        }
+        try:
+            bot_user = (
+                self.env.ref("business_discuss_bots.user_bot_handover", raise_if_not_found=False)
+                or self.env.ref("base.user_root")
+            )
+            chat = (
+                self.env["discuss.channel"]
+                .sudo()
+                .with_user(dept_head_user)
+                ._get_or_create_chat([bot_user.partner_id.id], pin=True)
+            )
+            chat.with_user(bot_user).sudo().message_post(
+                body=bot_body,
+                message_type="comment",
+                subtype_xmlid="mail.mt_comment",
+            )
+        except Exception:
+            _logger.exception(
+                "time_off_extra_approval: failed to send escalation bot chat leave_id=%s user_id=%s",
+                self.id,
+                dept_head_user.id,
+            )
+        self._notify_requester_handover_escalation_started_via_bot(hours=hours)
         existing_todo = self.activity_search(
             [_TODO_ACTIVITY_XMLID],
             user_id=dept_head_user.id,
@@ -1378,6 +1444,60 @@ class HolidaysRequest(models.Model):
                     _("Open this request and assign another colleague in Work Handover To."),
                 ),
             )
+
+    def _notify_handover_recipients_submit_via_bot(self):
+        """Send Discuss DM from handover bot when requester submits the leave."""
+        for leave in self.filtered("handover_employee_ids"):
+            requester_name = leave.employee_id.name or leave.employee_id.display_name or leave.display_name
+            date_from = leave.request_date_from or (leave.date_from and leave.date_from.date())
+            date_text = date_from.strftime("%d/%m/%Y") if date_from else ""
+            body = _(
+                "Bạn được %(requester)s nhờ nhận bàn giao công việc khi họ nghỉ phép vào ngày %(date)s, "
+                "vui lòng bấm vào mục Time Off để chấp nhận hoặc từ chối."
+            ) % {
+                "requester": requester_name,
+                "date": date_text,
+            }
+            for recipient in leave.handover_employee_ids:
+                user = recipient.user_id
+                if not user or user.share or not user.partner_id:
+                    continue
+                try:
+                    bot_user = (
+                        self.env.ref("business_discuss_bots.user_bot_handover", raise_if_not_found=False)
+                        or self.env.ref("base.user_root")
+                    )
+                    channel_model = self.env["discuss.channel"].sudo()
+                    # Primary path: create/get DM in bot context so sender is handover bot.
+                    chat = channel_model.with_user(bot_user)._get_or_create_chat([user.partner_id.id], pin=True)
+                    chat.with_user(bot_user).sudo().message_post(
+                        body=body,
+                        message_type="comment",
+                        subtype_xmlid="mail.mt_comment",
+                    )
+                except Exception:
+                    try:
+                        # Fallback path: create/get same DM from recipient side, then still post as bot.
+                        bot_partner = bot_user.partner_id if bot_user else False
+                        if not bot_partner:
+                            raise ValueError("handover bot partner not found")
+                        chat = (
+                            self.env["discuss.channel"]
+                            .sudo()
+                            .with_user(user)
+                            ._get_or_create_chat([bot_partner.id], pin=True)
+                        )
+                        chat.with_user(bot_user).sudo().message_post(
+                            body=body,
+                            message_type="comment",
+                            subtype_xmlid="mail.mt_comment",
+                        )
+                    except Exception:
+                        _logger.exception(
+                            "time_off_extra_approval: failed to send handover submit bot chat leave_id=%s recipient_id=%s",
+                            leave.id,
+                            recipient.id,
+                        )
 
     def _handover_owner_selected_replacement(self):
         self.ensure_one()
@@ -1436,6 +1556,88 @@ class HolidaysRequest(models.Model):
                         "or select another colleague in Work Handover To."
                     ),
                 ),
+            )
+        self._notify_requester_handover_refusal_via_bot(refused_employee, reason=reason)
+
+    def _notify_requester_handover_refusal_via_bot(self, refused_employee, reason=None):
+        """DM from handover bot to requester when a handover recipient refuses."""
+        self.ensure_one()
+        requester_user = self.employee_id.user_id
+        if not requester_user or requester_user.share or not requester_user.partner_id:
+            return
+        refuser_name = refused_employee.name or refused_employee.display_name
+        reason = (reason or "").strip()
+        if reason:
+            bot_body = _(
+                "%(refuser)s đã từ chối nhận bàn giao công việc cho bạn với lý do %(reason)s, "
+                "vui lòng vào mục Time Off để chọn lại người nhận bàn giao."
+            ) % {"refuser": refuser_name, "reason": reason}
+        else:
+            bot_body = _(
+                "%(refuser)s đã từ chối nhận bàn giao công việc cho bạn, "
+                "vui lòng vào mục Time Off để chọn lại người nhận bàn giao."
+            ) % {"refuser": refuser_name}
+        try:
+            bot_user = (
+                self.env.ref("business_discuss_bots.user_bot_handover", raise_if_not_found=False)
+                or self.env.ref("base.user_root")
+            )
+            chat = (
+                self.env["discuss.channel"]
+                .with_user(bot_user)
+                .sudo()
+                ._get_or_create_chat([requester_user.partner_id.id], pin=True)
+            )
+            chat.with_user(bot_user).sudo().message_post(
+                body=bot_body,
+                message_type="comment",
+                subtype_xmlid="mail.mt_comment",
+            )
+        except Exception:
+            _logger.exception(
+                "time_off_extra_approval: failed to send handover-refusal bot chat leave_id=%s requester_user_id=%s",
+                self.id,
+                requester_user.id,
+            )
+
+    def _notify_requester_handover_complete_via_bot(self):
+        """DM from handover bot when all handover recipients accepted; approval flow can proceed."""
+        self.ensure_one()
+        if not self.handover_employee_ids:
+            return
+        active_lines = self.handover_acceptance_ids.filtered(
+            lambda l: l.employee_id in self.handover_employee_ids
+        )
+        # Never notify at submit time; only notify after all current recipients explicitly accepted.
+        if not active_lines or active_lines.filtered(lambda l: l.state != "accepted"):
+            return
+        requester_user = self.employee_id.user_id
+        if not requester_user or requester_user.share or not requester_user.partner_id:
+            return
+        bot_body = _(
+            "Công việc của bạn đã được bàn giao thành công. Bước vào quy trình duyệt đơn."
+        )
+        try:
+            bot_user = (
+                self.env.ref("business_discuss_bots.user_bot_handover", raise_if_not_found=False)
+                or self.env.ref("base.user_root")
+            )
+            chat = (
+                self.env["discuss.channel"]
+                .with_user(bot_user)
+                .sudo()
+                ._get_or_create_chat([requester_user.partner_id.id], pin=True)
+            )
+            chat.with_user(bot_user).sudo().message_post(
+                body=bot_body,
+                message_type="comment",
+                subtype_xmlid="mail.mt_comment",
+            )
+        except Exception:
+            _logger.exception(
+                "time_off_extra_approval: failed to send handover-complete bot chat leave_id=%s requester_user_id=%s",
+                self.id,
+                requester_user.id,
             )
 
     def _feedback_requester_handover_update_todo(self, feedback_message):
@@ -1624,6 +1826,10 @@ class HolidaysRequest(models.Model):
             body=_("%s accepted the work handover.") % self.env.user.display_name,
             subtype_xmlid="mail.mt_note",
         )
+        if self._handover_ready_for_approval():
+            self._notify_requester_handover_complete_via_bot()
+            if self.validation_type == "employee_hr_responsibles" and self.state in ("confirm", "validate1"):
+                self._notify_responsible_current_turn()
         return True
 
     def action_handover_refuse(self):
@@ -1808,6 +2014,20 @@ class HolidaysRequest(models.Model):
         )
 
     def write(self, vals):
+        submit_notify_target = self.env["hr.leave"]
+        outcome_notify_prev_states = {}
+        if (
+            vals.get("state") in ("validate", "refuse", "cancel")
+            and not self.env.context.get("leave_fast_create")
+            and not self.env.context.get(_SKIP_OUTCOME_BOT_NOTIFY_CTX)
+        ):
+            outcome_notify_prev_states = {leave.id: leave.state for leave in self}
+        if (
+            vals.get("state") == "confirm"
+            and not self.env.context.get("leave_fast_create")
+            and not self.env.context.get(_SKIP_SUBMIT_BOT_NOTIFY_CTX)
+        ):
+            submit_notify_target = self.filtered(lambda l: l.state != "confirm" and l.handover_employee_ids)
         if vals and self._vals_trigger_emergency_leave_check(vals):
             if len(self) > 1:
                 raise UserError(
@@ -1862,12 +2082,19 @@ class HolidaysRequest(models.Model):
         if not self.env.context.get("leave_fast_create"):
             if vals.get("state") in ("confirm", "validate1"):
                 self._mark_handover_requested_at()
+            if vals.get("state") == "confirm" and submit_notify_target:
+                submit_notify_target._notify_handover_recipients_submit_via_bot()
             if vals.get("state") in ("validate", "refuse", "cancel"):
                 self._feedback_all_work_handover_activities()
             elif "handover_employee_ids" in vals:
                 self.filtered(lambda l: l.state in _HANDOVER_ACTIVE_STATES)._sync_handover_acceptance_lines()
                 self.filtered(lambda l: l.state in _HANDOVER_ACTIVE_STATES)._mark_pending_handover_lines_as_escalation_assigned()
                 self.filtered(lambda l: l.state in _HANDOVER_ACTIVE_STATES)._schedule_work_handover_activities()
+            if outcome_notify_prev_states:
+                for leave in self:
+                    prev = outcome_notify_prev_states.get(leave.id)
+                    if leave.state in ("validate", "refuse", "cancel") and leave.state != prev:
+                        leave._notify_requester_approval_outcome_via_bot(leave.state)
         return res
 
     @api.depends(
@@ -2193,6 +2420,8 @@ class HolidaysRequest(models.Model):
             ).sorted("sequence")[:1]
         if not line or not line.user_id.partner_id:
             return
+        if not self._handover_ready_for_approval():
+            return
         self.message_post(
             body=_(
                 "It is now your turn to approve time off request %(leave)s for %(employee)s."
@@ -2205,6 +2434,118 @@ class HolidaysRequest(models.Model):
             subtype_xmlid="mail.mt_comment",
             partner_ids=[line.user_id.partner_id.id],
         )
+        self._notify_responsible_current_turn_via_approval_bot(line.user_id)
+
+    def _notify_responsible_current_turn_via_approval_bot(self, approver_user):
+        """Send Discuss DM from approval bot to current responsible approver."""
+        self.ensure_one()
+        if not approver_user or approver_user.share or not approver_user.partner_id:
+            return
+        requester_name = self.employee_id.name or self.employee_id.display_name or self.display_name
+        leave_date = self.request_date_from or (self.date_from and self.date_from.date())
+        leave_date_text = leave_date.strftime("%d/%m/%Y") if leave_date else ""
+        body = _(
+            "%(requester)s đã gửi đơn xin nghỉ vào %(date)s, vui lòng vào mục Time Off để duyệt đơn hoặc từ chối."
+        ) % {
+            "requester": requester_name,
+            "date": leave_date_text,
+        }
+        try:
+            bot_user = (
+                self.env.ref("business_discuss_bots.user_bot_approval", raise_if_not_found=False)
+                or self.env.ref("base.user_root")
+            )
+            chat = (
+                self.env["discuss.channel"]
+                .with_user(bot_user)
+                .sudo()
+                ._get_or_create_chat([approver_user.partner_id.id], pin=True)
+            )
+            chat.with_user(bot_user).sudo().message_post(
+                body=body,
+                message_type="comment",
+                subtype_xmlid="mail.mt_comment",
+            )
+        except Exception:
+            _logger.exception(
+                "time_off_extra_approval: failed to send approval-step bot chat leave_id=%s approver_user_id=%s",
+                self.id,
+                approver_user.id,
+            )
+
+    def _notify_requester_approval_outcome_via_bot(self, outcome_state):
+        """Send approval result DM from default OdooBot to requester."""
+        self.ensure_one()
+        requester_user = self.employee_id.user_id
+        if not requester_user or requester_user.share or not requester_user.partner_id:
+            return
+        leave_date = self.request_date_from or (self.date_from and self.date_from.date())
+        leave_date_text = leave_date.strftime("%d/%m/%Y") if leave_date else ""
+        if outcome_state == "refuse":
+            body = _("Đơn xin nghỉ của bạn vào ngày %(date)s đã bị từ chối.") % {
+                "date": leave_date_text
+            }
+        elif outcome_state == "cancel":
+            body = _("Đơn xin nghỉ của bạn vào ngày %(date)s đã bị hủy.") % {
+                "date": leave_date_text
+            }
+        else:
+            body = _("Đơn xin nghỉ của bạn vào ngày %(date)s đã được phê duyệt thành công.") % {
+                "date": leave_date_text
+            }
+        try:
+            # Use default OdooBot (system user), not custom approval bot.
+            bot_user = self.env.ref("base.user_root")
+            chat = (
+                self.env["discuss.channel"]
+                .with_user(bot_user)
+                .sudo()
+                ._get_or_create_chat([requester_user.partner_id.id], pin=True)
+            )
+            chat.with_user(bot_user).sudo().message_post(
+                body=body,
+                message_type="comment",
+                subtype_xmlid="mail.mt_comment",
+            )
+        except Exception:
+            _logger.exception(
+                "time_off_extra_approval: failed to send approval-outcome bot chat leave_id=%s requester_user_id=%s state=%s",
+                self.id,
+                requester_user.id,
+                outcome_state,
+            )
+
+    def _notify_requester_auto_cancel_via_odoo_bot(self):
+        """Send specific auto-cancel timeout message via default OdooBot."""
+        self.ensure_one()
+        requester_user = self.employee_id.user_id
+        if not requester_user or requester_user.share or not requester_user.partner_id:
+            return
+        leave_date = self.request_date_from or (self.date_from and self.date_from.date())
+        leave_date_text = leave_date.strftime("%d/%m/%Y") if leave_date else ""
+        body = _(
+            "Đơn xin nghỉ của bạn vào %(date)s đã bị tự động hủy do quá thời gian chờ bàn giao công việc. "
+            "Vui lòng tạo đơn mới nếu vẫn cần nghỉ."
+        ) % {"date": leave_date_text}
+        try:
+            bot_user = self.env.ref("base.user_root")
+            chat = (
+                self.env["discuss.channel"]
+                .with_user(bot_user)
+                .sudo()
+                ._get_or_create_chat([requester_user.partner_id.id], pin=True)
+            )
+            chat.with_user(bot_user).sudo().message_post(
+                body=body,
+                message_type="comment",
+                subtype_xmlid="mail.mt_comment",
+            )
+        except Exception:
+            _logger.exception(
+                "time_off_extra_approval: failed to send auto-cancel OdooBot chat leave_id=%s requester_user_id=%s",
+                self.id,
+                requester_user.id,
+            )
 
     def action_confirm(self):
         missing_handover = self.filtered(lambda leave: not leave.handover_employee_ids)
@@ -2215,7 +2556,9 @@ class HolidaysRequest(models.Model):
                 )
             )
         try:
-            res = super().action_confirm()
+            # write(state='confirm') inside super() already handles submit notifications.
+            # Avoid duplicate DM sends from this action wrapper.
+            res = super(HolidaysRequest, self.with_context(**{_SKIP_SUBMIT_BOT_NOTIFY_CTX: True})).action_confirm()
         except AttributeError:
             res = True
         subset = self.filtered(
@@ -2240,6 +2583,8 @@ class HolidaysRequest(models.Model):
         records._responsible_backfill_pending_since_if_missing()
         records._bootstrap_handover_workflow()
         records._mark_handover_requested_at()
+        # Notify once when records are created directly in submit state.
+        records.filtered(lambda l: l.state == "confirm")._notify_handover_recipients_submit_via_bot()
         return records
 
     def _check_approval_update(self, state, raise_if_not_possible=True):
@@ -2622,7 +2967,7 @@ class HolidaysRequest(models.Model):
             },
             subtype_xmlid="mail.mt_note",
         )
-        self._notify_handover_timeout_escalation(dept_head_user)
+        self._notify_handover_timeout_escalation(dept_head_user, hours=first_hours)
 
     def _apply_handover_timeout_escalation_to_department_manager(self):
         self.ensure_one()
@@ -2674,7 +3019,7 @@ class HolidaysRequest(models.Model):
             },
             subtype_xmlid="mail.mt_note",
         )
-        self._notify_handover_timeout_escalation(manager_user)
+        self._notify_handover_timeout_escalation(manager_user, hours=second_hours)
 
     def _apply_handover_timeout_cancel_at_max_level(self):
         self.ensure_one()
@@ -2698,7 +3043,7 @@ class HolidaysRequest(models.Model):
         now = fields.Datetime.now()
         if requested_at > now - timedelta(hours=total_hours):
             return
-        self.sudo().write({"state": "cancel"})
+        self.with_context(**{_SKIP_OUTCOME_BOT_NOTIFY_CTX: True}).sudo().write({"state": "cancel"})
         self.message_post(
             body=_(
                 "Handover stayed unresolved after escalation timeout "
@@ -2710,6 +3055,7 @@ class HolidaysRequest(models.Model):
         )
         requester_user = self.employee_id.user_id
         if requester_user and requester_user.partner_id and not requester_user.share:
+            self._notify_requester_auto_cancel_via_odoo_bot()
             self.message_notify(
                 partner_ids=requester_user.partner_id.ids,
                 subject=_("Đơn nghỉ phép đã tự động hủy"),
@@ -2719,29 +3065,6 @@ class HolidaysRequest(models.Model):
                 )
                 % {"leave": self.display_name},
             )
-            # Send a direct Discuss chat message from OdooBot as well.
-            try:
-                bot_user = self.env.ref("base.user_root")
-                chat = (
-                    self.env["discuss.channel"]
-                    .with_user(bot_user)
-                    .sudo()
-                    ._get_or_create_chat([requester_user.partner_id.id], pin=True)
-                )
-                chat.with_user(bot_user).sudo().message_post(
-                    body=_(
-                        "Đơn nghỉ phép %(leave)s của bạn đã bị tự động hủy do quá thời gian chờ "
-                        "bàn giao công việc/duyệt theo cấu hình. Vui lòng tạo đơn mới nếu vẫn cần nghỉ."
-                    )
-                    % {"leave": self.display_name},
-                    message_type="comment",
-                    subtype_xmlid="mail.mt_comment",
-                )
-            except Exception:
-                _logger.exception(
-                    "time_off_extra_approval: failed to send OdooBot chat for auto-cancel leave id=%s",
-                    self.id,
-                )
             self.activity_schedule(
                 _TODO_ACTIVITY_XMLID,
                 user_id=requester_user.id,

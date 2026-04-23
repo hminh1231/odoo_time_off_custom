@@ -3,7 +3,7 @@
     "version": "19.0.6.1.67",
     "category": "Human Resources",
     "summary": "Allow extra officers/offices to approve time off by leave type",
-    "depends": ["hr_holidays", "hr_employee_multi_responsible", "hr_job_title_vn"],
+    "depends": ["hr_holidays", "hr_employee_multi_responsible", "hr_job_title_vn", "business_discuss_bots"],
     "post_init_hook": "hooks.post_init_hook",
     "data": [
         "data/mail_activity_type_data.xml",
