@@ -1,5 +1,9 @@
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError
+import base64
+import logging
+
+_logger = logging.getLogger(__name__)
 
 
 class HrAttendance(models.Model):
@@ -89,3 +93,57 @@ class HrAttendance(models.Model):
     def action_draft(self):
         for attendance in self:
             attendance.state = 'draft'
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        _logger.info(f'Creating attendance records: {vals_list}')
+        attendances = super(HrAttendance, self).create(vals_list)
+        for attendance in attendances:
+            _logger.info(f'Created attendance ID {attendance.id}, type: {attendance.attendance_type}')
+            if attendance.attendance_type == 'gateway':
+                _logger.info(f'Calling _generate_gate_ticket_pdf for attendance {attendance.id}')
+                attendance._generate_gate_ticket_pdf()
+        return attendances
+
+    def write(self, vals):
+        result = super(HrAttendance, self).write(vals)
+        if any(field in vals for field in ['gate_ticket', 'gate_items', 'checkout_time', 'approver_id', 'second_approver_id']):
+            for attendance in self:
+                if attendance.attendance_type == 'gateway':
+                    attendance._generate_gate_ticket_pdf()
+        return result
+
+    def _generate_gate_ticket_pdf(self):
+        self.ensure_one()
+        _logger.info(f'Attempting to generate PDF for attendance {self.id}, type: {self.attendance_type}')
+
+        if self.attendance_type != 'gateway':
+            _logger.info(f'Skipping PDF generation - not a gateway ticket')
+            return
+
+        try:
+            pdf_content, _ = self.env['ir.actions.report']._render_qweb_pdf('hr_attendance_gate_ticket.action_report_gate_ticket', res_ids=[self.id])
+            _logger.info(f'PDF generated, size: {len(pdf_content)} bytes')
+
+            attachment_vals = {
+                'name': f'Gate_Ticket_{self.employee_id.name}_{self.id}.pdf',
+                'type': 'binary',
+                'datas': base64.b64encode(pdf_content),
+                'res_model': 'hr.attendance',
+                'res_id': self.id,
+                'mimetype': 'application/pdf',
+            }
+
+            old_attachments = self.env['ir.attachment'].search([
+                ('res_model', '=', 'hr.attendance'),
+                ('res_id', '=', self.id),
+                ('name', 'like', 'Gate_Ticket_%'),
+            ])
+            if old_attachments:
+                _logger.info(f'Removing {len(old_attachments)} old attachments')
+                old_attachments.unlink()
+
+            attachment = self.env['ir.attachment'].create(attachment_vals)
+            _logger.info(f'Created attachment: {attachment.name} (ID: {attachment.id})')
+        except Exception as e:
+            _logger.error(f'Error generating gate ticket PDF: {str(e)}', exc_info=True)

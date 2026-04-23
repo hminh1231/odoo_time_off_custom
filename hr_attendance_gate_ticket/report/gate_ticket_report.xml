@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Define the PDF Report -->
+    <record id="action_report_gate_ticket" model="ir.actions.report">
+        <field name="name">Gate Ticket</field>
+        <field name="model">hr.attendance</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">hr_attendance_gate_ticket.report_gate_ticket_document</field>
+        <field name="report_file">hr_attendance_gate_ticket.report_gate_ticket_document</field>
+        <field name="binding_model_id" ref="hr_attendance.model_hr_attendance"/>
+        <field name="binding_type">report</field>
+        <field name="print_report_name">'Gate_Ticket_%s' % (object.employee_id.name)</field>
+    </record>
+
+    <!-- QWeb Template for the Gate Ticket -->
+    <template id="report_gate_ticket_document">
+        <t t-call="web.basic_layout">
+            <t t-foreach="docs" t-as="o">
+                <div class="page" style="padding: 20px;">
+                    <div style="border: 2px solid black; padding: 20px; max-width: 600px; margin: 0 auto;">
+                        <div style="display: flex; align-items: center; margin-bottom: 20px;">
+                            <div style="flex: 0 0 auto; margin-right: 20px;">
+                                <img t-if="o.employee_id.company_id.logo" t-att-src="image_data_uri(o.employee_id.company_id.logo)" style="max-height: 80px; max-width: 150px;"/>
+                            </div>
+                            <div style="flex: 1;">
+                                <h3 style="margin: 0; font-size: 18pt; font-weight: bold;">GIẤY RA CỔNG</h3>
+                            </div>
+                        </div>
+
+                        <div style="font-size: 11pt; line-height: 2;">
+                            <div style="margin-bottom: 10px;">
+                                <span>Họ và tên: </span>
+                                <span style="border-bottom: 1px dotted black; display: inline-block; min-width: 250px; padding: 0 5px;">
+                                    <t t-esc="o.employee_id.name or ''"/>
+                                </span>
+                                <span style="margin-left: 20px;">Mã số: </span>
+                                <span style="border-bottom: 1px dotted black; display: inline-block; min-width: 80px; padding: 0 5px;">
+                                    <t t-esc="o.employee_id.id or ''"/>
+                                </span>
+                            </div>
+
+                            <div style="margin-bottom: 10px;">
+                                <span>Lý do ra cổng: </span>
+                                <span style="border-bottom: 1px dotted black; display: inline-block; min-width: 450px; padding: 0 5px;">
+                                    <t t-esc="o.gate_ticket or ''"/>
+                                </span>
+                            </div>
+
+                            <div style="margin-bottom: 10px;">
+                                <span>Giờ ra: </span>
+                                <span style="border-bottom: 1px dotted black; display: inline-block; min-width: 80px; padding: 0 5px;">
+                                    <t t-if="o.check_in">
+                                        <t t-esc="o.check_in.strftime('%H:%M') if o.check_in else ''"/>
+                                    </t>
+                                </span>
+                                <span style="margin-left: 15px;">Giờ vào: </span>
+                                <span style="border-bottom: 1px dotted black; display: inline-block; min-width: 80px; padding: 0 5px;">
+                                    <t t-if="o.checkout_time">
+                                        <t t-esc="o.checkout_time.strftime('%H:%M') if o.checkout_time else ''"/>
+                                    </t>
+                                </span>
+                                <span style="margin-left: 15px;">ngày: </span>
+                                <span style="border-bottom: 1px dotted black; display: inline-block; min-width: 120px; padding: 0 5px;">
+                                    <t t-if="o.check_in">
+                                        <t t-esc="o.check_in.strftime('%d/%m/%Y') if o.check_in else ''"/>
+                                    </t>
+                                </span>
+                            </div>
+
+                            <div style="margin-bottom: 30px;">
+                                <span>Vật dụng mang ra: </span>
+                                <span style="border-bottom: 1px dotted black; display: inline-block; min-width: 400px; padding: 0 5px;">
+                                    <t t-esc="o.gate_items or ''"/>
+                                </span>
+                            </div>
+
+                            <table style="width: 100%; margin-top: 40px; border-collapse: collapse;">
+                                <tr>
+                                    <td style="width: 33%; text-align: center; vertical-align: top;">
+                                        <div style="font-weight: bold; text-decoration: underline;">Nhân viên ký</div>
+                                        <div style="height: 60px;"></div>
+                                    </td>
+                                    <td style="width: 34%; text-align: center; vertical-align: top;">
+                                        <div style="font-weight: bold; text-decoration: underline;">Trưởng bộ phận</div>
+                                        <div style="height: 60px;"></div>
+                                    </td>
+                                    <td style="width: 33%; text-align: center; vertical-align: top;">
+                                        <div style="font-weight: bold; text-decoration: underline;">Kiểm soát</div>
+                                        <div style="height: 60px;"></div>
+                                    </td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </t>
+        </t>
+    </template>
+</odoo>

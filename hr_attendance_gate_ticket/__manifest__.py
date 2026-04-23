@@ -7,6 +7,7 @@
     'data': [
         'security/ir.model.access.csv',
         'views/hr_attendance_views.xml',
+        'report/gate_ticket_report.xml',
     ],
     'license': 'LGPL-3',
     'author': 'Custom',
