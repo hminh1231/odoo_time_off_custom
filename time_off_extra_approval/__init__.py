@@ -1,3 +1,3 @@
 from . import models
 
-from .hook import post_init_hook
+from .hooks import post_init_hook
