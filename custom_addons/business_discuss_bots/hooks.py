@@ -2,13 +2,10 @@
 
 import logging
 
-from odoo import SUPERUSER_ID, api
-
 _logger = logging.getLogger(__name__)
 
 
-def post_init_hook(cr):
-    env = api.Environment(cr, SUPERUSER_ID, {})
+def post_init_hook(env):
     bot_users = env["res.users"].browse(
         [
             env.ref("business_discuss_bots.user_bot_handover").id,
