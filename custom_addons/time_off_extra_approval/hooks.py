@@ -22,10 +22,8 @@ def sync_leave_type_form_view(env):
         orphans.write({"active": False})
 
 
-def post_init_hook(cr, registry):
+def post_init_hook(env):
     from odoo import SUPERUSER_ID, api
-
-    env = api.Environment(cr, SUPERUSER_ID, {})
     sync_leave_type_form_view(env)
     pending = env["hr.leave"].search([("state", "in", ("confirm", "validate1"))])
     if pending:
