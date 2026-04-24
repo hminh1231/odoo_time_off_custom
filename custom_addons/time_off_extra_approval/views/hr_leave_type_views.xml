@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_hr_leave_type_form_extra_approvers" model="ir.ui.view">
+        <field name="name">hr.leave.type.form.extra.approvers</field>
+        <field name="model">hr.leave.type</field>
+        <field name="priority">95</field>
+        <field name="inherit_id" ref="hr_holidays.edit_holiday_status_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='responsible_ids']" position="after">
+                <field name="extra_responsible_user_ids"
+                       widget="many2many_tags"
+                       placeholder="No extra officers"
+                       invisible="requires_allocation == 'no' or allocation_validation_type not in ['officer','leader']"/>
+                <field name="extra_responsible_department_ids"
+                       widget="many2many_tags"
+                       placeholder="No extra offices/departments"
+                       invisible="requires_allocation == 'no' or allocation_validation_type not in ['officer','leader']"/>
+            </xpath>
+
+            <!-- Visible block under "Approval" radios (not lost beside Notify HR at top). -->
+            <xpath expr="//group[@id='time_off_requests']/field[@name='leave_validation_type']" position="after">
+                <group string="HR responsibles workflow"
+                       colspan="2"
+                       class="o_inner_group"
+                       invisible="leave_validation_type != 'employee_hr_responsibles'">
+                    <field name="employee_responsible_approval_mode"/>
+                    <field name="employee_responsible_source"/>
+                    <field name="employee_responsible_escalation_hours"
+                           invisible="employee_responsible_approval_mode != 'sequential'"/>
+                </group>
+                <group string="Work handover escalation"
+                       colspan="2"
+                       class="o_inner_group">
+                    <field name="handover_escalation_after_hours"/>
+                    <field name="handover_escalation_max_job_title"/>
+                    <field name="handover_escalation_to_manager_hours"
+                           invisible="handover_escalation_max_job_title != 'trưởng phòng'"/>
+                    <field name="handover_cancel_if_max_unresponsive"/>
+                    <field name="handover_cancel_after_max_hours"
+                           invisible="not handover_cancel_if_max_unresponsive"/>
+                </group>
+            </xpath>
+
+            <!-- Full width directly under Time Off / Allocation approval radios (not beside Negative Cap). -->
+            <xpath expr="//group[@id='time_off_requests']/parent::group" position="after">
+                <group string="Multi-step approval (6 steps)"
+                       class="mw-100 col-lg-12"
+                       colspan="2"
+                       invisible="leave_validation_type != 'multi_step_6' and (not requires_allocation or allocation_validation_type != 'multi_step_6')">
+                    <field name="multi_step_approver_sync" invisible="1"/>
+                    <field name="multi_step_hr_source_department_id"
+                           options="{'no_create': True, 'no_create_edit': True}"/>
+                    <separator string="Approvers (HR employees, one per step)" colspan="2"/>
+                    <field name="multi_step_approver_employee_1_id" widget="many2one_save_on_change"
+                           context="{'list_view_ref': 'hr.view_employee_tree', 'search_view_ref': 'hr.view_employee_filter'}"
+                           options="{'no_create': True, 'no_create_edit': True, 'no_quick_create': True}"/>
+                    <field name="multi_step_approver_employee_2_id" widget="many2one_save_on_change"
+                           context="{'list_view_ref': 'hr.view_employee_tree', 'search_view_ref': 'hr.view_employee_filter'}"
+                           options="{'no_create': True, 'no_create_edit': True, 'no_quick_create': True}"/>
+                    <field name="multi_step_approver_employee_3_id" widget="many2one_save_on_change"
+                           context="{'list_view_ref': 'hr.view_employee_tree', 'search_view_ref': 'hr.view_employee_filter'}"
+                           options="{'no_create': True, 'no_create_edit': True, 'no_quick_create': True}"/>
+                    <field name="multi_step_approver_employee_4_id" widget="many2one_save_on_change"
+                           context="{'list_view_ref': 'hr.view_employee_tree', 'search_view_ref': 'hr.view_employee_filter'}"
+                           options="{'no_create': True, 'no_create_edit': True, 'no_quick_create': True}"/>
+                    <field name="multi_step_approver_employee_5_id" widget="many2one_save_on_change"
+                           context="{'list_view_ref': 'hr.view_employee_tree', 'search_view_ref': 'hr.view_employee_filter'}"
+                           options="{'no_create': True, 'no_create_edit': True, 'no_quick_create': True}"/>
+                    <field name="multi_step_approver_employee_6_id" widget="many2one_save_on_change"
+                           context="{'list_view_ref': 'hr.view_employee_tree', 'search_view_ref': 'hr.view_employee_filter'}"
+                           options="{'no_create': True, 'no_create_edit': True, 'no_quick_create': True}"/>
+                </group>
+            </xpath>
+        </field>
+    </record>
+</odoo>

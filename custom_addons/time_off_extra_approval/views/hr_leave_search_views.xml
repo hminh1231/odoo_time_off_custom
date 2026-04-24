@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+      Standard "Waiting For Me" ignores multi-step approvers (and own requests unless you are leave manager).
+      Include leaves where the current user is in extra_approver_user_ids (multi-step, Employee HR Responsibles, etc.).
+    -->
+    <record id="hr_leave_view_search_waiting_for_me_multi_step" model="ir.ui.view">
+        <field name="name">hr.leave.search.waiting.for.me.multi.step</field>
+        <field name="model">hr.leave</field>
+        <field name="inherit_id" ref="hr_holidays.view_hr_holidays_filter"/>
+        <field name="arch" type="xml">
+            <filter name="waiting_for_me" position="attributes">
+                <!-- Keep in sync with button permissions: show only requests this user can act on now. -->
+                <attribute name="domain">[('state','in',['confirm']), ('approval_actionable_user_ids', 'in', [uid])]</attribute>
+            </filter>
+            <filter name="waiting_for_me_manager" position="attributes">
+                <attribute name="domain">[('state','in',['confirm','validate1']), ('approval_actionable_user_ids', 'in', [uid])]</attribute>
+            </filter>
+        </field>
+    </record>
+</odoo>

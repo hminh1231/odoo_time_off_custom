@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+      Standard Kanban always uses can_approve / can_refuse (Time Off Officer rules).
+      For "Employee HR Responsibles" and multi-step types, use the same actions as the form
+      (can_responsible_approve / can_multi_step_approve).
+    -->
+    <record id="hr_leave_view_kanban_extra_approval" model="ir.ui.view">
+        <field name="name">hr.leave.view.kanban.extra.approval</field>
+        <field name="model">hr.leave</field>
+        <field name="inherit_id" ref="hr_holidays.hr_leave_view_kanban"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='can_refuse']" position="after">
+                <field name="validation_type" invisible="1"/>
+                <field name="can_responsible_approve" invisible="1"/>
+                <field name="can_multi_step_approve" invisible="1"/>
+                <field name="approval_current_step_label" invisible="1"/>
+            </xpath>
+            <xpath expr="//div[hasclass('o_holidays_kanban_card')]//field[@name='holiday_status_id'][hasclass('fw-bold')]" position="after">
+                <div class="text-muted small mt-1" t-if="record.approval_current_step_label.raw_value" title="Current approval step">
+                    <i class="fa fa-user-circle-o me-1" title="Current approver"/>
+                    <field name="approval_current_step_label" class="fst-italic" nolabel="1"/>
+                </div>
+            </xpath>
+            <xpath expr="//div[hasclass('o_hr_holidays_kanban_mobile')]//field[@name='holiday_status_id'][hasclass('text-muted')]" position="after">
+                <div class="text-muted small" t-if="record.approval_current_step_label.raw_value">
+                    <i class="fa fa-user-circle-o me-1" title="Current approver"/>
+                    <field name="approval_current_step_label" nolabel="1"/>
+                </div>
+            </xpath>
+            <xpath expr="//div[contains(@class,'o_hr_holidays_button')]" position="replace">
+                <div class="col-2 o_hr_holidays_button flex-wrap d-flex pe-4 gap-2 justify-content-start">
+                    <t t-if="record.validation_type.raw_value == 'employee_hr_responsibles'">
+                        <button
+                            name="action_responsible_approve" type="object" class="btn btn-primary"
+                            t-if="record.can_responsible_approve.raw_value">
+                            Approve
+                        </button>
+                        <button
+                            name="action_responsible_refuse" type="object" class="btn btn-secondary"
+                            t-if="record.can_responsible_approve.raw_value">
+                            Refuse
+                        </button>
+                    </t>
+                    <t t-elif="record.validation_type.raw_value == 'multi_step_6'">
+                        <button
+                            name="action_multi_step_approve" type="object" class="btn btn-primary"
+                            t-if="record.can_multi_step_approve.raw_value">
+                            Approve
+                        </button>
+                        <button
+                            name="action_multi_step_refuse" type="object" class="btn btn-secondary"
+                            t-if="record.can_multi_step_approve.raw_value">
+                            Refuse
+                        </button>
+                    </t>
+                    <t t-else="">
+                        <button
+                            name="action_approve" type="object" class="btn btn-primary"
+                            t-if="record.can_approve.raw_value">
+                            Approve
+                        </button>
+                        <button
+                            name="action_approve" type="object" class="btn btn-primary"
+                            t-if="record.can_validate.raw_value and !record.can_approve.raw_value">
+                            Validate
+                        </button>
+                        <button
+                            name="action_refuse" type="object" class="btn btn-secondary"
+                            t-if="record.can_refuse.raw_value">
+                            Refuse
+                        </button>
+                    </t>
+                </div>
+            </xpath>
+            <xpath expr="//div[contains(@class,'o_hr_holidays_kanban_mobile')]//bottom" position="replace">
+                <bottom class="d-flex justify-content-end gap-2 mt-0">
+                    <t t-if="record.validation_type.raw_value == 'employee_hr_responsibles'">
+                        <button t-if="record.can_responsible_approve.raw_value" name="action_responsible_approve" type="object" class="btn btn-sm btn-primary py-0">
+                            Approve
+                        </button>
+                        <button t-if="record.can_responsible_approve.raw_value" name="action_responsible_refuse" type="object" class="btn btn-sm btn-secondary py-0">
+                            Refuse
+                        </button>
+                    </t>
+                    <t t-elif="record.validation_type.raw_value == 'multi_step_6'">
+                        <button t-if="record.can_multi_step_approve.raw_value" name="action_multi_step_approve" type="object" class="btn btn-sm btn-primary py-0">
+                            Approve
+                        </button>
+                        <button t-if="record.can_multi_step_approve.raw_value" name="action_multi_step_refuse" type="object" class="btn btn-sm btn-secondary py-0">
+                            Refuse
+                        </button>
+                    </t>
+                    <t t-else="">
+                        <button t-if="record.can_approve.raw_value" name="action_approve" type="object" class="btn btn-sm btn-primary py-0"
+                            groups="hr_holidays.group_hr_holidays_user">
+                            Approve
+                        </button>
+                        <button t-if="record.can_validate.raw_value and !record.can_approve.raw_value" name="action_approve" type="object" class="btn btn-sm btn-primary py-0"
+                            groups="hr_holidays.group_hr_holidays_manager">
+                            Validate
+                        </button>
+                        <button t-if="record.can_refuse.raw_value" name="action_refuse" type="object" class="btn btn-sm btn-secondary py-0"
+                            groups="hr_holidays.group_hr_holidays_user">
+                            Refuse
+                        </button>
+                    </t>
+                    <button t-if="record.supported_attachment_ids_count.raw_value > 0" name="action_documents" type="object" class="btn btn-link btn-sm ps-0 text-danger">
+                        <i class="fa fa-paperclip"> <field name="supported_attachment_ids_count" nolabel="1"/></i>
+                    </button>
+                </bottom>
+            </xpath>
+        </field>
+    </record>
+</odoo>
