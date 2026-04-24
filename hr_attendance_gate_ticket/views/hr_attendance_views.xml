@@ -55,18 +55,6 @@
         </field>
     </record>
 
-    <record id="hr_attendance_view_tree_inherit" model="ir.ui.view">
-        <field name="name">hr.attendance.view.tree.inherit.gate.ticket</field>
-        <field name="model">hr.attendance</field>
-        <field name="inherit_id" ref="hr_attendance.view_attendance_tree"/>
-        <field name="arch" type="xml">
-            <field name="employee_id" position="after">
-                <field name="attendance_type"/>
-                <field name="gate_ticket"/>
-                <field name="checkout_time" optional="hide"/>
-            </field>
-        </field>
-    </record>
 
     <record id="hr_attendance_view_filter_inherit" model="ir.ui.view">
         <field name="name">hr.attendance.view.filter.inherit.gate.ticket</field>
@@ -130,8 +118,8 @@
         </field>
     </record>
 
-    <record id="hr_attendance_management_action" model="ir.actions.act_window">
-        <field name="name">Management</field>
+    <record id="hr_attendance_gateway_action" model="ir.actions.act_window">
+        <field name="name">Gateway</field>
         <field name="res_model">hr.attendance</field>
         <field name="view_mode">list,form</field>
         <field name="view_id" ref="hr_attendance_management_tree_view"/>
@@ -146,10 +134,10 @@
         </field>
     </record>
 
-    <menuitem id="menu_hr_attendance_management"
+    <menuitem id="menu_hr_attendance_gateway"
               name="Gateway"
               parent="hr_attendance.menu_hr_attendance_root"
-              action="hr_attendance_management_action"
+              action="hr_attendance_gateway_action"
               sequence="7"
               groups="hr_attendance.group_hr_attendance_officer"/>
 </odoo>
