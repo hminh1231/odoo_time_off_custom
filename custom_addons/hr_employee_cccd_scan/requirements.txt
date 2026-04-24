@@ -1,5 +1,0 @@
-# Server-side QR decode (action_decode_cccd_qr). Install into the SAME Python as Odoo, e.g.:
-#   venv\Scripts\python.exe -m pip install -r requirements.txt
-opencv-python>=4.8
-zxing-cpp>=1.4
-numpy
