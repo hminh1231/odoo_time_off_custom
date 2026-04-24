@@ -24,7 +24,6 @@ def sync_leave_type_form_view(env):
 
 def post_init_hook(env):
     from odoo import SUPERUSER_ID, api
-
     sync_leave_type_form_view(env)
     pending = env["hr.leave"].search([("state", "in", ("confirm", "validate1"))])
     if pending:
