@@ -1,21 +1,32 @@
-# Odoo custom: Time Off + HR responsibles + CCCD scan
+# Odoo custom: Time Off + HR + Discuss + CCCD
 
-Modules for **Odoo 19**:
+Bộ add-on cho **Odoo 19** (các module đặt cạnh nhau tại thư mục add-ons, ví dụ `custom_addons/`).
 
-| Module | Mô tả ngắn |
-|--------|------------|
-| `hr_employee_multi_responsible` | Nhiều HR responsible trên nhân viên |
-| `time_off_extra_approval` | Duyệt nghỉ phép bổ sung theo loại nghỉ |
-| `hr_job_title_vn` | Chức danh (job title) dạng chọn sẵn theo nhãn phổ biến tại VN |
-| `hr_employee_cccd_scan` | Quét CCCD để điền nhanh thông tin nhân viên trên form HR Employee |
+| Module | Tên ứng dụng (gần đúng) | Mô tả ngắn |
+|--------|-------------------------|------------|
+| `hr_employee_multi_responsible` | HR Employee Multiple Responsibles | Nhiều HR responsible trên từng nhân viên. |
+| `time_off_extra_approval` | Time Off Extra Approvers | Duyệt nghỉ phép bổ sung theo loại nghỉ (bàn giao, bước duyệt, v.v.). |
+| `hr_job_title_vn` | HR Job Title (Vietnamese selection) | Chức danh (job title) chọn sẵn theo nhãn thông dụng tại VN. |
+| `hr_employee_cccd_scan` | Employee ID Card Scan (CCCD) | Quét CCCD để điền nhanh thông tin nhân viên trên form HR Employee. |
+| `hr_employee_self_only` | HR Employee Self Only Access | **Employees = No:** ẩn tab *Personal* khi xem hồ sơ người khác; vẫn dùng full list / Many2one (bàn giao, tìm kiếm, v.v.). |
+| `business_discuss_bots` | Business Discuss Bots | Bot Discuss phục vụ thông báo / tích hợp quy trình nội bộ (phụ thuộc `mail_bot`). |
+| `hr_attendance_gate_ticket` | HR Attendance Gate Ticket | Mở rộng *Attendance* theo dạng vé / cổng (báo cáo, view). |
 
-## Cài đặt
+*Ghi chú: bộ copy **chỉ** thư mục `custom_addons` cạnh source Odoo lớn đôi khi không gồm `hr_attendance_gate_ticket` — cần thì lấy từ [bản full trên GitHub](https://github.com/hminh1231/odoo_time_off_custom).*
 
-1. Copy thư mục này vào máy chạy Odoo (hoặc clone repo này).
-2. Thêm đường dẫn vào `addons_path` trong `odoo.conf`, ví dụ: `addons_path = ...,/đường/dẫn/custom_addons`
-3. Cập nhật Apps và cài module theo nhu cầu:
-   - `HR Employee Multiple Responsibles` trước, sau đó `Time Off Extra Approvers`.
-   - `HR Job Title (Vietnamese selection)` cài độc lập khi cần.
-   - `Employee ID Card Scan (CCCD)` cài độc lập khi cần tính năng scan CCCD trên form nhân viên.
+## Yêu cầu cài theo thứ tự
 
-Tag `timeoff-stable-2026-04-05` đánh dấu bản đã kiểm tra trước khi chỉnh sửa thêm.
+1. Cài trước: **`hr_employee_multi_responsible`**, sau đó **`time_off_extra_approval`** (extra approval bám theo cấu hình HR).
+2. Các module còn lại cài theo nhu cầu; **`hr_employee_self_only`** cần khi tối ưu quyền xem tab Personal cho user không thuộc *Employees*.
+
+## Cài đặt (server)
+
+1. Copy thư mục này lên máy chạy Odoo (hoặc clone [repo](https://github.com/hminh1231/odoo_time_off_custom) — toàn bộ add-on ở **gốc** repo, không nằm dưới tên `custom_addons`).
+2. Thêm đường dẫn vào `addons_path` trong `odoo.conf`, ví dụ:  
+   `addons_path = ...,/đường/dẫn/custom_addons`  
+   (nếu clone GitHub, trỏ tới thư mục chứa trực tiếp các module, ví dụ: `.../odoo_time_off_custom`).
+3. Cập nhật Apps, bật chế độ developer nếu cần, cài từng ứng dụng tương ứng ở bảng trên.
+
+## Ghi chú bản ổn định
+
+Tag **`timeoff-stable-2026-04-05`** đánh dấu bản đã kiểm tra trước khi chỉnh sửa thêm.
