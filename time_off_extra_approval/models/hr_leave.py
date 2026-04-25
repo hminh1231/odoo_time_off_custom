@@ -61,6 +61,11 @@ def _normalize_job_title_key(title):
 class HolidaysRequest(models.Model):
     _inherit = "hr.leave"
 
+    # Rename the "confirm" status label to reflect handover waiting phase.
+    state = fields.Selection(
+        selection_add=[("confirm", "Waiting for Work Hand Over")],
+    )
+
     # Multi-step approval (demo). Used when hr.leave.type.leave_validation_type = 'multi_step_6'.
     multi_step_current = fields.Integer(
         string="Multi-step Current Step",
@@ -2546,6 +2551,42 @@ class HolidaysRequest(models.Model):
                 self.id,
                 requester_user.id,
             )
+
+    def _bot_status_current_step_details(self):
+        """Return (step_label, approver_descriptions) for bot status replies."""
+        self.ensure_one()
+        step_label = self.approval_current_step_label or _("Đang chờ duyệt")
+        approver_descriptions = []
+        if self.validation_type == "employee_hr_responsibles":
+            pending = self.responsible_approval_line_ids.filtered(
+                lambda line: line.state == "pending"
+            ).sorted("sequence")
+            mode = self.holiday_status_id.employee_responsible_approval_mode or "any"
+            current_lines = pending[:1] if mode == "sequential" else pending
+            for line in current_lines:
+                user = line.user_id
+                if not user:
+                    continue
+                employee = user.employee_id
+                job_title = employee.job_title if employee and employee.job_title else False
+                if job_title:
+                    approver_descriptions.append("%s (%s)" % (user.name, job_title))
+                else:
+                    approver_descriptions.append(user.name)
+        elif self.validation_type == "multi_step_6":
+            step = self._get_current_multi_step()
+            if step:
+                users = step._get_all_approver_users()
+                if step.name:
+                    step_label = step.name
+                for user in users:
+                    employee = user.employee_id
+                    job_title = employee.job_title if employee and employee.job_title else False
+                    if job_title:
+                        approver_descriptions.append("%s (%s)" % (user.name, job_title))
+                    else:
+                        approver_descriptions.append(user.name)
+        return step_label, approver_descriptions
 
     def action_confirm(self):
         missing_handover = self.filtered(lambda leave: not leave.handover_employee_ids)

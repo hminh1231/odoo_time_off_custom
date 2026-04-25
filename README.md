@@ -8,7 +8,6 @@ Modules for **Odoo 19**:
 | `time_off_extra_approval` | Duyệt nghỉ phép bổ sung theo loại nghỉ |
 | `hr_job_title_vn` | Chức danh (job title) dạng chọn sẵn theo nhãn phổ biến tại VN |
 | `hr_employee_cccd_scan` | Quét CCCD để điền nhanh thông tin nhân viên trên form HR Employee |
-| `hr_employee_self_only` | **Employees = No**: ẩn tab Personal khi xem hồ sơ người khác; vẫn xem full list / chọn Many2one (bàn giao, v.v.) |
 
 ## Cài đặt
 
@@ -18,6 +17,5 @@ Modules for **Odoo 19**:
    - `HR Employee Multiple Responsibles` trước, sau đó `Time Off Extra Approvers`.
    - `HR Job Title (Vietnamese selection)` cài độc lập khi cần.
    - `Employee ID Card Scan (CCCD)` cài độc lập khi cần tính năng scan CCCD trên form nhân viên.
-   - `HR Employee Self Only Access` cài khi cần tùy chọn **Employees = No** (ẩn tab Personal trên form nhân viên người khác; không chặn danh sách nhân viên).
 
 Tag `timeoff-stable-2026-04-05` đánh dấu bản đã kiểm tra trước khi chỉnh sửa thêm.

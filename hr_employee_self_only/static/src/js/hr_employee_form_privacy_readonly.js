@@ -1,7 +1,7 @@
 /** @odoo-module **/
 
 import { patch } from "@web/core/utils/patch";
-import { onMounted, onWillStart, status } from "@odoo/owl";
+import { onMounted, onWillStart, onWillUnmount, status } from "@odoo/owl";
 import { user } from "@web/core/user";
 import { effect } from "@web/core/utils/reactive";
 
@@ -15,15 +15,63 @@ patch(EmployeeFormController.prototype, {
     setup() {
         super.setup(...arguments);
         this._employeesNoUiLock = false;
+        this._employeesNoInteractionClass = "o_hr_employee_no_interaction";
+        this._employeesNoClickBlocker = null;
+        this._employeesNoObserver = null;
         onWillStart(async () => {
             this._employeesNoUiLock = await user.hasGroup(
                 "hr_employee_self_only.group_hr_employees_no"
             );
             if (this._employeesNoUiLock) {
                 this.canCreate = false;
+                this.canEdit = false;
             }
         });
         onMounted(() => {
+            const lockInteractiveElements = () => {
+                if (!this.el || !this._employeesNoUiLock) {
+                    return;
+                }
+                this.el
+                    .querySelectorAll(
+                        "a, button, .o_external_button, .o-dropdown--menu .dropdown-item, .o_notebook_headers .nav-link"
+                    )
+                    .forEach((node) => {
+                        node.style.pointerEvents = "none";
+                        node.style.cursor = "default";
+                    });
+            };
+            this._employeesNoClickBlocker = (ev) => {
+                if (!this._employeesNoUiLock) {
+                    return;
+                }
+                const root = this.model?.root;
+                if (!root || root.isNew || !root.resId) {
+                    return;
+                }
+                const target = ev.target;
+                if (!(target instanceof Element)) {
+                    return;
+                }
+                const interactive = target.closest(
+                    "a, button, .o_field_widget, .dropdown-item, .o_notebook_headers"
+                );
+                if (interactive) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                }
+            };
+            this.el?.addEventListener("click", this._employeesNoClickBlocker, true);
+            if (this._employeesNoUiLock && this.el) {
+                this._employeesNoObserver = new MutationObserver(() => {
+                    lockInteractiveElements();
+                });
+                this._employeesNoObserver.observe(this.el, {
+                    childList: true,
+                    subtree: true,
+                });
+                lockInteractiveElements();
+            }
             effect(
                 (model) => {
                     if (status(this) !== "mounted") {
@@ -33,23 +81,30 @@ patch(EmployeeFormController.prototype, {
                     if (!root || root.isNew || !root.resId) {
                         return;
                     }
-                    if (!root.fields.employee_form_force_readonly_ui) {
-                        return;
-                    }
-                    const forceReadonly = root.data.employee_form_force_readonly_ui;
-                    if (forceReadonly === undefined) {
-                        return;
-                    }
-                    if (forceReadonly) {
+                    if (this._employeesNoUiLock) {
+                        this.el?.classList.add(this._employeesNoInteractionClass);
+                        lockInteractiveElements();
                         if (root.config.mode !== "readonly") {
                             root.switchMode("readonly");
                         }
                     } else if (this.canEdit && root.config.mode === "readonly") {
+                        this.el?.classList.remove(this._employeesNoInteractionClass);
                         root.switchMode("edit");
+                    } else {
+                        this.el?.classList.remove(this._employeesNoInteractionClass);
                     }
                 },
                 [this.model]
             );
+        });
+        onWillUnmount(() => {
+            if (this._employeesNoClickBlocker) {
+                this.el?.removeEventListener("click", this._employeesNoClickBlocker, true);
+            }
+            if (this._employeesNoObserver) {
+                this._employeesNoObserver.disconnect();
+                this._employeesNoObserver = null;
+            }
         });
     },
 

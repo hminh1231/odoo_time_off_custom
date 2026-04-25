@@ -1,0 +1,23 @@
+.o_hr_employee_no_interaction.o_form_view {
+    .o_form_renderer {
+        position: relative;
+    }
+
+    .o_form_renderer::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 20;
+        background: transparent;
+        cursor: default;
+    }
+
+    .o_form_renderer a,
+    .o_form_renderer button,
+    .o_form_renderer .o_field_widget,
+    .o_form_renderer .o_external_button,
+    .o_form_renderer .dropdown-toggle,
+    .o_form_renderer .dropdown-item {
+        cursor: default !important;
+    }
+}

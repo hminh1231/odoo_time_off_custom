@@ -1,0 +1,404 @@
+import re
+import unicodedata
+
+from markupsafe import Markup
+
+from odoo import models, _
+
+
+class MailBot(models.AbstractModel):
+    _inherit = "mail.bot"
+
+    _BUSINESS_BOT_PARTNER_XMLID_TO_SKILL = {
+        "business_discuss_bots.partner_bot_approval": "approval",
+        "business_discuss_bots.partner_bot_handover": "handover",
+    }
+    _APPROVAL_SUPPORTED_INTENTS = {"approval_status", "approval_who", "help"}
+    _HANDOVER_SUPPORTED_INTENTS = {
+        "handover_status",
+        "handover_accepted",
+        "handover_pending",
+        "handover_refused",
+        "help",
+    }
+
+    def _get_answer(self, channel, body, values, command=False):
+        answer = self._business_bot_route(channel, body, values, command)
+        if answer:
+            return answer
+        return super()._get_answer(channel, body, values, command=command)
+
+    def _apply_logic(self, channel, values, command=None):
+        """Post answers as the correct bot identity in DM channels."""
+        channel.ensure_one()
+        if self.env.context.get("business_bot_skip_apply_logic"):
+            return
+        default_author_id = self.env["ir.model.data"]._xmlid_to_res_id("base.partner_root")
+        if values.get("author_id") in self._business_bot_author_ids() | {default_author_id} or (
+            values.get("message_type") != "comment" and not command
+        ):
+            return
+        body = values.get("body", "").replace("\xa0", " ").strip().lower().strip(".!")
+        answer = self._get_answer(channel, body, values, command)
+        if not answer:
+            return
+        author_id = self._business_bot_author_id(channel) or default_author_id
+        answers = answer if isinstance(answer, list) else [answer]
+        for ans in answers:
+            channel.with_context(business_bot_skip_apply_logic=True).sudo().message_post(
+                author_id=author_id,
+                body=Markup(ans) if not isinstance(ans, Markup) else ans,
+                message_type="comment",
+                silent=True,
+                subtype_xmlid="mail.mt_comment",
+            )
+
+    def _business_bot_route(self, channel, body, values, command=False):
+        if command or channel.channel_type != "chat":
+            return False
+        skill_key = self._business_bot_skill_key(channel)
+        if not skill_key:
+            return False
+        if "hr.leave" not in self.env:
+            return _("Bot chưa truy cập được dữ liệu Time Off trên hệ thống hiện tại.")
+        if skill_key == "main":
+            return self._run_main_router_skill(body)
+        intent = self._classify_intent(body)
+        if skill_key == "approval":
+            if intent not in self._APPROVAL_SUPPORTED_INTENTS:
+                return self._redirect_to_main_bot_message(_("duyệt đơn nghỉ phép"))
+            return self._run_approval_skill(intent)
+        if skill_key == "handover":
+            if intent not in self._HANDOVER_SUPPORTED_INTENTS:
+                return self._redirect_to_main_bot_message(_("bàn giao công việc"))
+            return self._run_handover_skill(intent)
+        return False
+
+    def _business_bot_skill_key(self, channel):
+        partners = channel.channel_member_ids.partner_id
+        main_bot_partner = self.env.ref("base.partner_root", raise_if_not_found=False)
+        if main_bot_partner and main_bot_partner in partners:
+            return "main"
+        for xmlid, skill_key in self._BUSINESS_BOT_PARTNER_XMLID_TO_SKILL.items():
+            partner = self.env.ref(xmlid, raise_if_not_found=False)
+            if partner and partner in partners:
+                return skill_key
+        return False
+
+    def _run_main_router_skill(self, body):
+        normalized = self._normalize_text(body)
+        if not normalized:
+            return False
+        intent = self._classify_intent(body)
+        hr_tokens = (
+            "time off",
+            "xin nghi",
+            "xin phep",
+            "nghi phep",
+            "don nghi",
+            "duyet",
+            "ban giao",
+            "handover",
+            "leave",
+            "vacation",
+            "pto",
+        )
+        hr_related = intent in {
+            "approval_status",
+            "approval_who",
+            "latest_leave",
+            "handover_status",
+            "handover_accepted",
+            "handover_pending",
+            "handover_refused",
+        } or (intent == "help" and any(token in normalized for token in hr_tokens)) or any(
+            token in normalized for token in hr_tokens
+        )
+        if not hr_related:
+            return False
+
+        odoobot_state = self.env.user.odoobot_state
+        in_onboarding = bool(odoobot_state and odoobot_state not in ("idle", "not_initialized", False))
+        onboarding_note = ""
+        if in_onboarding:
+            onboarding_note = _(
+                "<i>(Bạn đang trong tour OdooBot; mình vẫn trả lời phần Time Off bên dưới. "
+                "Để hỏi chi tiết bước duyệt, hãy mở chat OdooBot Duyệt đơn.)</i><br/><br/>"
+            )
+
+        core = False
+        if intent in ("handover_status", "handover_accepted", "handover_pending", "handover_refused"):
+            core = self._run_handover_skill(intent)
+        elif intent in ("latest_leave", "approval_who", "approval_status"):
+            core = self.with_context(business_discuss_leave_on_main_bot=True)._run_approval_skill(intent)
+        elif intent == "help" and any(t in normalized for t in hr_tokens):
+            core = self._run_main_help_with_leave_summary()
+        elif any(t in normalized for t in hr_tokens):
+            core = self._run_approval_skill("latest_leave")
+        else:
+            core = self._run_main_help_with_leave_summary()
+
+        if not core:
+            core = self._run_main_help_with_leave_summary()
+
+        guidance = _(
+            "<br/><br/><b>Hỏi chi tiết hơn</b> (chat trực tiếp từng bot):<br/>"
+            "• <b>OdooBot Duyệt đơn</b>: đang ở bước duyệt nào, ai đang duyệt<br/>"
+            "• <b>OdooBot Bàn giao việc</b>: ai đã chấp nhận / đang chờ / đã từ chối bàn giao"
+        )
+        return Markup(onboarding_note) + Markup(core) + Markup(guidance)
+
+    def _run_main_help_with_leave_summary(self):
+        employee = self.env.user.employee_id
+        if not employee:
+            return _("Mình chưa thấy hồ sơ nhân sự gắn với tài khoản của bạn.<br/>")
+        leaves = self.env["hr.leave"].sudo().search(
+            [("employee_id", "=", employee.id)],
+            order="request_date_from desc, create_date desc, id desc",
+            limit=5,
+        )
+        if not leaves:
+            return _("Chưa có đơn Time Off nào trên hệ thống cho bạn.<br/>")
+        latest = leaves[:1]
+        pending = leaves.filtered(lambda l: l.state in ("confirm", "validate1"))[:1]
+        lines = [
+            _("<b>Tóm tắt Time Off của bạn</b><br/>"),
+            self._format_latest_leave_answer(latest),
+        ]
+        if pending and pending.id != latest.id:
+            st = dict(pending._fields["state"].selection).get(pending.state, pending.state)
+            lines.append(
+                _("<br/>Đơn đang chờ xử lý gần nhất: ngày %(date)s — %(state)s.") % {
+                    "date": self._leave_date_text(pending),
+                    "state": st,
+                }
+            )
+        lines.append(
+            _("<br/><br/>Bạn có thể hỏi mình: đơn nghỉ gần nhất ngày nào, tình trạng đơn, "
+              "hoặc mở chat bot chuyên trách như trên.")
+        )
+        return "<br/>".join(lines)
+
+    def _business_bot_author_id(self, channel):
+        partners = channel.channel_member_ids.partner_id
+        for xmlid in self._BUSINESS_BOT_PARTNER_XMLID_TO_SKILL:
+            partner = self.env.ref(xmlid, raise_if_not_found=False)
+            if partner and partner in partners:
+                return partner.id
+        return False
+
+    def _business_bot_author_ids(self):
+        author_ids = set()
+        for xmlid in self._BUSINESS_BOT_PARTNER_XMLID_TO_SKILL:
+            partner = self.env.ref(xmlid, raise_if_not_found=False)
+            if partner:
+                author_ids.add(partner.id)
+        return author_ids
+
+    def _classify_intent(self, body):
+        text = self._normalize_text(body)
+        if not text:
+            return "help"
+        if any(token in text for token in ("menu", "help", "giup", "tro giup", "huong dan")):
+            return "help"
+        if any(token in text for token in ("gan nhat", "ngay nao", "khi nao")):
+            return "latest_leave"
+        if any(token in text for token in ("ai duyet", "nguoi duyet", "chuc vu")):
+            return "approval_who"
+        if any(token in text for token in ("accepted", "chap nhan", "dong y")):
+            return "handover_accepted"
+        if any(token in text for token in ("pending", "cho", "chua phan hoi", "dang doi")):
+            return "handover_pending"
+        if any(token in text for token in ("refused", "tu choi", "khong nhan")):
+            return "handover_refused"
+        if any(token in text for token in ("ban giao", "handover")):
+            return "handover_status"
+        if any(
+            token in text
+            for token in (
+                "step",
+                "buoc",
+                "trang thai",
+                "tinh trang",
+                "ket qua",
+                "duyet",
+                "time off",
+                "xin nghi",
+                "don",
+            )
+        ):
+            return "approval_status"
+        return "help"
+
+    def _run_approval_skill(self, intent):
+        employee = self.env.user.employee_id
+        if not employee:
+            return _("Mình chưa thấy hồ sơ nhân sự gắn với tài khoản của bạn nên chưa kiểm tra được đơn Time Off.")
+
+        leaves = self.env["hr.leave"].sudo().search(
+            [("employee_id", "=", employee.id)],
+            order="request_date_from desc, create_date desc, id desc",
+            limit=10,
+        )
+        if not leaves:
+            return _("Hiện tại mình chưa thấy đơn Time Off nào của bạn.")
+        latest = leaves[:1]
+        if intent == "help":
+            return self._approval_help_message()
+        if intent == "latest_leave":
+            return self._format_latest_leave_answer(latest)
+
+        leave = leaves.filtered(lambda l: l.state in ("confirm", "validate1"))[:1]
+        if not leave:
+            if self.env.context.get("business_discuss_leave_on_main_bot"):
+                latest = leaves[:1]
+                state_label = dict(latest._fields["state"].selection).get(latest.state, latest.state)
+                return _(
+                    "Đơn gần nhất của bạn: ngày %(date)s — trạng thái: %(state)s.<br/>"
+                    "Hiện không còn đơn nào đang chờ duyệt (confirm/validate1)."
+                ) % {
+                    "date": self._leave_date_text(latest),
+                    "state": state_label,
+                }
+            return _(
+                "Đơn của bạn hiện không còn ở trạng thái chờ duyệt tại bot này.<br/>"
+                "Bạn vui lòng nhắn OdooBot chính để tra cứu kết quả đơn đã duyệt xong "
+                "(Approved/Refused/Cancelled)."
+            )
+
+        step_label, approver_lines = self._approval_step_and_approvers(leave)
+        leave_date = self._leave_date_text(leave)
+        if intent == "approval_who":
+            if approver_lines:
+                return _("Đơn ngày %(date)s đang chờ: %(approvers)s.") % {
+                    "date": leave_date,
+                    "approvers": ", ".join(approver_lines),
+                }
+            return _("Đơn ngày %(date)s đang chờ duyệt nhưng chưa xác định được người duyệt hiện tại.") % {
+                "date": leave_date
+            }
+        response_lines = [
+            _("Đơn Time Off ngày %(date)s của bạn hiện đang ở: %(step)s.") % {
+                "date": leave_date,
+                "step": step_label,
+            }
+        ]
+        if approver_lines:
+            response_lines.append(_("Người đang duyệt: %(approvers)s.") % {"approvers": ", ".join(approver_lines)})
+        return "<br/>".join(response_lines)
+
+    def _run_handover_skill(self, intent):
+        employee = self.env.user.employee_id
+        if not employee:
+            return _("Mình chưa thấy hồ sơ nhân sự gắn với tài khoản của bạn nên chưa kiểm tra được bàn giao công việc.")
+        if intent == "help":
+            return self._handover_help_message()
+        leave = self.env["hr.leave"].sudo().search(
+            [
+                ("employee_id", "=", employee.id),
+                ("handover_employee_ids", "!=", False),
+            ],
+            order="request_date_from desc, create_date desc, id desc",
+            limit=1,
+        )
+        if not leave:
+            return _("Hiện tại bạn chưa có đơn Time Off nào có bàn giao công việc.")
+        accepted, pending, refused = self._handover_groups(leave)
+        date_text = self._leave_date_text(leave)
+        if intent == "handover_accepted":
+            return _("Đơn ngày %(date)s, đã chấp nhận bàn giao: %(names)s.") % {
+                "date": date_text,
+                "names": self._join_or_none(accepted),
+            }
+        if intent == "handover_pending":
+            return _("Đơn ngày %(date)s, đang chờ phản hồi bàn giao: %(names)s.") % {
+                "date": date_text,
+                "names": self._join_or_none(pending),
+            }
+        if intent == "handover_refused":
+            return _("Đơn ngày %(date)s, đã từ chối bàn giao: %(names)s.") % {
+                "date": date_text,
+                "names": self._join_or_none(refused),
+            }
+        return _(
+            "Trạng thái bàn giao của đơn ngày %(date)s:<br/>"
+            "Đã chấp nhận: %(accepted)s<br/>"
+            "Đang chờ: %(pending)s<br/>"
+            "Đã từ chối: %(refused)s"
+        ) % {
+            "date": date_text,
+            "accepted": self._join_or_none(accepted),
+            "pending": self._join_or_none(pending),
+            "refused": self._join_or_none(refused),
+        }
+
+    def _approval_step_and_approvers(self, leave):
+        if hasattr(leave, "_bot_status_current_step_details"):
+            return leave._bot_status_current_step_details()
+        step_label = leave.approval_current_step_label or _("Đang chờ duyệt")
+        return step_label, []
+
+    def _handover_groups(self, leave):
+        active_recipients = leave.handover_employee_ids
+        accepted = []
+        pending = []
+        refused = []
+        for recipient in active_recipients:
+            line = leave.handover_acceptance_ids.filtered(lambda l: l.employee_id == recipient)[:1]
+            label = self._employee_with_title(recipient)
+            if not line or line.state == "pending":
+                pending.append(label)
+            elif line.state == "accepted":
+                accepted.append(label)
+            elif line.state == "refused":
+                refused.append(label)
+        return accepted, pending, refused
+
+    def _employee_with_title(self, employee):
+        title = (employee.job_title or "").strip()
+        if title:
+            return "%s (%s)" % (employee.name, title)
+        return employee.name
+
+    def _format_latest_leave_answer(self, leave):
+        state_label = dict(leave._fields["state"].selection).get(leave.state, leave.state)
+        return _("Đơn Time Off gần nhất của bạn là ngày %(date)s (trạng thái: %(state)s).") % {
+            "date": self._leave_date_text(leave),
+            "state": state_label,
+        }
+
+    def _leave_date_text(self, leave):
+        leave_date = leave.request_date_from or (leave.date_from and leave.date_from.date())
+        return leave_date.strftime("%d/%m/%Y") if leave_date else (leave.display_name or "")
+
+    def _join_or_none(self, values):
+        return ", ".join(values) if values else _("Không có")
+
+    def _approval_help_message(self):
+        return _(
+            "Bạn có thể hỏi mình:<br/>"
+            "1) Đơn đang ở bước nào<br/>"
+            "2) Ai đang duyệt đơn"
+        )
+
+    def _handover_help_message(self):
+        return _(
+            "Bạn có thể hỏi mình:<br/>"
+            "1) Ai đã chấp nhận bàn giao<br/>"
+            "2) Ai đang chờ phản hồi bàn giao<br/>"
+            "3) Ai đã từ chối bàn giao<br/>"
+            "4) Trạng thái bàn giao hiện tại"
+        )
+
+    def _redirect_to_main_bot_message(self, task_name):
+        return _(
+            "Mình chỉ hỗ trợ tác vụ %(task)s.<br/>"
+            "Câu hỏi này chưa thuộc phạm vi của mình, bạn vui lòng nhắn qua OdooBot chính để được hỗ trợ thêm."
+        ) % {"task": task_name}
+
+    def _normalize_text(self, text):
+        normalized = (text or "").strip().lower()
+        normalized = unicodedata.normalize("NFKD", normalized)
+        normalized = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+        normalized = re.sub(r"\s+", " ", normalized)
+        return normalized
