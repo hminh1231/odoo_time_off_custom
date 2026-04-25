@@ -42,12 +42,32 @@ class HrAttendance(models.Model):
         ('refuse', 'Refused'),
     ], string='Status', default='draft', tracking=True, copy=False)
 
+    def _notify_approver(self, approver, message_body):
+        """Send notification to a specific approver."""
+        if not approver or self.attendance_type != 'gateway':
+            return
+
+        self.message_post(
+            body=message_body,
+            partner_ids=[approver.partner_id.id],
+            subtype_xmlid='mail.mt_comment'
+        )
+
     def action_submit(self):
         for attendance in self:
             if attendance.state != 'draft':
                 raise UserError(_('Only draft attendances can be submitted.'))
             if attendance.attendance_type == 'gateway':
                 attendance.state = 'confirm'
+                # Notify first approver
+                if attendance.approver_id:
+                    attendance._notify_approver(
+                        attendance.approver_id,
+                        _('Gateway ticket submitted by <b>%(employee)s</b> is waiting for your approval.<br/>'
+                          'Reason: %(reason)s',
+                          employee=attendance.employee_id.name,
+                          reason=attendance.gate_ticket or 'N/A')
+                    )
             else:
                 attendance.state = 'validate'
 
@@ -60,6 +80,25 @@ class HrAttendance(models.Model):
                     raise UserError(_('Only the assigned first approver or attendance administrators can do first approval.'))
             if attendance.attendance_type == 'gateway':
                 attendance.state = 'second_approve'
+                # Notify second approver
+                if attendance.second_approver_id:
+                    attendance._notify_approver(
+                        attendance.second_approver_id,
+                        _('Gateway ticket for <b>%(employee)s</b> has been approved by <b>%(approver)s</b> '
+                          'and is waiting for your second approval.<br/>'
+                          'Reason: %(reason)s',
+                          employee=attendance.employee_id.name,
+                          approver=self.env.user.name,
+                          reason=attendance.gate_ticket or 'N/A')
+                    )
+                # Notify employee about first approval
+                if attendance.employee_id.user_id:
+                    attendance._notify_approver(
+                        attendance.employee_id.user_id,
+                        _('Your gateway ticket has been approved by <b>%(approver)s</b>. '
+                          'Waiting for second approval.',
+                          approver=self.env.user.name)
+                    )
             else:
                 attendance.state = 'validate'
 
@@ -72,8 +111,38 @@ class HrAttendance(models.Model):
                     raise UserError(_('Only the assigned second approver or attendance administrators can do second approval.'))
             if attendance.third_approver_id:
                 attendance.state = 'third_approve'
+                # Notify third approver
+                attendance._notify_approver(
+                    attendance.third_approver_id,
+                    _('Gateway ticket for <b>%(employee)s</b> has passed second approval by <b>%(approver)s</b> '
+                      'and is waiting for your final approval.<br/>'
+                      'Reason: %(reason)s',
+                      employee=attendance.employee_id.name,
+                      approver=self.env.user.name,
+                      reason=attendance.gate_ticket or 'N/A')
+                )
+                # Notify employee about second approval
+                if attendance.employee_id.user_id:
+                    attendance._notify_approver(
+                        attendance.employee_id.user_id,
+                        _('Your gateway ticket has passed second approval by <b>%(approver)s</b>. '
+                          'Waiting for final approval.',
+                          approver=self.env.user.name)
+                    )
             else:
                 attendance.state = 'validate'
+                # Notify employee about final approval
+                if attendance.employee_id.user_id:
+                    attendance._notify_approver(
+                        attendance.employee_id.user_id,
+                        _('Your gateway ticket has been <b>fully approved</b> by <b>%(approver)s</b>.',
+                          approver=self.env.user.name)
+                    )
+                # Post general message about approval
+                attendance.message_post(
+                    body=_('Gateway ticket fully approved.'),
+                    subtype_xmlid='mail.mt_comment'
+                )
 
     def action_third_approve(self):
         for attendance in self:
@@ -83,12 +152,48 @@ class HrAttendance(models.Model):
                 if not self.env.user.has_group('hr_attendance.group_hr_attendance_user'):
                     raise UserError(_('Only the assigned third approver or attendance administrators can do third approval.'))
             attendance.state = 'validate'
+            # Notify employee about final approval
+            if attendance.employee_id.user_id:
+                attendance._notify_approver(
+                    attendance.employee_id.user_id,
+                    _('Your gateway ticket has been <b>fully approved</b> by <b>%(approver)s</b>.',
+                      approver=self.env.user.name)
+                )
+            # Post general message about approval
+            attendance.message_post(
+                body=_('Gateway ticket fully approved.'),
+                subtype_xmlid='mail.mt_comment'
+            )
 
     def action_refuse(self):
         for attendance in self:
             if attendance.state not in ['confirm', 'second_approve', 'third_approve', 'validate']:
                 raise UserError(_('Only confirmed, second approval, third approval, or approved attendances can be refused.'))
+            old_state = attendance.state
             attendance.state = 'refuse'
+            # Notify employee about refusal
+            if attendance.employee_id.user_id:
+                attendance._notify_approver(
+                    attendance.employee_id.user_id,
+                    _('Your gateway ticket has been <b>refused</b> by <b>%(approver)s</b>.',
+                      approver=self.env.user.name)
+                )
+            # Notify all approvers about refusal
+            approvers_to_notify = []
+            if attendance.approver_id and attendance.approver_id != self.env.user:
+                approvers_to_notify.append(attendance.approver_id)
+            if attendance.second_approver_id and attendance.second_approver_id != self.env.user:
+                approvers_to_notify.append(attendance.second_approver_id)
+            if attendance.third_approver_id and attendance.third_approver_id != self.env.user:
+                approvers_to_notify.append(attendance.third_approver_id)
+
+            for approver in approvers_to_notify:
+                attendance._notify_approver(
+                    approver,
+                    _('Gateway ticket for <b>%(employee)s</b> has been refused by <b>%(refuser)s</b>.',
+                      employee=attendance.employee_id.name,
+                      refuser=self.env.user.name)
+                )
 
     def action_draft(self):
         for attendance in self:

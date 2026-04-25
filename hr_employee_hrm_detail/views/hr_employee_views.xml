@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="hr_employee_view_form_hrm_detail" model="ir.ui.view">
+        <field name="name">hr.employee.form.hrm.detail</field>
+        <field name="model">hr.employee</field>
+        <field name="inherit_id" ref="hr.view_employee_form"/>
+        <field name="arch" type="xml">
+            <!-- Add HRM section at the bottom of Personal Information tab -->
+            <xpath expr="//page[@name='personal_information']" position="inside">
+                <group string="HRM" groups="hr.group_hr_user">
+                    <group>
+                        <field name="mien"/>
+                        <field name="id_hrm"/>
+                        <field name="ma_nv_ke_toan"/>
+                        <field name="ma_cham_cong"/>
+                        <field name="ten_khong_dau"/>
+                        <field name="trang_thai_nhan_vien"/>
+                        <field name="ma_bo_phan"/>
+                        <field name="ten_bo_phan"/>
+                        <field name="bp_ke_toan"/>
+                        <field name="so_tai_khoan"/>
+                        <field name="chi_nhanh_ngan_hang"/>
+                        <field name="ma_chuc_vu"/>
+                        <field name="cap_tai"/>
+                        <field name="dia_chi_tam_tru"/>
+                    </group>
+                    <group>
+                        <field name="trinh_do"/>
+                        <field name="ton_giao"/>
+                        <field name="dan_toc"/>
+                        <field name="nguyen_quan"/>
+                        <field name="so_so_bhxh"/>
+                        <field name="ngay_tham_gia_bhxh"/>
+                        <field name="ma_so_thue"/>
+                        <field name="ngay_vao_lam"/>
+                        <field name="ngay_nghi_viec"/>
+                        <field name="ngay_chinh_thuc"/>
+                        <field name="nguon_tuyen_dung"/>
+                        <field name="nhan_vien_cu"/>
+                        <field name="ghi_chu"/>
+                    </group>
+                </group>
+            </xpath>
+        </field>
+    </record>
+</odoo>
