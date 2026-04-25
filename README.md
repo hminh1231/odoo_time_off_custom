@@ -10,9 +10,6 @@ Bộ add-on cho **Odoo 19** (các module đặt cạnh nhau tại thư mục add
 | `hr_employee_cccd_scan` | Employee ID Card Scan (CCCD) | Quét CCCD để điền nhanh thông tin nhân viên trên form HR Employee. |
 | `hr_employee_self_only` | HR Employee Self Only Access | **Employees = No:** ẩn tab *Personal* khi xem hồ sơ người khác; vẫn dùng full list / Many2one (bàn giao, tìm kiếm, v.v.). |
 | `business_discuss_bots` | Business Discuss Bots | Bot Discuss phục vụ thông báo / tích hợp quy trình nội bộ (phụ thuộc `mail_bot`). |
-| `hr_attendance_gate_ticket` | HR Attendance Gate Ticket | Mở rộng *Attendance* theo dạng vé / cổng (báo cáo, view). |
-
-*Ghi chú: bộ copy **chỉ** thư mục `custom_addons` cạnh source Odoo lớn đôi khi không gồm `hr_attendance_gate_ticket` — cần thì lấy từ [bản full trên GitHub](https://github.com/hminh1231/odoo_time_off_custom).*
 
 ## Yêu cầu cài theo thứ tự
 
