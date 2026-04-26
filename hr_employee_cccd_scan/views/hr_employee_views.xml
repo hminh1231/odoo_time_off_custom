@@ -8,11 +8,12 @@
             <xpath expr="//header/button[@name='action_create_user']" position="after">
                 <button name="action_scan_id_card" type="object" string="Scan ID"
                         class="btn-secondary" icon="fa-id-card"
-                        groups="hr.group_hr_user"/>
+                        groups="hr.group_hr_user"
+                        invisible="personal_tab_hidden_for_privacy"/>
             </xpath>
             <!-- Do not use @string in xpath (forbidden for inheritance); first inner group on Personal tab is Private Contact -->
             <xpath expr="//page[@name='personal_information']/group/group[1]" position="before">
-                <group string="Identity document" groups="hr.group_hr_user">
+                <group string="Identity document" groups="hr.group_hr_user" invisible="personal_tab_hidden_for_privacy">
                     <button name="action_scan_id_card" type="object" string="Scan ID card"
                             class="btn-secondary" icon="fa-camera" colspan="2"/>
                 </group>

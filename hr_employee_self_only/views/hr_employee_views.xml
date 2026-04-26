@@ -24,6 +24,11 @@
             <xpath expr="//page[@name='personal_information']" position="attributes">
                 <attribute name="invisible">personal_tab_hidden_for_privacy</attribute>
             </xpath>
+            <!-- Time Off Officer implies hr.group_hr_user, so the HR header still shows. Hide
+                 Launch Plan for Employees=No when viewing another employee (same as Personal tab). -->
+            <xpath expr="//header/button[@name='action_create_user']/following-sibling::button[1]" position="attributes">
+                <attribute name="invisible">not active or not id or personal_tab_hidden_for_privacy</attribute>
+            </xpath>
         </field>
     </record>
 </odoo>

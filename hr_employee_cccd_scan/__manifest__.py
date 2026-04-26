@@ -5,7 +5,7 @@
     'version': '19.0.1.18.1',
     'category': 'Human Resources',
     'summary': 'Scan national ID card to fill employee data (UI hook, step 1)',
-    'depends': ['hr'],
+    'depends': ['hr', 'hr_employee_self_only'],
     'data': [
         'views/hr_employee_views.xml',
     ],
