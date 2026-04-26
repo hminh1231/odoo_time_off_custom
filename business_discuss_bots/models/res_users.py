@@ -17,6 +17,7 @@ class ResUsers(models.Model):
         bot_sources = {
             "business_discuss_bots.user_bot_handover": "business_discuss_bots/static/src/img/bot_handover.png",
             "business_discuss_bots.user_bot_approval": "business_discuss_bots/static/src/img/bot_approval.png",
+            "business_discuss_bots.user_bot_gate_ticket": "business_discuss_bots/static/src/img/bot_gate_ticket.png",
         }
         for user_xmlid, image_path in bot_sources.items():
             bot_user = self.env.ref(user_xmlid, raise_if_not_found=False)
@@ -34,6 +35,7 @@ class ResUsers(models.Model):
         xmlids = [
             "business_discuss_bots.user_bot_handover",
             "business_discuss_bots.user_bot_approval",
+            "business_discuss_bots.user_bot_gate_ticket",
         ]
         bot_ids = []
         for xmlid in xmlids:

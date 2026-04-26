@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="hr_employee_gate_ticket_rule_user_own" model="ir.rule">
+        <field name="name">Gate Ticket: user own records</field>
+        <field name="model_id" ref="model_hr_employee_gate_ticket"/>
+        <field name="domain_force">[('employee_id.user_id', '=', user.id)]</field>
+        <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+        <field name="perm_read" eval="1"/>
+        <field name="perm_write" eval="1"/>
+        <field name="perm_create" eval="1"/>
+        <field name="perm_unlink" eval="1"/>
+    </record>
+
+    <record id="hr_employee_gate_ticket_rule_officer_approver" model="ir.rule">
+        <field name="name">Gate Ticket: officer approver records</field>
+        <field name="model_id" ref="model_hr_employee_gate_ticket"/>
+        <field name="domain_force">['|', '|', ('approver_id', '=', user.id), ('second_approver_id', '=', user.id), ('third_approver_id', '=', user.id)]</field>
+        <field name="groups" eval="[(4, ref('hr_attendance.group_hr_attendance_user'))]"/>
+        <field name="perm_read" eval="1"/>
+        <field name="perm_write" eval="1"/>
+        <field name="perm_create" eval="0"/>
+        <field name="perm_unlink" eval="0"/>
+    </record>
+</odoo>

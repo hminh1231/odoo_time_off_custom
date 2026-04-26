@@ -12,6 +12,7 @@ class MailBot(models.AbstractModel):
     _BUSINESS_BOT_PARTNER_XMLID_TO_SKILL = {
         "business_discuss_bots.partner_bot_approval": "approval",
         "business_discuss_bots.partner_bot_handover": "handover",
+        "business_discuss_bots.partner_bot_gate_ticket": "gate_ticket",
     }
     _APPROVAL_SUPPORTED_INTENTS = {"approval_status", "approval_who", "help"}
     _HANDOVER_SUPPORTED_INTENTS = {
@@ -21,6 +22,7 @@ class MailBot(models.AbstractModel):
         "handover_refused",
         "help",
     }
+    _GATE_TICKET_SUPPORTED_INTENTS = {"approval_status", "approval_who", "help"}
 
     def _get_answer(self, channel, body, values, command=False):
         answer = self._business_bot_route(channel, body, values, command)
@@ -72,6 +74,10 @@ class MailBot(models.AbstractModel):
             if intent not in self._HANDOVER_SUPPORTED_INTENTS:
                 return self._redirect_to_main_bot_message(_("bàn giao công việc"))
             return self._run_handover_skill(intent)
+        if skill_key == "gate_ticket":
+            if intent not in self._GATE_TICKET_SUPPORTED_INTENTS:
+                return self._redirect_to_main_bot_message(_("duyệt đơn ra cổng"))
+            return self._run_gate_ticket_skill(intent, body)
         return False
 
     def _business_bot_skill_key(self, channel):
@@ -332,6 +338,69 @@ class MailBot(models.AbstractModel):
             "refused": self._join_or_none(refused),
         }
 
+    def _run_gate_ticket_skill(self, intent, body):
+        employee = self.env.user.employee_id
+        if not employee:
+            return _("Mình chưa thấy hồ sơ nhân sự gắn với tài khoản của bạn nên chưa kiểm tra được đơn ra cổng.")
+        if "hr.employee.gate.ticket" not in self.env:
+            return _("Chưa tìm thấy dữ liệu đơn ra cổng trên hệ thống hiện tại.")
+
+        gate_ticket_model = self.env["hr.employee.gate.ticket"].sudo()
+        ticket_code = self._extract_gate_ticket_code(body)
+        ticket = False
+        if ticket_code:
+            ticket = gate_ticket_model.search(
+                [("employee_id", "=", employee.id), ("name", "=", ticket_code)],
+                limit=1,
+            )
+            if not ticket:
+                return _("Mình không tìm thấy đơn ra cổng mã %(ticket)s của bạn.") % {"ticket": ticket_code}
+        else:
+            ticket = gate_ticket_model.search(
+                [("employee_id", "=", employee.id)],
+                order="check_in desc, create_date desc, id desc",
+                limit=1,
+            )
+            if not ticket:
+                return _("Hiện tại bạn chưa có đơn ra cổng nào.")
+
+        state_labels = dict(ticket._fields["state"].selection)
+        state_label = state_labels.get(ticket.state, ticket.state)
+        approver = self._gate_ticket_current_approver(ticket)
+        ticket_date = ticket.check_in and ticket.check_in.strftime("%d/%m/%Y %H:%M") or "-"
+        ticket_link = "/web#id=%s&model=hr.employee.gate.ticket&view_type=form" % ticket.id
+
+        if intent == "approval_who":
+            if approver:
+                return _(
+                    "Đơn ra cổng <b>%(ticket)s</b> đang chờ: <b>%(approver)s</b>.<br/>"
+                    "Mở đơn: <a href='%(url)s'>%(url)s</a>"
+                ) % {
+                    "ticket": ticket.name,
+                    "approver": approver.name,
+                    "url": ticket_link,
+                }
+            return _(
+                "Đơn ra cổng <b>%(ticket)s</b> hiện ở trạng thái <b>%(state)s</b> (không còn người duyệt hiện tại).<br/>"
+                "Mở đơn: <a href='%(url)s'>%(url)s</a>"
+            ) % {
+                "ticket": ticket.name,
+                "state": state_label,
+                "url": ticket_link,
+            }
+
+        result = _(
+            "Đơn ra cổng <b>%(ticket)s</b> (%(date)s) hiện ở trạng thái: <b>%(state)s</b>."
+        ) % {
+            "ticket": ticket.name,
+            "date": ticket_date,
+            "state": state_label,
+        }
+        if approver:
+            result += _("<br/>Người đang duyệt: <b>%(approver)s</b>.") % {"approver": approver.name}
+        result += _("<br/>Mở đơn: <a href='%(url)s'>%(url)s</a>") % {"url": ticket_link}
+        return result
+
     def _approval_step_and_approvers(self, leave):
         if hasattr(leave, "_bot_status_current_step_details"):
             return leave._bot_status_current_step_details()
@@ -402,3 +471,16 @@ class MailBot(models.AbstractModel):
         normalized = "".join(ch for ch in normalized if not unicodedata.combining(ch))
         normalized = re.sub(r"\s+", " ", normalized)
         return normalized
+
+    def _extract_gate_ticket_code(self, body):
+        match = re.search(r"\bGT\d+\b", (body or "").upper())
+        return match.group(0) if match else False
+
+    def _gate_ticket_current_approver(self, ticket):
+        if ticket.state == "confirm":
+            return ticket.approver_id
+        if ticket.state == "second_approve":
+            return ticket.second_approver_id
+        if ticket.state == "third_approve":
+            return ticket.third_approver_id
+        return False

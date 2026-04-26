@@ -2,17 +2,15 @@
 
 import logging
 
-from odoo import SUPERUSER_ID, api
-
 _logger = logging.getLogger(__name__)
 
 
-def post_init_hook(cr):
-    env = api.Environment(cr, SUPERUSER_ID, {})
+def post_init_hook(env):
     bot_users = env["res.users"].browse(
         [
             env.ref("business_discuss_bots.user_bot_handover").id,
             env.ref("business_discuss_bots.user_bot_approval").id,
+            env.ref("business_discuss_bots.user_bot_gate_ticket").id,
         ]
     ).filtered(lambda u: u.partner_id and u.active)
     if not bot_users:

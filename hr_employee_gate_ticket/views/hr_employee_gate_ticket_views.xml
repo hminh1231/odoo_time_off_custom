@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="hr_employee_gate_ticket_view_form" model="ir.ui.view">
+        <field name="name">hr.employee.gate.ticket.view.form</field>
+        <field name="model">hr.employee.gate.ticket</field>
+        <field name="arch" type="xml">
+            <form string="Gateway Ticket" duplicate="false">
+                <header>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,confirm,second_approve,third_approve,validate"/>
+                    <button name="action_submit" string="Submit" type="object"
+                            class="oe_highlight"
+                            invisible="state != 'draft'"
+                            groups="base.group_user"/>
+                    <button name="action_first_approve" string="First Approve" type="object"
+                            class="oe_highlight"
+                            invisible="state not in ['confirm', 'refuse']"
+                            groups="hr_attendance.group_hr_attendance_user"/>
+                    <button name="action_second_approve" string="Second Approve" type="object"
+                            class="oe_highlight"
+                            invisible="state != 'second_approve'"
+                            groups="hr_attendance.group_hr_attendance_user"/>
+                    <button name="action_third_approve" string="Third Approve" type="object"
+                            class="oe_highlight"
+                            invisible="state != 'third_approve'"
+                            groups="hr_attendance.group_hr_attendance_user"/>
+                    <button name="action_refuse" string="Refuse" type="object"
+                            invisible="state not in ['confirm', 'second_approve', 'third_approve', 'validate']"
+                            groups="hr_attendance.group_hr_attendance_user"/>
+                    <button name="action_draft" string="Reset to Draft" type="object"
+                            invisible="state == 'draft'"
+                            groups="base.group_system"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="employee_id" widget="many2one_avatar_employee"/>
+                            <field name="check_in"/>
+                            <field name="checkout_time" widget="datetime" options="{'warn_future': false}"/>
+                        </group>
+                        <group>
+                            <field name="gate_ticket"/>
+                            <field name="gate_items"/>
+                        </group>
+                    </group>
+                    <group string="Approvers">
+                        <group>
+                            <field name="approver_id"/>
+                            <field name="second_approver_id"/>
+                        </group>
+                        <group>
+                            <field name="third_approver_id"/>
+                        </group>
+                    </group>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="hr_employee_gate_ticket_view_tree" model="ir.ui.view">
+        <field name="name">hr.employee.gate.ticket.view.tree</field>
+        <field name="model">hr.employee.gate.ticket</field>
+        <field name="arch" type="xml">
+            <list string="Gateway Tickets" decoration-info="state == 'draft'"
+                  decoration-warning="state == 'confirm'" decoration-muted="state in ['second_approve', 'third_approve']"
+                  decoration-success="state == 'validate'" decoration-danger="state == 'refuse'">
+                <field name="name"/>
+                <field name="employee_id" widget="many2one_avatar_employee"/>
+                <field name="check_in"/>
+                <field name="checkout_time" optional="hide"/>
+                <field name="gate_ticket"/>
+                <field name="gate_items" optional="hide"/>
+                <field name="approver_id" optional="show"/>
+                <field name="second_approver_id" optional="show"/>
+                <field name="third_approver_id" optional="show"/>
+                <field name="state" widget="badge"
+                       decoration-info="state == 'draft'"
+                       decoration-warning="state == 'confirm'"
+                       decoration-muted="state in ['second_approve', 'third_approve']"
+                       decoration-success="state == 'validate'"
+                       decoration-danger="state == 'refuse'"/>
+                <button name="action_first_approve" type="object" string="First Approve"
+                        class="btn-primary"
+                        icon="fa-check"
+                        invisible="state not in ['confirm', 'refuse']"
+                        groups="hr_attendance.group_hr_attendance_user"/>
+                <button name="action_second_approve" type="object" string="Second Approve"
+                        class="btn-info"
+                        icon="fa-check-double"
+                        invisible="state != 'second_approve'"
+                        groups="hr_attendance.group_hr_attendance_user"/>
+                <button name="action_third_approve" type="object" string="Third Approve"
+                        class="btn-success"
+                        icon="fa-check-circle"
+                        invisible="state != 'third_approve'"
+                        groups="hr_attendance.group_hr_attendance_user"/>
+                <button name="action_refuse" type="object" string="Refuse"
+                        class="btn-danger"
+                        icon="fa-times"
+                        invisible="state not in ['confirm', 'second_approve', 'third_approve', 'validate']"
+                        groups="hr_attendance.group_hr_attendance_user"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="hr_employee_gate_ticket_view_search" model="ir.ui.view">
+        <field name="name">hr.employee.gate.ticket.view.search</field>
+        <field name="model">hr.employee.gate.ticket</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="employee_id"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="hr_employee_gate_ticket_action_overview" model="ir.actions.act_window">
+        <field name="name">Overview</field>
+        <field name="res_model">hr.employee.gate.ticket</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('employee_id.user_id', '=', uid)]</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No gateway tickets found
+            </p>
+            <p>
+                Click the "New" button to create a new gateway ticket.
+            </p>
+        </field>
+    </record>
+
+    <record id="hr_employee_gate_ticket_action_gateway" model="ir.actions.act_window">
+        <field name="name">Gateway</field>
+        <field name="res_model">hr.employee.gate.ticket</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[
+            '|', '|',
+            '&amp;', ('state', '=', 'confirm'), ('approver_id', '=', uid),
+            '&amp;', ('state', '=', 'second_approve'), ('second_approver_id', '=', uid),
+            '&amp;', ('state', '=', 'third_approve'), ('third_approver_id', '=', uid)
+        ]</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No gateway tickets found
+            </p>
+            <p>
+                Click the "New" button to create a new gateway ticket.
+            </p>
+        </field>
+    </record>
+
+    <menuitem id="menu_hr_employee_gate_ticket_root"
+              name="HR Employee Gate Ticket"
+              sequence="206"
+              groups="base.group_user"
+              web_icon="hr_employee_gate_ticket,static/description/icon.png"/>
+
+    <menuitem id="menu_hr_employee_gate_ticket_overview"
+              name="Overview"
+              parent="menu_hr_employee_gate_ticket_root"
+              action="hr_employee_gate_ticket_action_overview"
+              sequence="5"
+              groups="base.group_user"/>
+
+    <menuitem id="menu_hr_employee_gate_ticket_gateway"
+              name="Gateway"
+              parent="menu_hr_employee_gate_ticket_root"
+              action="hr_employee_gate_ticket_action_gateway"
+              sequence="7"
+              groups="hr_attendance.group_hr_attendance_user"/>
+</odoo>

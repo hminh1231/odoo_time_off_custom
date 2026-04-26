@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <record id="sequence_hr_employee_gate_ticket" model="ir.sequence">
+            <field name="name">HR Employee Gate Ticket Sequence</field>
+            <field name="code">hr.employee.gate.ticket</field>
+            <field name="prefix">GT</field>
+            <field name="padding">5</field>
+            <field name="company_id" eval="False"/>
+        </record>
+    </data>
+</odoo>

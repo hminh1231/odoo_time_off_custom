@@ -3,7 +3,7 @@
 import { Thread } from "@mail/core/common/thread_model";
 import { patch } from "@web/core/utils/patch";
 
-const BUSINESS_BOT_NAMES = new Set(["OdooBot Bàn giao việc", "OdooBot Duyệt đơn"]);
+const BUSINESS_BOT_NAMES = new Set(["OdooBot Bàn giao việc", "OdooBot Duyệt đơn", "OdooBot Ra cổng"]);
 
 patch(Thread.prototype, {
     get allowCalls() {

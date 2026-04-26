@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Form View -->
+    <record id="gateway_ticket_view_form" model="ir.ui.view">
+        <field name="name">gateway.ticket.view.form</field>
+        <field name="model">gateway.ticket</field>
+        <field name="arch" type="xml">
+            <form string="Gateway Ticket" duplicate="false">
+                <header>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,confirm,second_approve,third_approve,validate"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="employee_id" widget="many2one_avatar_employee"/>
+                            <field name="check_in"/>
+                            <field name="checkout_time"/>
+                        </group>
+                        <group>
+                            <field name="gate_ticket"/>
+                            <field name="gate_items"/>
+                        </group>
+                    </group>
+                    <group string="Approvers">
+                        <group>
+                            <field name="approver_id"/>
+                            <field name="second_approver_id"/>
+                        </group>
+                        <group>
+                            <field name="third_approver_id"/>
+                        </group>
+                    </group>
+                </sheet>
+                <div class="oe_chatter">
+                    <field name="message_follower_ids"/>
+                    <field name="activity_ids"/>
+                    <field name="message_ids"/>
+                </div>
+            </form>
+        </field>
+    </record>
+
+    <!-- Tree View -->
+    <record id="gateway_ticket_view_tree" model="ir.ui.view">
+        <field name="name">gateway.ticket.view.tree</field>
+        <field name="model">gateway.ticket</field>
+        <field name="arch" type="xml">
+            <list string="Gateway Tickets" decoration-info="state == 'draft'"
+                  decoration-warning="state == 'confirm'" decoration-muted="state in ['second_approve', 'third_approve']"
+                  decoration-success="state == 'validate'" decoration-danger="state == 'refuse'">
+                <field name="name"/>
+                <field name="employee_id" widget="many2one_avatar_employee"/>
+                <field name="check_in"/>
+                <field name="checkout_time" optional="hide"/>
+                <field name="gate_ticket"/>
+                <field name="gate_items" optional="hide"/>
+                <field name="approver_id" optional="show"/>
+                <field name="second_approver_id" optional="show"/>
+                <field name="third_approver_id" optional="show"/>
+                <field name="state" widget="badge"
+                       decoration-info="state == 'draft'"
+                       decoration-warning="state == 'confirm'"
+                       decoration-muted="state in ['second_approve', 'third_approve']"
+                       decoration-success="state == 'validate'"
+                       decoration-danger="state == 'refuse'"/>
+                <button name="action_first_approve" type="object" string="First Approve"
+                        class="btn-primary"
+                        icon="fa-check"
+                        invisible="state not in ['confirm', 'refuse']"
+                        groups="base.group_user"/>
+                <button name="action_second_approve" type="object" string="Second Approve"
+                        class="btn-info"
+                        icon="fa-check-double"
+                        invisible="state != 'second_approve'"
+                        groups="base.group_user"/>
+                <button name="action_third_approve" type="object" string="Third Approve"
+                        class="btn-success"
+                        icon="fa-check-circle"
+                        invisible="state != 'third_approve'"
+                        groups="base.group_user"/>
+                <button name="action_refuse" type="object" string="Refuse"
+                        class="btn-danger"
+                        icon="fa-times"
+                        invisible="state not in ['confirm', 'second_approve', 'third_approve', 'validate']"
+                        groups="base.group_user"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Search View -->
+    <record id="gateway_ticket_view_search" model="ir.ui.view">
+        <field name="name">gateway.ticket.view.search</field>
+        <field name="model">gateway.ticket</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="employee_id"/>
+            </search>
+        </field>
+    </record>
+
+    <!-- Action -->
+    <record id="gateway_ticket_action" model="ir.actions.act_window">
+        <field name="name">Gate Tickets</field>
+        <field name="res_model">gateway.ticket</field>
+        <field name="view_mode">list,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No gateway tickets found
+            </p>
+            <p>
+                Click the "New" button to create a new gateway ticket.
+            </p>
+        </field>
+    </record>
+
+    <!-- Root menu for Gateway app in Home Menu -->
+    <menuitem id="menu_gateway_root"
+              name="Gateway"
+              sequence="206"
+              web_icon="hr_attendance_gate_ticket,static/description/icon.png"
+              groups="base.group_user"/>
+
+    <!-- Submenu under Gateway app -->
+    <menuitem id="menu_gateway_tickets"
+              name="Gate Tickets"
+              parent="menu_gateway_root"
+              action="gateway_ticket_action"
+              sequence="10"
+              groups="base.group_user"/>
+</odoo>
