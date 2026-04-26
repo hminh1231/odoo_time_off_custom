@@ -133,7 +133,7 @@ class HolidaysRequest(models.Model):
     handover_acceptance_ids = fields.One2many(
         comodel_name="hr.leave.handover.acceptance",
         inverse_name="leave_id",
-        string="Work Handover Responses",
+        string="Work Handover Details",
         copy=False,
     )
     can_respond_handover = fields.Boolean(
@@ -465,6 +465,29 @@ class HolidaysRequest(models.Model):
             if len(leave.handover_employee_ids) > 5:
                 raise ValidationError(_("You can select at most 5 work handover recipients."))
 
+    @api.constrains("handover_acceptance_ids", "handover_acceptance_ids.employee_id")
+    def _check_handover_duplicate_recipients(self):
+        for leave in self:
+            employees = leave.handover_acceptance_ids.mapped("employee_id")
+            if len(employees.ids) != len(set(employees.ids)):
+                raise ValidationError(_("Each handover recipient can only appear once."))
+
+    @api.constrains("state", "handover_acceptance_ids", "handover_acceptance_ids.handover_work_content")
+    def _check_handover_content_required_on_submit(self):
+        for leave in self:
+            if leave.state not in ("confirm", "validate1", "validate"):
+                continue
+            missing_content = leave.handover_acceptance_ids.filtered(
+                lambda line: line.employee_id and not (line.handover_work_content or "").strip()
+            )
+            if missing_content:
+                raise ValidationError(
+                    _(
+                        "Please fill in work handover content for: %(names)s."
+                    )
+                    % {"names": ", ".join(missing_content.mapped("employee_id.name"))}
+                )
+
     @api.constrains("state", "handover_employee_ids")
     def _check_handover_required_on_submit(self):
         for leave in self:
@@ -588,6 +611,34 @@ class HolidaysRequest(models.Model):
                         % {"names": ", ".join(unavailable.mapped("name"))},
                     }
                 }
+
+    @api.onchange("handover_acceptance_ids", "handover_acceptance_ids.employee_id")
+    def _onchange_handover_acceptance_ids(self):
+        for leave in self:
+            for idx, line in enumerate(leave.handover_acceptance_ids, start=1):
+                line.sequence = idx
+            employees = leave.handover_acceptance_ids.mapped("employee_id")
+            leave.handover_employee_ids = [Command.set(employees.ids)]
+
+    def _resequence_handover_acceptance_lines(self):
+        for leave in self:
+            lines = leave.handover_acceptance_ids.sudo().sorted(lambda l: (l.sequence or 0, l.id or 0))
+            expected = 1
+            for line in lines:
+                if line.sequence != expected:
+                    line.sequence = expected
+                expected += 1
+        return self
+
+    def _sync_handover_employees_from_acceptance(self):
+        for leave in self:
+            line_employees = leave.handover_acceptance_ids.mapped("employee_id")
+            if set(line_employees.ids) != set(leave.handover_employee_ids.ids):
+                leave.with_context(skip_handover_line_sync=True).write(
+                    {"handover_employee_ids": [Command.set(line_employees.ids)]}
+                )
+            leave._resequence_handover_acceptance_lines()
+        return self
 
     @api.depends(
         "state",
@@ -1113,6 +1164,7 @@ class HolidaysRequest(models.Model):
                     if requester_user and not requester_user.share:
                         line_vals["assigned_by_user_id"] = requester_user.id
                     Acceptance.create(line_vals)
+            leave._resequence_handover_acceptance_lines()
         return self
 
     def _handover_employee_for_assigner_user(self, user):
@@ -1465,17 +1517,30 @@ class HolidaysRequest(models.Model):
             requester_name = leave.employee_id.name or leave.employee_id.display_name or leave.display_name
             date_from = leave.request_date_from or (leave.date_from and leave.date_from.date())
             date_text = date_from.strftime("%d/%m/%Y") if date_from else ""
-            body = _(
-                "Bạn được %(requester)s nhờ nhận bàn giao công việc khi họ nghỉ phép vào ngày %(date)s, "
-                "vui lòng bấm vào mục Time Off để chấp nhận hoặc từ chối."
-            ) % {
-                "requester": requester_name,
-                "date": date_text,
-            }
             for recipient in leave.handover_employee_ids:
                 user = recipient.user_id
                 if not user or user.share or not user.partner_id:
                     continue
+                line = leave.handover_acceptance_ids.filtered(lambda l: l.employee_id == recipient)[:1]
+                work_content = (line.handover_work_content or "").strip()
+                if work_content:
+                    body = _(
+                        "Bạn được %(requester)s bàn giao công việc khi họ nghỉ vào ngày %(date)s "
+                        "với nội dung công việc là: %(content)s. "
+                        "Vui lòng bấm vào mục Time Off để chấp nhận hoặc từ chối."
+                    ) % {
+                        "requester": requester_name,
+                        "date": date_text,
+                        "content": work_content,
+                    }
+                else:
+                    body = _(
+                        "Bạn được %(requester)s bàn giao công việc khi họ nghỉ vào ngày %(date)s. "
+                        "Vui lòng bấm vào mục Time Off để chấp nhận hoặc từ chối."
+                    ) % {
+                        "requester": requester_name,
+                        "date": date_text,
+                    }
                 try:
                     bot_user = (
                         self.env.ref("business_discuss_bots.user_bot_handover", raise_if_not_found=False)
@@ -2029,6 +2094,9 @@ class HolidaysRequest(models.Model):
         )
 
     def write(self, vals):
+        handover_lines_changed = bool(
+            vals.get("handover_acceptance_ids") is not None and not self.env.context.get("skip_handover_line_sync")
+        )
         submit_notify_target = self.env["hr.leave"]
         outcome_notify_prev_states = {}
         if (
@@ -2082,6 +2150,8 @@ class HolidaysRequest(models.Model):
                 lambda l: l.validation_type == "multi_step_6" and l.state != "confirm"
             )
         res = super().write(vals)
+        if handover_lines_changed:
+            self._sync_handover_employees_from_acceptance()
         if reset_leaves:
             reset_leaves.mapped("multi_approval_line_ids").unlink()
             reset_leaves.with_context(**{_MULTI_STEP_RESET_CTX: True}).write({"multi_step_current": 1})

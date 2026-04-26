@@ -51,15 +51,23 @@
                 >
                     <field name="handover_escalation_pick_prompt" readonly="1" nolabel="1"/>
                 </div>
+                <field name="handover_employee_ids" invisible="1"/>
                 <field
-                    name="handover_employee_ids"
-                    widget="many2many_tags"
-                    options="{'no_create': True, 'no_open': True}"
-                    domain="[('id', '!=', employee_id), ('user_id', '!=', False), ('id', 'not in', unavailable_handover_employee_ids)]"
-                    placeholder="Select work handover recipients (max 5)"
+                    name="handover_acceptance_ids"
+                    string="Work Handover To"
                     invisible="can_manage_handover_replacement or can_respond_handover"
-                    readonly="state != 'confirm' or handover_recipient_list_readonly or can_manage_handover_replacement"
-                />
+                    readonly="state not in ('draft', 'confirm') or handover_recipient_list_readonly or can_manage_handover_replacement"
+                >
+                    <list editable="bottom" create="1" delete="1">
+                        <field name="sequence" string="STT" readonly="1"/>
+                        <field
+                            name="employee_id"
+                            options="{'no_create': True, 'no_open': True}"
+                            domain="[('id', '!=', parent.employee_id), ('user_id', '!=', False), ('id', 'not in', parent.unavailable_handover_employee_ids)]"
+                        />
+                        <field name="handover_work_content" string="Nội dung công việc"/>
+                    </list>
+                </field>
                 <field name="unavailable_handover_employee_ids" invisible="1"/>
                 <field name="handover_replacement_picker_open" invisible="1"/>
                 <field name="handover_refused_recipient_ids" invisible="1"/>
@@ -155,10 +163,6 @@
         <field name="model">hr.leave</field>
         <field name="inherit_id" ref="hr_holidays.hr_leave_view_form_dashboard_new_time_off"/>
         <field name="arch" type="xml">
-            <xpath expr="//field[@name='handover_employee_ids']" position="attributes">
-                <attribute name="readonly">state != 'confirm' or handover_recipient_list_readonly or can_manage_handover_replacement</attribute>
-                <attribute name="invisible">can_manage_handover_replacement or can_respond_handover</attribute>
-            </xpath>
             <xpath expr="//sheet" position="inside">
                 <field name="is_emergency_leave" invisible="1"/>
                 <div

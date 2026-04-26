@@ -15,7 +15,6 @@
         "web.assets_backend": [
             "hr_employee_self_only/static/src/js/res_user_group_ids_employees_no_order.js",
             "hr_employee_self_only/static/src/js/hr_employee_form_privacy_readonly.js",
-            "hr_employee_self_only/static/src/scss/hr_employee_form_privacy_readonly.scss",
         ],
     },
 }
