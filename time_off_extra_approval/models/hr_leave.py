@@ -179,6 +179,11 @@ class HolidaysRequest(models.Model):
         copy=False,
         help="Department head from org chart who can assign a replacement handover recipient.",
     )
+    handover_last_bot_escalation_signature = fields.Char(
+        string="Handover last bot escalation signature",
+        copy=False,
+        help="Technical field to avoid duplicate escalation bot DMs for same leave/owner/level.",
+    )
     handover_escalation_label = fields.Char(
         string="Handover escalation status",
         compute="_compute_handover_escalation_label",
@@ -1388,6 +1393,9 @@ class HolidaysRequest(models.Model):
         self.ensure_one()
         if not dept_head_user or not dept_head_user.partner_id:
             return
+        signature = "%s:%s:%s" % (self.id, dept_head_user.id, self.handover_escalation_level or 0)
+        if self.handover_last_bot_escalation_signature == signature:
+            return
         hours = hours if hours is not None else self._handover_escalation_after_hours()
         body = _(
             "Work handover for %(leave)s has no acceptance after %(hours)s hours. "
@@ -1426,6 +1434,7 @@ class HolidaysRequest(models.Model):
                 message_type="comment",
                 subtype_xmlid="mail.mt_comment",
             )
+            self.sudo().write({"handover_last_bot_escalation_signature": signature})
         except Exception:
             _logger.exception(
                 "time_off_extra_approval: failed to send escalation bot chat leave_id=%s user_id=%s",
@@ -1704,9 +1713,10 @@ class HolidaysRequest(models.Model):
 
     def _handover_second_escalation_hours(self):
         self.ensure_one()
-        if self.holiday_status_id and self.holiday_status_id.handover_escalation_to_manager_hours:
-            return self.holiday_status_id.handover_escalation_to_manager_hours
-        return _HANDOVER_ESCALATION_TO_MANAGER_HOURS
+        # Escalation should progress level-by-level on the same cadence configured by
+        # "Handover: Escalate After (hours)". This makes each timeout hop to the next
+        # manager and notify them until max escalation title is reached.
+        return self._handover_escalation_after_hours()
 
     def _handover_max_escalation_job_title(self):
         self.ensure_one()
@@ -2978,17 +2988,21 @@ class HolidaysRequest(models.Model):
             return
         if not self._handover_past_due_without_any_acceptance():
             return
-        dept_head_user = self._get_org_chart_department_head_user()
+        # First escalation is sequential: escalate to the immediate next manager.
+        # Further steps are handled by _apply_handover_timeout_escalation_to_department_manager().
+        dept_head_user = self._get_next_manager_user_from_user(self.employee_id.user_id)
         first_hours = self._handover_escalation_after_hours()
         if not dept_head_user:
             self.message_post(
                 body=_(
-                    "Handover timeout reached (%(hours)s h), but no '%(title)s' user was found in org chart."
+                    "Handover timeout reached (%(hours)s h), but no manager user was found in org chart."
                 )
-                % {"hours": first_hours, "title": _DEPARTMENT_HEAD_JOB_TITLE_KEY},
+                % {"hours": first_hours},
                 subtype_xmlid="mail.mt_note",
             )
             return
+        owner_emp = self._handover_employee_for_assigner_user(dept_head_user)
+        owner_title = owner_emp.job_title if owner_emp and owner_emp.job_title else _("next level")
         self.sudo().write(
             {
                 "handover_escalated": True,
@@ -3004,7 +3018,7 @@ class HolidaysRequest(models.Model):
             % {
                 "hours": first_hours,
                 "user": dept_head_user.display_name,
-                "title": _DEPARTMENT_HEAD_JOB_TITLE_KEY,
+                "title": owner_title,
             },
             subtype_xmlid="mail.mt_note",
         )
