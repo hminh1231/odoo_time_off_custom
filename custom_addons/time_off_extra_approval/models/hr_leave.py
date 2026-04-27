@@ -1,4 +1,6 @@
 import logging
+import re
+import unicodedata
 from datetime import date, datetime, time, timedelta
 from numbers import Integral
 
@@ -32,7 +34,7 @@ _TODO_ACTIVITY_XMLID = "mail.mail_activity_data_todo"
 # Fallback values when leave type config is missing.
 _HANDOVER_ESCALATION_MINUTES = 5
 _HANDOVER_ESCALATION_TO_MANAGER_HOURS = 2
-_DEPARTMENT_HEAD_JOB_TITLE_KEY = "trưởng BP"
+_DEPARTMENT_HEAD_JOB_TITLE_KEY = "trưởng bộ phận"
 _DEPARTMENT_MANAGER_JOB_TITLE_KEY = "trưởng phòng"
 
 # Advance notice (calendar days between today and first leave day) by job title (hr_job_title_vn keys).
@@ -55,7 +57,24 @@ def _job_title_approval_sort_key(user, order_index):
 
 
 def _normalize_job_title_key(title):
-    return (title or "").strip().casefold()
+    normalized = (title or "").strip().casefold()
+    normalized = "".join(
+        ch for ch in unicodedata.normalize("NFKD", normalized) if not unicodedata.combining(ch)
+    )
+    normalized = re.sub(r"[^a-z0-9]+", " ", normalized).strip()
+    aliases = {
+        "truong bp": "truong bo phan",
+    }
+    return aliases.get(normalized, normalized)
+
+
+def _job_title_rank_map():
+    """Support both selection keys and display labels stored in DB."""
+    rank_map = {}
+    for idx, (key, label) in enumerate(JOB_TITLE_SELECTION):
+        rank_map[_normalize_job_title_key(key)] = idx
+        rank_map[_normalize_job_title_key(label)] = idx
+    return rank_map
 
 
 class HolidaysRequest(models.Model):
@@ -237,6 +256,16 @@ class HolidaysRequest(models.Model):
         copy=False,
         help="New colleague to receive work handover (cannot be someone who already accepted).",
     )
+    skip_work_handover = fields.Boolean(
+        string="Không cần bàn giao công việc",
+        default=False,
+        copy=False,
+        help="Allow eligible senior employees to submit leave without handover recipients.",
+    )
+    can_skip_work_handover = fields.Boolean(
+        string="Can skip work handover",
+        compute="_compute_can_skip_work_handover",
+    )
     approval_current_step_label = fields.Char(
         string="Current approval",
         compute="_compute_approval_current_step_label",
@@ -274,6 +303,7 @@ class HolidaysRequest(models.Model):
             ("handover_escalation_level", "int4"),
             ("handover_escalation_user_id", "int4"),
             ("handover_last_bot_escalation_signature", "varchar"),
+            ("skip_work_handover", "boolean"),
         ):
             cr.execute(
                 """
@@ -304,6 +334,87 @@ class HolidaysRequest(models.Model):
             leaves = self.env["hr.leave"].sudo().search([])
             if leaves:
                 leaves._compute_emergency_leave_approver_notice()
+
+    @api.depends(
+        "employee_id",
+        "employee_id.job_title",
+        "employee_id.current_version_id",
+        "employee_id.current_version_id.job_title",
+    )
+    def _compute_can_skip_work_handover(self):
+        for leave in self:
+            leave.can_skip_work_handover = leave._can_skip_work_handover_by_job_title(
+                leave._get_effective_employee_for_skip_handover()
+            )
+
+    def _get_effective_employee_for_skip_handover(self):
+        """The employee the rule applies to (the requester on the time off, not the current user)."""
+        self.ensure_one()
+        if self.employee_id:
+            return self.employee_id
+        if self.env.user.employee_id:
+            return self.env.user.employee_id
+        return self.env["hr.employee"]
+
+    def _read_job_title_safely(self, employee):
+        """Read `job_title` on hr.employee, falling back to current hr.version in sudo if ACL hides it.
+
+        The Work tab in HR stores job title on the employee version model; the ORM can expose
+        it as a normal field, but in some access setups it is safer to read the underlying
+        `current_version_id.job_title` with elevated rights.
+        """
+        if not employee:
+            return False
+        if employee.job_title:
+            return employee.job_title
+        if employee.current_version_id and employee.current_version_id.job_title:
+            return employee.sudo().current_version_id.job_title
+        if employee.sudo().current_version_id and employee.sudo().current_version_id.job_title:
+            return employee.sudo().current_version_id.job_title
+        return False
+
+    def _can_skip_workover_rank_for_employee(self, employee):
+        """True when employee job title is at least `trưởng bộ phận` on the company selection scale."""
+        self.ensure_one()
+        threshold = _normalize_job_title_key(_DEPARTMENT_HEAD_JOB_TITLE_KEY)
+        rank_map = _job_title_rank_map()
+        threshold_rank = rank_map.get(threshold)
+        if threshold_rank is None:
+            return False
+        raw = self._read_job_title_safely(employee)
+        key = _normalize_job_title_key(raw)
+        if not key:
+            return False
+        rank = rank_map.get(key)
+        if rank is None:
+            return False
+        return rank >= threshold_rank
+
+    def _can_skip_work_handover_by_job_title(self, employee):
+        return self._can_skip_workover_rank_for_employee(employee)
+
+    @api.constrains(
+        "skip_work_handover",
+        "employee_id",
+        "employee_id.job_title",
+        "employee_id.current_version_id",
+        "employee_id.current_version_id.job_title",
+    )
+    def _check_skip_work_handover_permission(self):
+        for leave in self.filtered("skip_work_handover"):
+            target_employee = leave._get_effective_employee_for_skip_handover()
+            if not leave._can_skip_workover_rank_for_employee(target_employee):
+                title_raw = leave._read_job_title_safely(target_employee)
+                raise ValidationError(
+                    _(
+                        "Only employees with job title from Department Head and above can skip work handover. "
+                        "Detected employee: %(employee)s, job title: %(title)s."
+                    )
+                    % {
+                        "employee": target_employee.display_name or "-",
+                        "title": title_raw or "-",
+                    }
+                )
 
     # --- Advance notice vs job title (emergency leave) -----------------------------------------
 
@@ -478,6 +589,8 @@ class HolidaysRequest(models.Model):
         for leave in self:
             if leave.state not in ("confirm", "validate1", "validate"):
                 continue
+            if leave.skip_work_handover:
+                continue
             missing_content = leave.handover_acceptance_ids.filtered(
                 lambda line: line.employee_id and not (line.handover_work_content or "").strip()
             )
@@ -492,7 +605,11 @@ class HolidaysRequest(models.Model):
     @api.constrains("state", "handover_employee_ids")
     def _check_handover_required_on_submit(self):
         for leave in self:
-            if leave.state in ("confirm", "validate1", "validate") and not leave.handover_employee_ids:
+            if (
+                leave.state in ("confirm", "validate1", "validate")
+                and not leave.skip_work_handover
+                and not leave.handover_employee_ids
+            ):
                 raise ValidationError(
                     _("Please select at least one work handover recipient before submitting the time off request.")
                 )
@@ -1832,7 +1949,7 @@ class HolidaysRequest(models.Model):
     def _handover_job_title_rank(self, title_key):
         if not title_key:
             return -1
-        rank_map = {_normalize_job_title_key(key): idx for idx, (key, _label) in enumerate(JOB_TITLE_SELECTION)}
+        rank_map = _job_title_rank_map()
         return rank_map.get(_normalize_job_title_key(title_key), -1)
 
     def _get_handover_escalation_cap_user_for_max_title(self):
@@ -2709,7 +2826,9 @@ class HolidaysRequest(models.Model):
         return step_label, approver_descriptions
 
     def action_confirm(self):
-        missing_handover = self.filtered(lambda leave: not leave.handover_employee_ids)
+        missing_handover = self.filtered(
+            lambda leave: not leave.skip_work_handover and not leave.handover_employee_ids
+        )
         if missing_handover:
             raise UserError(
                 _(
