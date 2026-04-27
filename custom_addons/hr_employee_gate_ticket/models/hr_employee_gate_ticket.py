@@ -71,7 +71,6 @@ class HrEmployeeGateTicket(models.Model):
             ('draft', 'To Submit'),
             ('confirm', 'First Approval'),
             ('second_approve', 'Second Approval'),
-            ('third_approve', 'Third Approval'),
             ('validate', 'Approved'),
             ('refuse', 'Refused'),
         ],
@@ -170,45 +169,18 @@ class HrEmployeeGateTicket(models.Model):
                 raise UserError(_('Only tickets in second approval state can be approved.'))
             if ticket.second_approver_id and ticket.second_approver_id != self.env.user and not self.env.user.has_group('base.group_system'):
                 raise UserError(_('Only the assigned second approver or administrators can do second approval.'))
-            if ticket.third_approver_id:
-                ticket.state = 'third_approve'
-                ticket._notify_approver(
-                    ticket.third_approver_id,
-                    _(
-                        'Nhân viên <b>%(employee)s</b> đang yêu cầu ra cổng.',
-                        employee=ticket.employee_id.name,
-                    ),
-                )
-                if ticket.employee_id.user_id:
-                    ticket._notify_approver(
-                        ticket.employee_id.user_id,
-                        _('Đơn ra cổng của bạn đã được chấp nhận.'),
-                    )
-            else:
-                ticket.state = 'validate'
-                if ticket.employee_id.user_id:
-                    ticket._notify_approver(
-                        ticket.employee_id.user_id,
-                        _('Đơn ra cổng của bạn đã được chấp nhận.'),
-                    )
-                ticket.message_post(
-                    body=_('Gateway ticket fully approved.'),
-                    subtype_xmlid='mail.mt_comment',
-                )
-
-    def action_third_approve(self):
-        for ticket in self:
-            if ticket.state != 'third_approve':
-                raise UserError(_('Only tickets in third approval state can be finally approved.'))
-            if ticket.third_approver_id and ticket.third_approver_id != self.env.user and not self.env.user.has_group('base.group_system'):
-                raise UserError(_('Only the assigned third approver or administrators can do third approval.'))
             ticket.state = 'validate'
             if ticket.employee_id.user_id:
                 ticket._notify_approver(
                     ticket.employee_id.user_id,
+                    _('Đơn ra cổng của bạn đã được chấp nhận.'),
+                )
+            if ticket.third_approver_id:
+                ticket._notify_approver(
+                    ticket.third_approver_id,
                     _(
-                        'Your gateway ticket has been <b>fully approved</b> by <b>%(approver)s</b>.',
-                        approver=self.env.user.name,
+                        'Nhân viên <b>%(employee)s</b> đã được chấp thuận ra cổng. (Notification only)',
+                        employee=ticket.employee_id.name,
                     ),
                 )
             ticket.message_post(
@@ -216,10 +188,11 @@ class HrEmployeeGateTicket(models.Model):
                 subtype_xmlid='mail.mt_comment',
             )
 
+
     def action_refuse(self):
         for ticket in self:
-            if ticket.state not in ['confirm', 'second_approve', 'third_approve', 'validate']:
-                raise UserError(_('Only confirmed, second approval, third approval, or approved tickets can be refused.'))
+            if ticket.state not in ['confirm', 'second_approve', 'validate']:
+                raise UserError(_('Only confirmed, second approval, or approved tickets can be refused.'))
             ticket.state = 'refuse'
             if ticket.employee_id.user_id:
                 ticket._notify_approver(
