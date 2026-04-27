@@ -43,15 +43,18 @@
                 <attribute name="invisible">validation_type in ('employee_hr_responsibles', 'multi_step_6') or not can_validate or can_approve</attribute>
             </xpath>
             <xpath expr="//field[@name='message_needaction']/following-sibling::button[@icon='fa-times']" position="replace">
-                <button string="Refuse" name="action_responsible_refuse" type="object"
+                <button string="Refuse" name="action_open_responsible_refuse_wizard" type="object"
                     icon="fa-times"
                     invisible="validation_type != 'employee_hr_responsibles' or not can_responsible_approve"/>
-                <button string="Refuse" name="action_multi_step_refuse" type="object"
+                <button string="Refuse" name="action_open_multi_step_refuse_wizard" type="object"
                     icon="fa-times"
                     invisible="validation_type != 'multi_step_6' or not can_multi_step_approve"/>
-                <button string="Refuse" name="action_refuse" type="object"
+                <button string="Refuse" name="action_open_refuse_wizard" type="object"
                     icon="fa-times"
                     invisible="validation_type in ('employee_hr_responsibles', 'multi_step_6') or not can_refuse"/>
+            </xpath>
+            <xpath expr="//header/button[@name='action_refuse']" position="attributes">
+                <attribute name="name">action_open_refuse_wizard</attribute>
             </xpath>
         </field>
     </record>

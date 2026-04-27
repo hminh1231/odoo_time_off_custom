@@ -19,7 +19,7 @@ class ResourceResource(models.Model):
             linked = records.filtered(lambda r: r.employee_id)
             if linked:
                 linked.sudo().unlink()
-                raise AccessError(_("You only have view access to employees."))
+                raise AccessError(_("Bạn chỉ có quyền xem thông tin nhân viên."))
         return records
 
     def write(self, vals):

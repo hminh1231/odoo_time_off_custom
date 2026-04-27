@@ -16,13 +16,13 @@ def _privacy_raise_if_employee_no_write(env, employees):
     if not _privacy_is_employees_no_user(env):
         return
     if employees:
-        raise AccessError(_("You only have view access to employees."))
+        raise AccessError(_("Bạn chỉ có quyền xem thông tin nhân viên."))
 
 
 def _privacy_raise_if_hr_version_no_write(env):
     """Employees=No: cannot change employee versions or contract templates (hr.version)."""
     if _privacy_is_employees_no_user(env):
-        raise AccessError(_("You only have view access to employee records."))
+        raise AccessError(_("Bạn chỉ có quyền xem hồ sơ nhân viên."))
 
 
 def _privacy_raise_if_hr_employee_resource_no_write(env, resources):
@@ -30,10 +30,10 @@ def _privacy_raise_if_hr_employee_resource_no_write(env, resources):
     if not _privacy_is_employees_no_user(env):
         return
     if resources.filtered(lambda r: r.employee_id):
-        raise AccessError(_("You only have view access to employees."))
+        raise AccessError(_("Bạn chỉ có quyền xem thông tin nhân viên."))
 
 
 def _privacy_raise_if_employee_create_forbidden(env):
     if not _privacy_is_employees_no_user(env):
         return
-    raise AccessError(_("You cannot create employees."))
+    raise AccessError(_("Bạn không có quyền tạo nhân viên."))

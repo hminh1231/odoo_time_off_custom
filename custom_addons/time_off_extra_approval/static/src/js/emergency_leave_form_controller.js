@@ -27,6 +27,8 @@ patch(FormController.prototype, {
             this.dialogService.add(ConfirmationDialog, {
                 title: preview.title || _t("Emergency leave confirmation"),
                 body: preview.message,
+                confirmLabel: _t("Đồng ý"),
+                cancelLabel: _t("Hủy"),
                 confirm: () => resolve(true),
                 cancel: () => resolve(false),
             });

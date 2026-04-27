@@ -532,10 +532,10 @@ class HolidaysRequest(models.Model):
             }
         return {
             "needs_confirmation": True,
-            "title": _("Emergency leave confirmation"),
+            "title": _("Xác nhận nghỉ khẩn cấp"),
             "message": _(
-                "You are requesting emergency leave (less advance notice than required by policy). "
-                "Are you sure you want to continue?"
+                "Bạn đang gửi đơn nghỉ khẩn cấp (thời gian báo trước ngắn hơn quy định). "
+                "Bạn có chắc chắn muốn tiếp tục không?"
             ),
         }
 
@@ -575,14 +575,14 @@ class HolidaysRequest(models.Model):
     def _check_handover_employee_limit(self):
         for leave in self:
             if len(leave.handover_employee_ids) > 5:
-                raise ValidationError(_("You can select at most 5 work handover recipients."))
+                raise ValidationError(_("Bạn chỉ có thể chọn tối đa 5 người nhận bàn giao công việc."))
 
     @api.constrains("handover_acceptance_ids", "handover_acceptance_ids.employee_id")
     def _check_handover_duplicate_recipients(self):
         for leave in self:
             employees = leave.handover_acceptance_ids.mapped("employee_id")
             if len(employees.ids) != len(set(employees.ids)):
-                raise ValidationError(_("Each handover recipient can only appear once."))
+                raise ValidationError(_("Mỗi người nhận bàn giao chỉ được xuất hiện một lần."))
 
     @api.constrains("state", "handover_acceptance_ids", "handover_acceptance_ids.handover_work_content")
     def _check_handover_content_required_on_submit(self):
@@ -597,7 +597,7 @@ class HolidaysRequest(models.Model):
             if missing_content:
                 raise ValidationError(
                     _(
-                        "Please fill in work handover content for: %(names)s."
+                        "Vui lòng điền nội dung bàn giao công việc cho: %(names)s."
                     )
                     % {"names": ", ".join(missing_content.mapped("employee_id.name"))}
                 )
@@ -691,8 +691,8 @@ class HolidaysRequest(models.Model):
             if unavailable:
                 raise ValidationError(
                     _(
-                        "Selected work handover recipient(s) already have time off in this period: %(names)s. "
-                        "Please choose other colleagues."
+                        "Người nhận bàn giao đã chọn đang nghỉ phép trong giai đoạn này: %(names)s. "
+                        "Vui lòng chọn đồng nghiệp khác."
                     )
                     % {"names": ", ".join(unavailable.mapped("name"))}
                 )
@@ -721,10 +721,10 @@ class HolidaysRequest(models.Model):
                         ]
                     },
                     "warning": {
-                        "title": _("Validation Warning"),
+                        "title": _("Cảnh báo kiểm tra dữ liệu"),
                         "message": _(
-                            "Cannot assign work handover to %(names)s because they already have time off in this period. "
-                            "Those recipients were removed. Please select someone else."
+                            "Không thể phân công bàn giao cho %(names)s vì họ đang nghỉ phép trong giai đoạn này. "
+                            "Những người này đã được xóa khỏi danh sách. Vui lòng chọn người khác."
                         )
                         % {"names": ", ".join(unavailable.mapped("name"))},
                     }
@@ -790,9 +790,9 @@ class HolidaysRequest(models.Model):
                 continue
             waiting = leave._get_handover_blocking_employees()
             if waiting:
-                leave.handover_waiting_label = _("Waiting handover: %s") % ", ".join(waiting.mapped("name"))
+                leave.handover_waiting_label = _("Đang chờ bàn giao: %s") % ", ".join(waiting.mapped("name"))
             else:
-                leave.handover_waiting_label = _("All handover recipients accepted")
+                leave.handover_waiting_label = _("Tất cả người nhận bàn giao đã chấp nhận")
 
     @api.depends(
         "state",
@@ -807,7 +807,7 @@ class HolidaysRequest(models.Model):
                 continue
             refused = leave.handover_acceptance_ids.filtered(lambda l: l.state == "refused").mapped("employee_id")
             if refused:
-                leave.handover_refused_label = _("Refused handover: %s") % ", ".join(refused.mapped("name"))
+                leave.handover_refused_label = _("Từ chối bàn giao: %s") % ", ".join(refused.mapped("name"))
 
     @api.depends(
         "state",
@@ -935,7 +935,7 @@ class HolidaysRequest(models.Model):
             owner_name = (
                 leave.handover_escalation_user_id.display_name
                 if leave.handover_escalation_user_id
-                else _("Department Head")
+                else _("Trưởng bộ phận")
             )
             leave.handover_escalation_label = _(
                 "Handover timeout: escalated to %(owner)s for replacement assignment."
@@ -1432,7 +1432,7 @@ class HolidaysRequest(models.Model):
         first = _(
             "You were asked to cover work while %(name)s is away (%(leave_type)s, %(dates)s)."
         ) % {"name": requester_name, "leave_type": leave_type, "dates": date_txt}
-        second = _("Open this request and choose Accept work handover or Refuse work handover.")
+        second = _("Mở yêu cầu này và chọn Chấp nhận bàn giao hoặc Từ chối bàn giao.")
         return Markup("<p>%s</p><p>%s</p>") % (first, second)
 
     def _refresh_handover_activity_notes_for_employees(self, employees):
@@ -1654,17 +1654,17 @@ class HolidaysRequest(models.Model):
         existing_todo = self.activity_search(
             [_TODO_ACTIVITY_XMLID],
             user_id=dept_head_user.id,
-            additional_domain=[("summary", "=", _("Assign handover replacement"))],
+            additional_domain=[("summary", "=", _("Chỉ định người thay thế bàn giao"))],
             only_automated=False,
         )
         if not existing_todo:
             self.activity_schedule(
                 _TODO_ACTIVITY_XMLID,
                 user_id=dept_head_user.id,
-                summary=_("Assign handover replacement"),
+                summary=_("Chỉ định người thay thế bàn giao"),
                 note=Markup("<p>%s</p><p>%s</p>") % (
                     body,
-                    _("Open this request and assign another colleague in Work Handover To."),
+                    _("Mở yêu cầu này và chỉ định đồng nghiệp khác trong mục Người nhận bàn giao công việc."),
                 ),
             )
 
@@ -1750,7 +1750,7 @@ class HolidaysRequest(models.Model):
             leave.activity_feedback(
                 [_HANDOVER_ACTIVITY_XMLID],
                 only_automated=False,
-                feedback=_("Time off request closed."),
+                feedback=_("Đơn xin nghỉ phép đã đóng."),
             )
         return self
 
@@ -1760,10 +1760,10 @@ class HolidaysRequest(models.Model):
         if not requester or not requester.user_id or requester.user_id.share:
             return
         reason = (reason or "").strip()
-        reason_suffix = _("\nReason: %s") % reason if reason else ""
+        reason_suffix = _("\nLý do: %s") % reason if reason else ""
         body = _(
-            "%(recipient)s declined your work handover request for %(leave)s. "
-            "Do you want to select another colleague?"
+            "%(recipient)s đã từ chối yêu cầu nhận bàn giao công việc cho %(leave)s. "
+            "Bạn có muốn chọn đồng nghiệp khác không?"
         ) % {
             "recipient": refused_employee.name or refused_employee.display_name,
             "leave": self.display_name,
@@ -1771,25 +1771,25 @@ class HolidaysRequest(models.Model):
         if requester.user_id.partner_id:
             self.message_notify(
                 partner_ids=requester.user_id.partner_id.ids,
-                subject=_("Work handover declined"),
+                subject=_("Bàn giao công việc bị từ chối"),
                 body=body,
             )
         existing_todo = self.activity_search(
             [_TODO_ACTIVITY_XMLID],
             user_id=requester.user_id.id,
-            additional_domain=[("summary", "=", _("Update work handover recipients"))],
+            additional_domain=[("summary", "=", _("Cập nhật người nhận bàn giao công việc"))],
             only_automated=False,
         )
         if not existing_todo:
             self.activity_schedule(
                 _TODO_ACTIVITY_XMLID,
                 user_id=requester.user_id.id,
-                summary=_("Update work handover recipients"),
+                summary=_("Cập nhật người nhận bàn giao công việc"),
                 note=Markup("<p>%s</p><p>%s</p>") % (
                     body,
                     _(
-                        "Open this request, then either remove the refused recipient "
-                        "or select another colleague in Work Handover To."
+                        "Mở yêu cầu này, sau đó xóa người đã từ chối "
+                        "hoặc chọn đồng nghiệp khác trong mục Người nhận bàn giao công việc."
                     ),
                 ),
             )
@@ -1885,7 +1885,7 @@ class HolidaysRequest(models.Model):
         open_acts = self.activity_search(
             [_TODO_ACTIVITY_XMLID],
             user_id=requester_user.id,
-            additional_domain=[("summary", "=", _("Update work handover recipients"))],
+            additional_domain=[("summary", "=", _("Cập nhật người nhận bàn giao công việc"))],
             only_automated=False,
         )
         if open_acts:
@@ -2032,8 +2032,8 @@ class HolidaysRequest(models.Model):
         names = ", ".join(leave._get_handover_blocking_employees().mapped("name"))
         raise UserError(
             _(
-                "Approval is locked until all work handover recipients accept. "
-                "Still waiting for: %(names)s."
+                "Duyệt đơn đang bị khóa cho đến khi tất cả người nhận bàn giao chấp nhận. "
+                "Hiện vẫn đang chờ: %(names)s."
             )
             % {"names": names}
         )
@@ -2042,10 +2042,10 @@ class HolidaysRequest(models.Model):
         self.ensure_one()
         emp = self.env.user.sudo().employee_id
         if not emp or emp not in self.handover_employee_ids:
-            raise UserError(_("Only selected work handover recipients can respond here."))
+            raise UserError(_("Chỉ những người nhận bàn giao đã chọn mới có thể phản hồi tại đây."))
         line = self.handover_acceptance_ids.sudo().filtered(lambda l: l.employee_id == emp)[:1]
         if not line or line.state != "pending":
-            raise UserError(_("You have already responded to this work handover request."))
+            raise UserError(_("Bạn đã phản hồi yêu cầu bàn giao công việc này rồi."))
         line.write(
             {
                 "state": "accepted",
@@ -2057,10 +2057,10 @@ class HolidaysRequest(models.Model):
             [_HANDOVER_ACTIVITY_XMLID],
             user_id=self.env.user.id,
             only_automated=False,
-            feedback=_("Accepted work handover."),
+            feedback=_("Đã chấp nhận bàn giao công việc."),
         )
         self.message_post(
-            body=_("%s accepted the work handover.") % self.env.user.display_name,
+            body=_("%s đã chấp nhận bàn giao công việc.") % self.env.user.display_name,
             subtype_xmlid="mail.mt_note",
         )
         if self._handover_ready_for_approval():
@@ -2073,12 +2073,12 @@ class HolidaysRequest(models.Model):
         self.ensure_one()
         emp = self.env.user.sudo().employee_id
         if not emp or emp not in self.handover_employee_ids:
-            raise UserError(_("Only selected work handover recipients can respond here."))
+            raise UserError(_("Chỉ những người nhận bàn giao đã chọn mới có thể phản hồi tại đây."))
         line = self.handover_acceptance_ids.sudo().filtered(lambda l: l.employee_id == emp)[:1]
         if not line or line.state != "pending":
-            raise UserError(_("You have already responded to this work handover request."))
+            raise UserError(_("Bạn đã phản hồi yêu cầu bàn giao công việc này rồi."))
         return {
-            "name": _("Refuse Work Handover"),
+            "name": _("Từ chối bàn giao công việc"),
             "type": "ir.actions.act_window",
             "target": "new",
             "res_model": "hr.leave.handover.refuse.wizard",
@@ -2095,10 +2095,10 @@ class HolidaysRequest(models.Model):
         reason = (reason or "").strip()
         emp = self.env.user.sudo().employee_id
         if not emp or emp not in self.handover_employee_ids:
-            raise UserError(_("Only selected work handover recipients can respond here."))
+            raise UserError(_("Chỉ những người nhận bàn giao đã chọn mới có thể phản hồi tại đây."))
         line = self.handover_acceptance_ids.sudo().filtered(lambda l: l.employee_id == emp)[:1]
         if not line or line.state != "pending":
-            raise UserError(_("You have already responded to this work handover request."))
+            raise UserError(_("Bạn đã phản hồi yêu cầu bàn giao công việc này rồi."))
         line.write(
             {
                 "state": "refused",
@@ -2110,17 +2110,17 @@ class HolidaysRequest(models.Model):
             [_HANDOVER_ACTIVITY_XMLID],
             user_id=self.env.user.id,
             only_automated=False,
-            feedback=_("Refused work handover."),
+            feedback=_("Đã từ chối bàn giao công việc."),
         )
         reason_html = (
             Markup("<br/><strong>%s</strong> %s")
-            % (_("Reason:"), reason)
+            % (_("Lý do:"), reason)
             if reason
             else Markup("")
         )
         self.message_post(
             body=Markup("%s%s")
-            % (_("%s refused the work handover.") % self.env.user.display_name, reason_html),
+            % (_("%s đã từ chối bàn giao công việc.") % self.env.user.display_name, reason_html),
             subtype_xmlid="mail.mt_note",
         )
         self._notify_requester_handover_refusal(emp, reason=reason)
@@ -2131,7 +2131,7 @@ class HolidaysRequest(models.Model):
         self.ensure_one()
         if not self.can_manage_handover_replacement:
             raise UserError(
-                _("Only the employee who requested this time off can update refused work handover recipients.")
+                _("Chỉ nhân viên đã tạo đơn nghỉ phép này mới có thể cập nhật người nhận bàn giao bị từ chối.")
             )
         self.write({"handover_replacement_picker_open": True})
         return self._action_return_reload_leave_form()
@@ -2141,7 +2141,7 @@ class HolidaysRequest(models.Model):
         self.ensure_one()
         if not self.can_manage_handover_replacement:
             raise UserError(
-                _("Only the employee who requested this time off can update refused work handover recipients.")
+                _("Chỉ nhân viên đã tạo đơn nghỉ phép này mới có thể cập nhật người nhận bàn giao bị từ chối.")
             )
         refused_emps = self.handover_acceptance_ids.filtered(
             lambda line: line.state == "refused"
@@ -2159,8 +2159,8 @@ class HolidaysRequest(models.Model):
         if not remaining:
             raise UserError(
                 _(
-                    "You cannot remove all work handover recipients. "
-                    "Add at least one colleague or use Yes to replace someone."
+                    "Bạn không thể xóa toàn bộ người nhận bàn giao công việc. "
+                    "Hãy giữ ít nhất một người hoặc chọn Có để thay thế người nhận."
                 )
             )
         self.write(
@@ -2172,10 +2172,10 @@ class HolidaysRequest(models.Model):
             }
         )
         self._feedback_requester_handover_update_todo(
-            _("Refused colleague(s) removed from work handover; approval can continue.")
+            _("Đã xóa đồng nghiệp từ chối khỏi danh sách bàn giao; quy trình duyệt có thể tiếp tục.")
         )
         self.message_post(
-            body=_("%s removed refused colleague(s) from work handover without replacing them.")
+            body=_("%s đã xóa đồng nghiệp từ chối khỏi danh sách bàn giao mà không thay thế.")
             % self.env.user.display_name,
             subtype_xmlid="mail.mt_note",
         )
@@ -2186,21 +2186,21 @@ class HolidaysRequest(models.Model):
         self.ensure_one()
         if not self.can_manage_handover_replacement:
             raise UserError(
-                _("Only the employee who requested this time off can update refused work handover recipients.")
+                _("Chỉ nhân viên đã tạo đơn nghỉ phép này mới có thể cập nhật người nhận bàn giao bị từ chối.")
             )
         swap = self.handover_swap_out_employee_id
         new_emp = self.handover_new_recipient_id
         if not swap or not new_emp:
-            raise UserError(_("Please select who to replace (refused colleague) and the new colleague."))
+            raise UserError(_("Vui lòng chọn người cần thay (đã từ chối) và người thay thế mới."))
         if swap not in self.handover_replaceable_recipient_ids:
             raise UserError(
                 _(
-                    "You can only replace recipients who are currently replaceable "
-                    "(refused, or pending after timeout escalation)."
+                    "Bạn chỉ có thể thay những người nhận hiện đang cho phép thay "
+                    "(đã từ chối, hoặc đang chờ sau khi quá thời gian chuyển cấp)."
                 )
             )
         if swap not in self.handover_employee_ids:
-            raise UserError(_("The selected colleague is not in the current work handover list."))
+            raise UserError(_("Đồng nghiệp được chọn không nằm trong danh sách bàn giao hiện tại."))
         if new_emp not in self.handover_allowed_new_recipient_ids:
             raise UserError(
                 _(
@@ -2209,12 +2209,12 @@ class HolidaysRequest(models.Model):
                 )
             )
         if swap == new_emp:
-            raise UserError(_("The new colleague must be different from the person being replaced."))
+            raise UserError(_("Người thay thế mới phải khác với người đang được thay."))
         new_ids = [e.id for e in self.handover_employee_ids if e != swap]
         if new_emp.id not in new_ids:
             new_ids.append(new_emp.id)
         if len(new_ids) > 5:
-            raise ValidationError(_("You can select at most 5 work handover recipients."))
+            raise ValidationError(_("Bạn chỉ có thể chọn tối đa 5 người nhận bàn giao công việc."))
         self.write(
             {
                 "handover_employee_ids": [Command.set(new_ids)],
@@ -2529,7 +2529,7 @@ class HolidaysRequest(models.Model):
                 if mode == "sequential":
                     cur = pending[:1]
                     name = cur.user_id.name or ""
-                    leave.approval_current_step_label = _("Step %(step)d / %(total)d · %(name)s") % {
+                    leave.approval_current_step_label = _("Bước %(step)d / %(total)d · %(name)s") % {
                         "step": cur.sequence,
                         "total": total,
                         "name": name,
@@ -2573,10 +2573,10 @@ class HolidaysRequest(models.Model):
                             "and job titles (team lead → dept head → controller → HR head → director) on the hierarchy."
                         )
                     )
-                raise UserError(_("This employee has no HR Responsible configured."))
+                raise UserError(_("Nhân viên này chưa được cấu hình người phụ trách HR."))
             if len(approvers) > _MAX_EMPLOYEE_HR_RESPONSIBLES:
                 raise UserError(
-                    _("This workflow supports up to %(max)s HR Responsibles per employee.")
+                    _("Luồng này hỗ trợ tối đa %(max)s người phụ trách HR cho mỗi nhân viên.")
                     % {"max": _MAX_EMPLOYEE_HR_RESPONSIBLES}
                 )
             now = fields.Datetime.now()
@@ -2885,8 +2885,8 @@ class HolidaysRequest(models.Model):
                     if raise_if_not_possible:
                         raise UserError(
                             _(
-                                "Approval is locked until all work handover recipients accept. "
-                                "Still waiting for: %(names)s."
+                                "Duyệt đơn đang bị khóa cho đến khi tất cả người nhận bàn giao chấp nhận. "
+                                "Hiện vẫn đang chờ: %(names)s."
                             )
                             % {"names": ", ".join(blocking.mapped("name"))}
                         )
@@ -2900,7 +2900,7 @@ class HolidaysRequest(models.Model):
                     approvers = holiday._get_multi_step_approvers()
                     if self.env.user not in approvers:
                         if raise_if_not_possible:
-                            raise UserError(_("You are not allowed to approve/refuse this multi-step time off step."))
+                            raise UserError(_("Bạn không được phép duyệt/từ chối bước nghỉ phép nhiều cấp này."))
                         return False
                 continue
 
@@ -2910,25 +2910,25 @@ class HolidaysRequest(models.Model):
                         if raise_if_not_possible:
                             raise UserError(
                                 _(
-                                    "In this workflow only employees with job title \"Director\" may approve or refuse "
-                                    "their own time off. Other approvers must process someone else's request."
+                                    "Trong luồng này, chỉ nhân viên có chức danh \"Giám đốc\" mới được duyệt hoặc từ chối "
+                                    "đơn nghỉ phép của chính mình. Những người duyệt khác phải xử lý đơn của người khác."
                                 )
                             )
                         return False
                     if not is_manager and self.env.user not in holiday._get_responsible_approval_users():
                         if raise_if_not_possible:
-                            raise UserError(_("You are not allowed to approve/refuse this leave for current responsible flow."))
+                            raise UserError(_("Bạn không được phép duyệt/từ chối đơn nghỉ phép này trong luồng phụ trách hiện tại."))
                         return False
                 continue
 
             if not is_manager and state != "confirm":
                 if state == "draft":
                     if holiday.state == "refuse":
-                        raise UserError(_("Only a Time Off Manager can reset a refused leave."))
+                        raise UserError(_("Chỉ Quản lý nghỉ phép mới có thể đặt lại đơn đã bị từ chối."))
                     if holiday.date_from and holiday.date_from.date() <= fields.Date.today():
-                        raise UserError(_("Only a Time Off Manager can reset a started leave."))
+                        raise UserError(_("Chỉ Quản lý nghỉ phép mới có thể đặt lại đơn đã bắt đầu."))
                     if holiday.employee_id != current_employee:
-                        raise UserError(_("Only a Time Off Manager can reset other people leaves."))
+                        raise UserError(_("Chỉ Quản lý nghỉ phép mới có thể đặt lại đơn nghỉ phép của người khác."))
                 else:
                     if val_type == "no_validation" and current_employee == holiday.employee_id and (
                         is_officer_any or is_manager
@@ -2944,13 +2944,13 @@ class HolidaysRequest(models.Model):
                         and not is_officer_any
                     ):
                         raise UserError(
-                            _("Only a Time Off Officer or Manager can approve/refuse its own requests.")
+                            _("Chỉ Cán bộ nghỉ phép hoặc Quản lý nghỉ phép mới có thể duyệt/từ chối yêu cầu của chính mình.")
                         )
 
                     if (state == "validate1" and val_type == "both") and holiday.employee_id:
                         if not is_officer_any and self.env.user != holiday.employee_id.leave_manager_id:
                             raise UserError(
-                                _("You must be either %s's manager or Time off Manager to approve this leave")
+                                _("Bạn phải là quản lý của %s hoặc là Quản lý nghỉ phép để duyệt đơn này")
                                 % (holiday.employee_id.name,)
                             )
 
@@ -2969,14 +2969,14 @@ class HolidaysRequest(models.Model):
                                     "name"
                                 )
                             )
-                        raise UserError(_("You must be %s's Manager to approve this leave", employees))
+                        raise UserError(_("Bạn phải là quản lý của %s để duyệt đơn này", employees))
 
                     if (
                         not is_officer_any
                         and (state == "validate" and val_type == "hr")
                         and holiday.employee_id
                     ):
-                        raise UserError(_("You must either be a Time off Officer or Time off Manager to approve this leave"))
+                        raise UserError(_("Bạn phải là Cán bộ nghỉ phép hoặc Quản lý nghỉ phép để duyệt đơn này"))
 
         return True
 
@@ -2988,23 +2988,23 @@ class HolidaysRequest(models.Model):
         """Approve one multi-step level (demo, fixed 6 steps)."""
         self.ensure_one()
         if self.validation_type != "multi_step_6":
-            raise UserError(_("This leave is not configured for multi-step approval."))
+            raise UserError(_("Đơn nghỉ phép này chưa được cấu hình duyệt nhiều cấp."))
         if self.state != "confirm":
-            raise UserError(_("Time off must be in 'To Approve' state to approve steps."))
+            raise UserError(_("Đơn nghỉ phép phải ở trạng thái 'Chờ duyệt' để duyệt theo từng bước."))
         self._ensure_handover_ready_for_approval()
 
         approvers = self._get_multi_step_approvers()
         is_manager = self.env.user.has_group("hr_holidays.group_hr_holidays_manager")
         if not is_manager and self.env.user not in approvers:
-            raise UserError(_("You are not authorized to approve the current step."))
+            raise UserError(_("Bạn không có quyền duyệt bước hiện tại."))
 
         step = self._get_current_multi_step()
         if not step:
-            raise UserError(_("Missing multi-step configuration for step %s.") % self.multi_step_current)
+            raise UserError(_("Thiếu cấu hình duyệt nhiều cấp cho bước %s.") % self.multi_step_current)
 
         if not self._multi_step_previous_steps_logged():
             raise UserError(
-                _("Earlier approval steps are missing from the log. Approvals must be done in order (step 1, then 2, …).")
+                _("Thiếu log của các bước duyệt trước đó. Cần duyệt đúng thứ tự (bước 1, rồi bước 2, ...).")
             )
 
         self.env["hr.leave.multi.approval"].create(
@@ -3034,7 +3034,7 @@ class HolidaysRequest(models.Model):
         if not leave_id:
             return {"type": "ir.actions.act_window_close"}
         return {
-            "name": _("Cancel Time Off"),
+            "name": _("Hủy nghỉ phép"),
             "type": "ir.actions.act_window",
             "target": "new",
             "res_model": "hr.holidays.cancel.leave",
@@ -3046,19 +3046,19 @@ class HolidaysRequest(models.Model):
             },
         }
 
-    def action_multi_step_refuse(self):
+    def action_multi_step_refuse(self, reason=False):
         """Refuse a multi-step leave at the current step."""
         self.ensure_one()
         if self.validation_type != "multi_step_6":
-            raise UserError(_("This leave is not configured for multi-step approval."))
+            raise UserError(_("Đơn nghỉ phép này chưa được cấu hình duyệt nhiều cấp."))
         if self.state != "confirm":
-            raise UserError(_("Time off must be in 'To Approve' state to refuse steps."))
+            raise UserError(_("Đơn nghỉ phép phải ở trạng thái 'Chờ duyệt' để từ chối theo từng bước."))
         self._ensure_handover_ready_for_approval()
 
         approvers = self._get_multi_step_approvers()
         is_manager = self.env.user.has_group("hr_holidays.group_hr_holidays_manager")
         if not is_manager and self.env.user not in approvers:
-            raise UserError(_("You are not authorized to refuse the current step."))
+            raise UserError(_("Bạn không có quyền từ chối bước hiện tại."))
 
         step = self._get_current_multi_step()
         if step:
@@ -3070,14 +3070,14 @@ class HolidaysRequest(models.Model):
                 }
             )
 
-        return super().action_refuse()
+        return self.action_refuse(reason=reason)
 
     def action_responsible_approve(self):
         self.ensure_one()
         if self.validation_type != "employee_hr_responsibles":
-            raise UserError(_("This leave is not configured for Employee HR Responsibles flow."))
+            raise UserError(_("Đơn nghỉ phép này chưa được cấu hình luồng Người phụ trách HR của nhân viên."))
         if self.state not in ("confirm", "validate1"):
-            raise UserError(_("Time off must be in 'To Approve' or 'Second Approval' state."))
+            raise UserError(_("Đơn nghỉ phép phải ở trạng thái 'Chờ duyệt' hoặc 'Duyệt cấp 2'."))
         self._ensure_handover_ready_for_approval()
 
         is_manager = self.env.user.has_group("hr_holidays.group_hr_holidays_manager")
@@ -3085,9 +3085,9 @@ class HolidaysRequest(models.Model):
         mode = self.holiday_status_id.employee_responsible_approval_mode
         if mode == "sequential":
             if not is_responsible:
-                raise UserError(_("You are not allowed to approve this leave."))
+                raise UserError(_("Bạn không được phép duyệt đơn nghỉ phép này."))
         elif not is_manager and not is_responsible:
-            raise UserError(_("You are not allowed to approve this leave."))
+            raise UserError(_("Bạn không được phép duyệt đơn nghỉ phép này."))
         if (mode == "sequential" or not is_manager) and self._employee_hr_blocks_self_approval_non_director():
             raise UserError(
                 _(
@@ -3103,14 +3103,14 @@ class HolidaysRequest(models.Model):
             lambda l: l.user_id == self.env.user
         )[:1]
         if user_line and user_line.state != "pending":
-            raise UserError(_("You already processed your approval for this leave."))
+            raise UserError(_("Bạn đã xử lý duyệt đơn nghỉ phép này rồi."))
 
         if mode == "sequential":
             first_pending = self.responsible_approval_line_ids.filtered(
                 lambda l: l.state == "pending"
             ).sorted("sequence")[:1]
             if not user_line or not first_pending or user_line != first_pending:
-                raise UserError(_("This leave must be approved in sequence order."))
+                raise UserError(_("Đơn nghỉ phép này phải được duyệt đúng thứ tự tuần tự."))
 
         if is_responsible and user_line:
             user_line.write({"state": "approved", "action_date": fields.Datetime.now()})
@@ -3132,12 +3132,12 @@ class HolidaysRequest(models.Model):
         self.activity_update()
         return True
 
-    def action_responsible_refuse(self):
+    def action_responsible_refuse(self, reason=False):
         self.ensure_one()
         if self.validation_type != "employee_hr_responsibles":
-            raise UserError(_("This leave is not configured for Employee HR Responsibles flow."))
+            raise UserError(_("Đơn nghỉ phép này chưa được cấu hình luồng Người phụ trách HR của nhân viên."))
         if self.state not in ("confirm", "validate1"):
-            raise UserError(_("Time off must be in 'To Approve' or 'Second Approval' state."))
+            raise UserError(_("Đơn nghỉ phép phải ở trạng thái 'Chờ duyệt' hoặc 'Duyệt cấp 2'."))
         self._ensure_handover_ready_for_approval()
 
         is_manager = self.env.user.has_group("hr_holidays.group_hr_holidays_manager")
@@ -3145,9 +3145,9 @@ class HolidaysRequest(models.Model):
         mode = self.holiday_status_id.employee_responsible_approval_mode
         if mode == "sequential":
             if not is_responsible:
-                raise UserError(_("You are not allowed to refuse this leave."))
+                raise UserError(_("Bạn không được phép từ chối đơn nghỉ phép này."))
         elif not is_manager and not is_responsible:
-            raise UserError(_("You are not allowed to refuse this leave."))
+            raise UserError(_("Bạn không được phép từ chối đơn nghỉ phép này."))
         if (mode == "sequential" or not is_manager) and self._employee_hr_blocks_self_approval_non_director():
             raise UserError(
                 _(
@@ -3167,16 +3167,46 @@ class HolidaysRequest(models.Model):
                 lambda l: l.state == "pending"
             ).sorted("sequence")[:1]
             if not user_line or not first_pending or user_line != first_pending:
-                raise UserError(_("This leave must be refused in sequence order."))
+                raise UserError(_("Đơn nghỉ phép này phải được từ chối đúng thứ tự tuần tự."))
 
         if user_line and user_line.state == "pending":
             user_line.write({"state": "refused", "action_date": fields.Datetime.now()})
 
-        return super().action_refuse()
+        return self.action_refuse(reason=reason)
 
-    def action_refuse(self):
+    def action_open_refuse_wizard(self, refuse_action="standard"):
+        return {
+            "name": _("Từ chối duyệt đơn nghỉ phép"),
+            "type": "ir.actions.act_window",
+            "target": "new",
+            "res_model": "hr.leave.refuse.wizard",
+            "view_mode": "form",
+            "views": [[False, "form"]],
+            "context": {
+                "default_leave_ids": self.ids,
+                "default_refuse_action": refuse_action,
+                "dialog_size": "medium",
+            },
+        }
+
+    def action_open_multi_step_refuse_wizard(self):
+        self.ensure_one()
+        return self.action_open_refuse_wizard(refuse_action="multi_step")
+
+    def action_open_responsible_refuse_wizard(self):
+        self.ensure_one()
+        return self.action_open_refuse_wizard(refuse_action="responsible")
+
+    def action_refuse(self, reason=False):
         self._ensure_handover_ready_for_approval()
-        return super().action_refuse()
+        result = super().action_refuse()
+        if reason:
+            for leave in self:
+                leave.message_post(
+                    body=_("Lý do từ chối duyệt: %(reason)s", reason=reason),
+                    subtype_xmlid="mail.mt_note",
+                )
+        return result
 
     @api.model
     def cron_escalate_responsible_approval_timeouts(self):
@@ -3231,7 +3261,7 @@ class HolidaysRequest(models.Model):
             )
             return
         owner_emp = self._handover_employee_for_assigner_user(dept_head_user)
-        owner_title = owner_emp.job_title if owner_emp and owner_emp.job_title else _("next level")
+        owner_title = owner_emp.job_title if owner_emp and owner_emp.job_title else _("cấp tiếp theo")
         self.sudo().write(
             {
                 "handover_escalated": True,
@@ -3276,7 +3306,7 @@ class HolidaysRequest(models.Model):
                 )
                 % {
                     "hours": second_hours,
-                    "owner": self.handover_escalation_user_id.display_name or _("department head"),
+                    "owner": self.handover_escalation_user_id.display_name or _("trưởng bộ phận"),
                 },
                 subtype_xmlid="mail.mt_note",
             )
@@ -3290,7 +3320,7 @@ class HolidaysRequest(models.Model):
             }
         )
         manager_emp = self._handover_employee_for_assigner_user(manager_user)
-        manager_title = manager_emp.job_title if manager_emp and manager_emp.job_title else _("next level")
+        manager_title = manager_emp.job_title if manager_emp and manager_emp.job_title else _("cấp tiếp theo")
         self.message_post(
             body=_(
                 "Handover still had no replacement after %(hours)s hours at current level. "

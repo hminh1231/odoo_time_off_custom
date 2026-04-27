@@ -14,6 +14,7 @@
         "views/hr_leave_search_views.xml",
         "views/hr_leave_form_handover_views.xml",
         "views/hr_leave_handover_refuse_wizard_views.xml",
+        "views/hr_leave_refuse_wizard_views.xml",
         "views/hr_leave_kanban_extra_approval.xml",
         "views/hr_leave_list_extra_approval.xml",
         "views/hr_leave_multi_step_views.xml",

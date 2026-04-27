@@ -10,18 +10,18 @@ class HolidaysAllocation(models.Model):
 
     # Multi-step approval (demo) used when hr.leave.type.allocation_validation_type == 'multi_step_6'.
     multi_step_current = fields.Integer(
-        string="Multi-step Current Step",
+        string="Bước hiện tại (duyệt nhiều cấp)",
         default=1,
-        help="Current approval step index (1..6) for multi-step allocation approval (demo).",
+        help="Chỉ số bước duyệt hiện tại (1..6) cho luồng phân bổ nghỉ phép duyệt nhiều cấp (demo).",
     )
     multi_approval_line_ids = fields.One2many(
         comodel_name="hr.leave.multi.approval",
         inverse_name="allocation_id",
-        string="Multi-step Approval Log (Demo)",
+        string="Nhật ký duyệt nhiều cấp (Demo)",
         readonly=True,
     )
     can_multi_step_validate = fields.Boolean(
-        string="Can Validate Current Multi-step (Demo)",
+        string="Có thể duyệt bước hiện tại (Demo)",
         compute="_compute_can_multi_step_validate",
     )
 
@@ -30,11 +30,11 @@ class HolidaysAllocation(models.Model):
         relation="hr_leave_allocation_extra_approver_user_rel",
         column1="allocation_id",
         column2="user_id",
-        string="Extra Time Off Allocation Approvers",
+        string="Người duyệt bổ sung cho phân bổ nghỉ phép",
         compute="_compute_extra_approver_user_ids",
         store=True,
         readonly=True,
-        help="Users who can approve/refuse allocations based on the leave type configuration.",
+        help="Người dùng có thể duyệt/từ chối phân bổ dựa theo cấu hình loại nghỉ phép.",
     )
 
     @api.depends(
@@ -134,7 +134,7 @@ class HolidaysAllocation(models.Model):
             if val_type == "multi_step_6":
                 if not is_manager and self.env.user not in allocation._get_multi_step_approvers():
                     if raise_if_not_possible:
-                        raise UserError(_("You are not allowed to validate/refuse this multi-step allocation step."))
+                        raise UserError(_("Bạn không được phép duyệt/từ chối bước phân bổ nhiều cấp này."))
                     return False
                 continue
 
@@ -155,7 +155,7 @@ class HolidaysAllocation(models.Model):
 
             if not allowed:
                 raise UserError(
-                    _("Only authorized officers/managers/leaders can approve or refuse time off allocations for this type.")
+                    _("Chỉ cán bộ/quản lý/trưởng bộ phận được phân quyền mới có thể duyệt hoặc từ chối phân bổ loại nghỉ phép này.")
                 )
 
             # First access check: department, members, ... (see security.xml & record rules)
@@ -168,7 +168,7 @@ class HolidaysAllocation(models.Model):
                 and not is_manager
                 and val_type != "no"
             ):
-                raise UserError(_("Only a time off Manager can approve its own requests."))
+                raise UserError(_("Chỉ Quản lý nghỉ phép mới có thể tự duyệt yêu cầu của chính mình."))
 
     def _get_responsible_for_approval(self):
         self.ensure_one()
@@ -195,22 +195,22 @@ class HolidaysAllocation(models.Model):
         """Approve current multi-step allocation level (demo, fixed 6 steps)."""
         self.ensure_one()
         if self.validation_type != "multi_step_6":
-            raise UserError(_("This allocation is not configured for multi-step approval."))
+            raise UserError(_("Phân bổ này chưa được cấu hình duyệt nhiều cấp."))
         if self.state != "confirm":
-            raise UserError(_("Allocation must be in 'To Approve' state to validate steps."))
+            raise UserError(_("Phân bổ phải ở trạng thái 'Chờ duyệt' để duyệt theo từng bước."))
 
         approvers = self._get_multi_step_approvers()
         is_manager = self.env.user.has_group("hr_holidays.group_hr_holidays_manager")
         if not is_manager and self.env.user not in approvers:
-            raise UserError(_("You are not authorized to validate the current step."))
+            raise UserError(_("Bạn không có quyền duyệt bước hiện tại."))
 
         step = self._get_current_multi_step()
         if not step:
-            raise UserError(_("Missing multi-step configuration for step %s.") % self.multi_step_current)
+            raise UserError(_("Thiếu cấu hình duyệt nhiều cấp cho bước %s.") % self.multi_step_current)
 
         if not self._multi_step_previous_steps_logged():
             raise UserError(
-                _("Earlier approval steps are missing from the log. Validations must be done in order (step 1, then 2, …).")
+                _("Thiếu log của các bước duyệt trước đó. Cần duyệt đúng thứ tự (bước 1, rồi bước 2, ...).")
             )
 
         self.env["hr.leave.multi.approval"].create(
@@ -233,14 +233,14 @@ class HolidaysAllocation(models.Model):
         """Refuse a multi-step allocation at the current step."""
         self.ensure_one()
         if self.validation_type != "multi_step_6":
-            raise UserError(_("This allocation is not configured for multi-step approval."))
+            raise UserError(_("Phân bổ này chưa được cấu hình duyệt nhiều cấp."))
         if self.state != "confirm":
-            raise UserError(_("Allocation must be in 'To Approve' state to refuse steps."))
+            raise UserError(_("Phân bổ phải ở trạng thái 'Chờ duyệt' để từ chối theo từng bước."))
 
         approvers = self._get_multi_step_approvers()
         is_manager = self.env.user.has_group("hr_holidays.group_hr_holidays_manager")
         if not is_manager and self.env.user not in approvers:
-            raise UserError(_("You are not authorized to refuse the current step."))
+            raise UserError(_("Bạn không có quyền từ chối bước hiện tại."))
 
         step = self._get_current_multi_step()
         if step:
@@ -260,7 +260,7 @@ class HolidaysAllocation(models.Model):
         for allocation in self:
             if allocation.validation_type != "no":
                 note = _(
-                    "New Allocation Request created by %(user)s: %(count)s Days of %(allocation_type)s",
+                    "Yêu cầu phân bổ mới được tạo bởi %(user)s: %(count)s ngày của loại %(allocation_type)s",
                     user=allocation.create_uid.name,
                     count=allocation.number_of_days,
                     allocation_type=allocation.holiday_status_id.name,

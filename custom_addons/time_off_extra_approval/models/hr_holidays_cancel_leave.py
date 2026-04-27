@@ -6,7 +6,7 @@ class HrHolidaysCancelLeave(models.TransientModel):
 
     # Dashboard popup may open cancel wizard before leave is persisted.
     # Keep field optional here to avoid technical ValidationError on wizard creation.
-    leave_id = fields.Many2one("hr.leave", string="Time Off Request", required=False)
+    leave_id = fields.Many2one("hr.leave", string="Đơn xin nghỉ phép", required=False)
 
     def action_cancel_leave(self):
         self.ensure_one()
@@ -16,7 +16,7 @@ class HrHolidaysCancelLeave(models.TransientModel):
                 "tag": "display_notification",
                 "params": {
                     "type": "warning",
-                    "message": _("Please save/submit the time off request before cancelling it."),
+                    "message": _("Vui lòng lưu/gửi đơn xin nghỉ phép trước khi hủy."),
                     "next": {"type": "ir.actions.act_window_close"},
                 },
             }

@@ -39,9 +39,9 @@ class HrEmployee(models.Model):
         labels = dict(JOB_TITLE_SELECTION)
         raise ValidationError(
             _(
-                "Invalid reporting line: “%(employee)s” (%(emp_title)s) cannot report to “%(manager)s” "
-                "(%(mgr_title)s). The manager’s job title must be equal or higher on the company scale than "
-                "the employee’s (organization chart follows the job title order).",
+                "Sai tuyến quản lý: “%(employee)s” (%(emp_title)s) không thể báo cáo cho “%(manager)s” "
+                "(%(mgr_title)s). Chức danh của quản lý phải bằng hoặc cao hơn nhân viên theo thang chức danh "
+                "của công ty (sơ đồ tổ chức đi theo thứ tự chức danh).",
                 employee=self.name,
                 emp_title=labels.get(self.job_title, self.job_title or "-"),
                 manager=self.parent_id.name,

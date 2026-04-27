@@ -15,8 +15,8 @@ class HrEmployee(models.Model):
         "hr_employee_extra_responsible_rel",
         "employee_id",
         "user_id",
-        string="Additional HR Responsible",
-        help="Additional users responsible for this employee.",
+        string="Phụ trách HR bổ sung",
+        help="Người dùng phụ trách HR bổ sung cho nhân viên này.",
         groups="hr.group_hr_user",
         domain=_get_hr_responsible_domain,
     )
@@ -24,7 +24,7 @@ class HrEmployee(models.Model):
         "res.users",
         compute="_compute_hr_responsible_ids",
         inverse="_inverse_hr_responsible_ids",
-        string="HR Responsibles",
+        string="Người phụ trách HR",
         groups="hr.group_hr_user",
         domain=_get_hr_responsible_domain,
     )
@@ -53,9 +53,9 @@ class HrEmployee(models.Model):
         for employee in self:
             count = len(employee.hr_responsible_id | employee.additional_hr_responsible_ids)
             if count == 0:
-                raise ValidationError(_("At least one HR Responsible is required."))
+                raise ValidationError(_("Cần có ít nhất một người phụ trách HR."))
             if count > 6:
-                raise ValidationError(_("You can assign at most 6 HR Responsible users per employee."))
+                raise ValidationError(_("Mỗi nhân viên chỉ được gán tối đa 6 người phụ trách HR."))
 
     @api.model
     def notify_expiring_contract_work_permit(self):
@@ -84,7 +84,7 @@ class HrEmployee(models.Model):
                 employee.with_context(mail_activity_quick_update=True).activity_schedule(
                     "mail.mail_activity_data_todo",
                     employee.contract_date_end,
-                    _("The contract of %s is about to expire.", employee.name),
+                    _("Hợp đồng của %s sắp hết hạn.", employee.name),
                     user_id=user.id,
                 )
 
@@ -94,7 +94,7 @@ class HrEmployee(models.Model):
                 employee.with_context(mail_activity_quick_update=True).activity_schedule(
                     "mail.mail_activity_data_todo",
                     employee.work_permit_expiration_date,
-                    _("The work permit of %s is about to expire.", employee.name),
+                    _("Giấy phép lao động của %s sắp hết hạn.", employee.name),
                     user_id=user.id,
                 )
 

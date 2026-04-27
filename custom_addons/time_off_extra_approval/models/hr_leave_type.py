@@ -29,101 +29,101 @@ class HolidaysType(models.Model):
     # Multi-step approval (demo) for Time Off requests.
     leave_validation_type = fields.Selection(
         selection_add=[
-            ("multi_step_6", "By 6-Step Approval (Demo)"),
-            ("employee_hr_responsibles", "By Employee HR Responsibles"),
+            ("multi_step_6", "Duyệt 6 bước (Demo)"),
+            ("employee_hr_responsibles", "Duyệt theo người phụ trách HR của nhân viên"),
         ],
     )
 
     employee_responsible_approval_mode = fields.Selection(
         selection=[
-            ("any", "Any One Responsible Can Approve"),
-            ("all", "All Responsibles Must Approve"),
-            ("sequential", "Sequential (In Order)"),
+            ("any", "Chỉ cần một người phụ trách duyệt"),
+            ("all", "Tất cả người phụ trách phải duyệt"),
+            ("sequential", "Duyệt tuần tự (theo thứ tự)"),
         ],
-        string="Employee Responsible Approval Mode",
+        string="Chế độ duyệt của người phụ trách nhân viên",
         default="any",
-        help="Applies when Leave Validation is 'By Employee HR Responsibles'. "
-        "For Sequential, approvers are ordered by each responsible user's job title (see Job Title on their employee), "
-        "from Team Lead through Director per company job title configuration.",
+        help="Áp dụng khi hình thức duyệt nghỉ phép là 'Duyệt theo người phụ trách HR của nhân viên'. "
+        "Với chế độ tuần tự, người duyệt được sắp theo chức danh của từng người phụ trách "
+        "(xem Chức danh trên hồ sơ nhân viên), từ Trưởng nhóm đến Giám đốc theo cấu hình công ty.",
     )
 
     employee_responsible_source = fields.Selection(
         selection=[
-            ("manual", "HR Responsibles on Employee"),
-            ("org_chart", "Organization Chart (by job title on manager chain)"),
+            ("manual", "Người phụ trách HR trên hồ sơ nhân viên"),
+            ("org_chart", "Sơ đồ tổ chức (theo chức danh trên chuỗi quản lý)"),
         ],
-        string="Employee Responsible Source",
+        string="Nguồn người phụ trách nhân viên",
         default="manual",
-        help="Manual: use HR Responsible users configured on the employee. "
-        "Organization chart: walk the employee's manager chain (parent) upward and create one approval step "
-        "per level that has a linked internal user (each reporting line, not one slot per job title).",
+        help="Thủ công: dùng người phụ trách HR cấu hình trên nhân viên. "
+        "Sơ đồ tổ chức: đi ngược chuỗi quản lý (parent) và tạo một bước duyệt cho mỗi cấp có user nội bộ liên kết "
+        "(theo từng tuyến báo cáo, không phải mỗi chức danh một ô).",
     )
 
     employee_responsible_escalation_hours = fields.Float(
-        string="Escalation After (hours)",
+        string="Tự động chuyển cấp sau (giờ)",
         default=2.0,
-        help="Sequential flow only: if the current approver does not act within this time, the request escalates "
-        "to the next level.",
+        help="Chỉ áp dụng cho luồng tuần tự: nếu người duyệt hiện tại không xử lý trong thời gian này, "
+        "yêu cầu sẽ chuyển lên cấp tiếp theo.",
     )
     handover_escalation_after_hours = fields.Float(
-        string="Handover: Escalate After (hours)",
+        string="Bàn giao: Chuyển cấp sau (giờ)",
         default=2.0,
-        help="If nobody accepts work handover within this time, escalation starts.",
+        help="Nếu không ai chấp nhận bàn giao trong khoảng thời gian này, hệ thống bắt đầu chuyển cấp.",
     )
     handover_escalation_max_job_title = fields.Selection(
         selection=_HANDOVER_MAX_ESCALATION_JOB_TITLE_SELECTION,
-        string="Handover: Max Escalation Job Title",
+        string="Bàn giao: Chức danh tối đa để chuyển cấp",
         default="trưởng BP",
-        help="Maximum escalation level for work handover assignment.",
+        help="Cấp chức danh tối đa khi chuyển cấp phân công bàn giao.",
     )
     handover_escalation_to_manager_hours = fields.Float(
-        string="Handover: Escalate To Next Level After (hours)",
+        string="Bàn giao: Chuyển lên cấp kế tiếp sau (giờ)",
         default=2.0,
-        help="When max level is Trưởng phòng: wait this many hours after escalating to Trưởng BP "
-        "before escalating to Trưởng phòng.",
+        help="Khi cấp tối đa là Trưởng phòng: chờ số giờ này sau khi đã chuyển lên Trưởng bộ phận "
+        "rồi mới chuyển lên Trưởng phòng.",
     )
     handover_cancel_if_max_unresponsive = fields.Boolean(
-        string="Handover: Auto-cancel At Max Escalation",
+        string="Bàn giao: Tự động hủy ở cấp chuyển tối đa",
         default=False,
-        help="If enabled, the leave is automatically canceled when the max escalation level does not assign "
-        "a handover recipient within the configured timeout.",
+        help="Nếu bật, đơn nghỉ sẽ tự hủy khi đã lên cấp tối đa nhưng chưa phân công được người nhận bàn giao "
+        "trong thời gian cấu hình.",
     )
     handover_cancel_after_max_hours = fields.Float(
-        string="Handover: Cancel After Max Level Timeout (hours)",
+        string="Bàn giao: Hủy sau khi quá hạn ở cấp tối đa (giờ)",
         default=2.0,
-        help="Only used when auto-cancel at max escalation is enabled.",
+        help="Chỉ dùng khi bật tùy chọn tự động hủy ở cấp chuyển tối đa.",
     )
 
     # Extend allocation (Time Off allocation requests) approval options.
     # Note: this selection is used by `hr.leave.allocation` validation_type.
     allocation_validation_type = fields.Selection(
         selection_add=[
-            ("manager", "Approved by Time Off Manager"),
-            ("leader", "Approved by Time Off Leader"),
-            ("multi_step_6", "By 6-Step Approval (Demo)"),
+            ("manager", "Duyệt bởi quản lý nghỉ phép"),
+            ("leader", "Duyệt bởi trưởng bộ phận nghỉ phép"),
+            ("multi_step_6", "Duyệt 6 bước (Demo)"),
         ]
     )
 
     multi_approval_step_ids = fields.One2many(
         comodel_name="hr.leave.type.approval.step",
         inverse_name="leave_type_id",
-        string="Multi-step Approval Steps (Demo)",
-        help="Backing lines for 6-step approval (configured via Step 1–6 employee fields on the leave type form).",
+        string="Các bước duyệt nhiều cấp (Demo)",
+        help="Các dòng cấu hình nền cho duyệt 6 bước (thiết lập qua trường Nhân viên bước 1-6 trên loại nghỉ).",
     )
 
     # Kept for backwards compatibility: Studio / old inherited views may still reference this field.
     multi_step_approver_sync = fields.Char(
         compute="_compute_multi_step_approver_sync",
-        string="Multi-step approver fingerprint",
+        string="Mã đồng bộ người duyệt nhiều cấp",
     )
 
     # Pool for multi-step approvers: users must be employees in this department tree (default: name ilike HR).
     multi_step_hr_source_department_id = fields.Many2one(
         comodel_name="hr.department",
-        string="Approver pool (department)",
+        string="Nguồn người duyệt (phòng ban)",
         default=lambda self: self._default_multi_step_hr_department(),
-        help="Step approvers are limited to internal users linked to an employee in this department "
-        "(including child departments). Change this if your HR team uses another department name.",
+        help="Người duyệt theo bước bị giới hạn trong các user nội bộ liên kết với nhân viên thuộc phòng ban này "
+        "(bao gồm phòng ban con). Đổi nếu đội HR dùng tên phòng ban khác.",
     )
 
     _MULTI_STEP_EMPLOYEE_DOMAIN = (
@@ -194,7 +194,7 @@ class HolidaysType(models.Model):
                 and lt.employee_responsible_approval_mode != "sequential"
             ):
                 raise ValidationError(
-                    _("Organization chart approval requires 'Sequential (In Order)' mode.")
+                    _("Duyệt theo sơ đồ tổ chức yêu cầu chế độ 'Duyệt tuần tự (theo thứ tự)'.")
                 )
 
     @api.onchange("employee_responsible_source")
@@ -278,7 +278,7 @@ class HolidaysType(models.Model):
                 emp = deduped[seq]
                 if emp and not emp.user_id:
                     raise ValidationError(
-                        _("Step %(step)s: employee %(name)s has no related user and cannot approve.")
+                        _("Bước %(step)s: nhân viên %(name)s chưa liên kết user nên không thể duyệt.")
                         % {"step": seq, "name": emp.display_name}
                     )
             # Clear all step approvers first. Writing step 1 before step 3 is cleared would
@@ -321,13 +321,13 @@ class HolidaysType(models.Model):
         if not value:
             return None
         msg = _(
-            "Each person can only be assigned to one step. "
-            "Duplicate selections were cleared from step(s) %(steps)s (the lowest step number is kept for each person)."
+            "Mỗi người chỉ được gán cho một bước. "
+            "Các lựa chọn trùng đã bị xóa ở bước %(steps)s (giữ lại bước có số nhỏ nhất cho mỗi người)."
         ) % {"steps": ", ".join(cleared_steps)}
         return {
             "value": value,
             "warning": {
-                "title": _("Duplicate approver"),
+                "title": _("Trùng người duyệt"),
                 "message": msg,
             },
         }
@@ -383,10 +383,10 @@ class HolidaysType(models.Model):
         relation="hr_leave_type_extra_res_users_rel",
         column1="leave_type_id",
         column2="user_id",
-        string="Approved by Additional Officers",
+        string="Duyệt bởi cán bộ bổ sung",
         domain=[("share", "=", False)],
-        help="Additional officers/users who can approve/refuse time off of this type "
-             "(in addition to the standard Time Off Officer(s)).",
+        help="Cán bộ/người dùng bổ sung có thể duyệt/từ chối loại nghỉ phép này "
+             "(ngoài các cán bộ nghỉ phép tiêu chuẩn).",
     )
 
     extra_responsible_department_ids = fields.Many2many(
@@ -394,8 +394,8 @@ class HolidaysType(models.Model):
         relation="hr_leave_type_extra_res_dept_rel",
         column1="leave_type_id",
         column2="department_id",
-        string="Approved by Additional Offices (Departments)",
-        help="Members of these departments can also approve/refuse time off of this type.",
+        string="Duyệt bởi phòng ban bổ sung",
+        help="Thành viên của các phòng ban này cũng có thể duyệt/từ chối loại nghỉ phép này.",
     )
 
     def _register_hook(self):

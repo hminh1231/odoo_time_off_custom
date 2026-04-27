@@ -3,14 +3,14 @@ from odoo import api, fields, models
 
 class HrLeaveHandoverAcceptance(models.Model):
     _name = "hr.leave.handover.acceptance"
-    _description = "Work handover acknowledgement"
+    _description = "Xác nhận bàn giao công việc"
     _order = "sequence, id"
 
     sequence = fields.Integer(string="STT", default=1)
 
     leave_id = fields.Many2one(
         comodel_name="hr.leave",
-        string="Time Off",
+        string="Nghỉ phép",
         required=True,
         ondelete="cascade",
         index=True,
@@ -25,34 +25,34 @@ class HrLeaveHandoverAcceptance(models.Model):
     handover_work_content = fields.Text(string="Nội dung công việc")
     state = fields.Selection(
         selection=[
-            ("pending", "Pending"),
-            ("accepted", "Accepted"),
-            ("refused", "Refused"),
+            ("pending", "Chờ phản hồi"),
+            ("accepted", "Đã chấp nhận"),
+            ("refused", "Đã từ chối"),
         ],
-        string="Response",
+        string="Phản hồi",
         default="pending",
         required=True,
     )
-    responded_at = fields.Datetime(string="Responded On")
-    refusal_reason = fields.Text(string="Refusal Reason")
+    responded_at = fields.Datetime(string="Thời điểm phản hồi")
+    refusal_reason = fields.Text(string="Lý do từ chối")
     assigned_by_user_id = fields.Many2one(
         comodel_name="res.users",
-        string="Assigned by",
+        string="Được gán bởi",
         copy=False,
-        help="When set, this recipient was picked by this user (e.g. department head after handover timeout).",
+        help="Nếu có giá trị, người nhận này được chọn bởi user này (ví dụ: trưởng bộ phận sau khi bàn giao quá hạn).",
     )
     reassigned_by_escalation_owner = fields.Boolean(
-        string="Picked by department head after escalation",
+        string="Được chọn bởi trưởng bộ phận sau chuyển cấp",
         default=False,
         copy=False,
-        help="True when the department head (escalation owner) assigned this recipient after timeout.",
+        help="Đúng khi trưởng bộ phận (người phụ trách chuyển cấp) đã gán người nhận này sau khi quá hạn.",
     )
 
     _sql_constraints = [
         (
             "leave_employee_unique",
             "unique(leave_id, employee_id)",
-            "Each colleague can only have one work handover line per time off request.",
+            "Mỗi đồng nghiệp chỉ có một dòng bàn giao công việc cho mỗi đơn nghỉ phép.",
         ),
     ]
 

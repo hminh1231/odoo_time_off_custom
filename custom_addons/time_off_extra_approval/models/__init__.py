@@ -6,4 +6,5 @@ from . import hr_leave_allocation
 from . import hr_leave_multi_step
 from . import hr_leave_responsible_approval
 from . import hr_holidays_cancel_leave
+from . import hr_leave_refuse_wizard
 

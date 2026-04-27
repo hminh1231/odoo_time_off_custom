@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_hr_leave_refuse_wizard_form" model="ir.ui.view">
+        <field name="name">hr.leave.refuse.wizard.form</field>
+        <field name="model">hr.leave.refuse.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Từ chối bàn giao công việc">
+                <group>
+                    <field name="leave_ids" invisible="1"/>
+                    <field name="refuse_action" invisible="1"/>
+                    <field name="reason" placeholder="Giải thích lý do bạn từ chối duyệt đơn nghỉ phép..."/>
+                </group>
+                <footer>
+                    <button name="action_refuse" type="object" class="btn-primary" string="Submit Refusal"/>
+                    <button special="cancel" string="Cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>
