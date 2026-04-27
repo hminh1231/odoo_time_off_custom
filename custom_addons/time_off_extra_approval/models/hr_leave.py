@@ -84,6 +84,17 @@ class HolidaysRequest(models.Model):
         string="Status Display",
         compute="_compute_status_display_label",
     )
+    last_refusal_reason = fields.Text(
+        string="Last Refusal Reason",
+        copy=False,
+        readonly=True,
+    )
+    last_refuser_id = fields.Many2one(
+        "res.users",
+        string="Last Refuser",
+        copy=False,
+        readonly=True,
+    )
 
     # Multi-step approval (demo). Used when hr.leave.type.leave_validation_type = 'multi_step_6'.
     multi_step_current = fields.Integer(
@@ -2336,7 +2347,11 @@ class HolidaysRequest(models.Model):
                 for leave in self:
                     prev = outcome_notify_prev_states.get(leave.id)
                     if leave.state in ("validate", "refuse", "cancel") and leave.state != prev:
-                        leave._notify_requester_approval_outcome_via_bot(leave.state)
+                        leave._notify_requester_approval_outcome_via_bot(
+                            leave.state,
+                            refusal_reason=self.env.context.get("refusal_reason"),
+                            refuser_name=self.env.context.get("refuser_name"),
+                        )
         return res
 
     @api.depends(
@@ -2715,7 +2730,7 @@ class HolidaysRequest(models.Model):
                 approver_user.id,
             )
 
-    def _notify_requester_approval_outcome_via_bot(self, outcome_state):
+    def _notify_requester_approval_outcome_via_bot(self, outcome_state, refusal_reason=None, refuser_name=None):
         """Send approval result DM from default OdooBot to requester."""
         self.ensure_one()
         requester_user = self.employee_id.user_id
@@ -2724,9 +2739,23 @@ class HolidaysRequest(models.Model):
         leave_date = self.request_date_from or (self.date_from and self.date_from.date())
         leave_date_text = leave_date.strftime("%d/%m/%Y") if leave_date else ""
         if outcome_state == "refuse":
-            body = _("Đơn xin nghỉ của bạn vào ngày %(date)s đã bị từ chối.") % {
-                "date": leave_date_text
-            }
+            reason_text = (refusal_reason or self.last_refusal_reason or "").strip()
+            by_text = refuser_name or (self.last_refuser_id and self.last_refuser_id.display_name) or _("người duyệt")
+            if reason_text:
+                body = _(
+                    "Đơn của bạn xin nghỉ vào ngày %(date)s đã bị từ chối bởi %(refuser)s với lý do là %(reason)s."
+                ) % {
+                    "date": leave_date_text,
+                    "refuser": by_text,
+                    "reason": reason_text,
+                }
+            else:
+                body = _(
+                    "Đơn của bạn xin nghỉ vào ngày %(date)s đã bị từ chối bởi %(refuser)s."
+                ) % {
+                    "date": leave_date_text,
+                    "refuser": by_text,
+                }
         elif outcome_state == "cancel":
             body = _("Đơn xin nghỉ của bạn vào ngày %(date)s đã bị hủy.") % {
                 "date": leave_date_text
@@ -2736,7 +2765,6 @@ class HolidaysRequest(models.Model):
                 "date": leave_date_text
             }
         try:
-            # Use default OdooBot (system user), not custom approval bot.
             bot_user = self.env.ref("base.user_root")
             chat = (
                 self.env["discuss.channel"]
@@ -3049,6 +3077,8 @@ class HolidaysRequest(models.Model):
     def action_multi_step_refuse(self, reason=False):
         """Refuse a multi-step leave at the current step."""
         self.ensure_one()
+        if not (reason or "").strip():
+            return self.action_open_multi_step_refuse_wizard()
         if self.validation_type != "multi_step_6":
             raise UserError(_("Đơn nghỉ phép này chưa được cấu hình duyệt nhiều cấp."))
         if self.state != "confirm":
@@ -3134,6 +3164,8 @@ class HolidaysRequest(models.Model):
 
     def action_responsible_refuse(self, reason=False):
         self.ensure_one()
+        if not (reason or "").strip():
+            return self.action_open_responsible_refuse_wizard()
         if self.validation_type != "employee_hr_responsibles":
             raise UserError(_("Đơn nghỉ phép này chưa được cấu hình luồng Người phụ trách HR của nhân viên."))
         if self.state not in ("confirm", "validate1"):
@@ -3198,15 +3230,50 @@ class HolidaysRequest(models.Model):
         return self.action_open_refuse_wizard(refuse_action="responsible")
 
     def action_refuse(self, reason=False):
+        if not (reason or "").strip():
+            return self.action_open_refuse_wizard()
         self._ensure_handover_ready_for_approval()
-        result = super().action_refuse()
-        if reason:
+        reason_text = (reason or "").strip()
+        current_employee = self.env.user.employee_id
+        if any(leave.state not in ("confirm", "validate", "validate1") for leave in self):
+            raise UserError(
+                _("Time off request must be confirmed or validated in order to refuse it.")
+            )
+        if reason_text:
+            self.write(
+                {
+                    "last_refusal_reason": reason_text,
+                    "last_refuser_id": self.env.user.id,
+                }
+            )
+        # Re-implement refusal flow to avoid base fallback message body
+        # "Đơn xin nghỉ ... đã bị từ chối." and keep only custom message template.
+        self._notify_manager()
+        validated_holidays = self.filtered(lambda leave: leave.state == "validate1")
+        if validated_holidays:
+            validated_holidays.with_context(**{_SKIP_OUTCOME_BOT_NOTIFY_CTX: True}).write(
+                {"state": "refuse", "first_approver_id": current_employee.id}
+            )
+        (self - validated_holidays).with_context(
+            **{_SKIP_OUTCOME_BOT_NOTIFY_CTX: True}
+        ).write(
+            {"state": "refuse", "second_approver_id": current_employee.id}
+        )
+        self.mapped("meeting_id").write({"active": False})
+        if reason_text:
             for leave in self:
                 leave.message_post(
-                    body=_("Lý do từ chối duyệt: %(reason)s", reason=reason),
+                    body=_("Lý do từ chối duyệt: %(reason)s", reason=reason_text),
                     subtype_xmlid="mail.mt_note",
                 )
-        return result
+        self.activity_update()
+        for leave in self:
+            leave._notify_requester_approval_outcome_via_bot(
+                "refuse",
+                refusal_reason=reason_text,
+                refuser_name=self.env.user.display_name,
+            )
+        return True
 
     @api.model
     def cron_escalate_responsible_approval_timeouts(self):
