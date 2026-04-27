@@ -133,11 +133,10 @@
         <field name="name">Gateway</field>
         <field name="res_model">hr.employee.gate.ticket</field>
         <field name="view_mode">list,form</field>
-        <field name="domain">[
-            '|', '|',
-            '&amp;', ('state', '=', 'confirm'), ('approver_id', '=', uid),
-            '&amp;', ('state', '=', 'second_approve'), ('second_approver_id', '=', uid),
-            '&amp;', ('state', '=', 'third_approve'), ('third_approver_id', '=', uid)
+        <field name="domain">['|', '|',
+            ('approver_id', '=', uid),
+            ('second_approver_id', '=', uid),
+            ('third_approver_id', '=', uid)
         ]</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
