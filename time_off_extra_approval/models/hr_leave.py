@@ -273,6 +273,7 @@ class HolidaysRequest(models.Model):
             ("handover_escalated_at", "timestamp"),
             ("handover_escalation_level", "int4"),
             ("handover_escalation_user_id", "int4"),
+            ("handover_last_bot_escalation_signature", "varchar"),
         ):
             cr.execute(
                 """
@@ -3241,4 +3242,3 @@ class HolidaysRequest(models.Model):
             self._notify_responsible_current_turn(next_pending.user_id)
         else:
             self._action_validate(check_state=False)
-
