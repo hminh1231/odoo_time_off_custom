@@ -61,9 +61,9 @@ def _normalize_job_title_key(title):
 class HolidaysRequest(models.Model):
     _inherit = "hr.leave"
 
-    # Rename the "confirm" status label to reflect handover waiting phase.
-    state = fields.Selection(
-        selection_add=[("confirm", "Waiting for Work Hand Over")],
+    status_display_label = fields.Char(
+        string="Status Display",
+        compute="_compute_status_display_label",
     )
 
     # Multi-step approval (demo). Used when hr.leave.type.leave_validation_type = 'multi_step_6'.
@@ -710,6 +710,45 @@ class HolidaysRequest(models.Model):
                 if line.refusal_reason:
                     items.append(_("%(name)s: %(reason)s") % {"name": line.employee_id.name, "reason": line.refusal_reason})
             leave.handover_refusal_reason_label = "\n".join(items) if items else False
+
+    @api.depends(
+        "state",
+        "validation_type",
+        "multi_step_current",
+        "holiday_status_id",
+        "holiday_status_id.multi_approval_step_ids",
+        "handover_employee_ids",
+        "handover_acceptance_ids.state",
+        "responsible_approval_line_ids",
+        "responsible_approval_line_ids.state",
+    )
+    def _compute_status_display_label(self):
+        selection = dict(self._fields["state"].selection)
+        for leave in self:
+            label = selection.get(leave.state)
+            if leave.state in ("confirm", "validate1"):
+                # Determine approval-flow state from underlying workflow data
+                # (instead of relying on a display label compute order).
+                in_approval_flow = False
+                if leave.validation_type == "employee_hr_responsibles":
+                    in_approval_flow = bool(
+                        leave.responsible_approval_line_ids.filtered(
+                            lambda line: line.state == "pending"
+                        )[:1]
+                    )
+                elif leave.validation_type == "multi_step_6":
+                    in_approval_flow = bool(leave._get_current_multi_step())
+                else:
+                    # Default Odoo approval states are approval flow.
+                    in_approval_flow = True
+
+                if in_approval_flow:
+                    label = _("Đang chờ duyệt")
+                elif leave._get_handover_blocking_employees():
+                    label = _("Đang chờ bàn giao công việc")
+                else:
+                    label = _("Đang chờ duyệt")
+            leave.status_display_label = label
 
     @api.depends(
         "state",

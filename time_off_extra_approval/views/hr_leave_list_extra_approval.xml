@@ -17,6 +17,17 @@
             <xpath expr="//field[@name='employee_id']" position="after">
                 <field name="approval_current_step_label" optional="show" string="Awaiting"/>
             </xpath>
+            <xpath expr="//field[@name='state']" position="replace">
+                <field name="state" column_invisible="1"/>
+                <field
+                    name="status_display_label"
+                    string="Status"
+                    widget="badge"
+                    decoration-warning="state in ('confirm','validate1')"
+                    decoration-success="state == 'validate'"
+                    decoration-danger="state == 'refuse'"
+                />
+            </xpath>
             <xpath expr="//field[@name='message_needaction']/following-sibling::button[@icon='fa-thumbs-up']" position="replace">
                 <button string="Approve" name="action_responsible_approve" type="object"
                     icon="fa-thumbs-up"

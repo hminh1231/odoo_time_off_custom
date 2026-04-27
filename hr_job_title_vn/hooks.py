@@ -6,14 +6,20 @@ def pre_init_hook(env):
     env.cr.execute(
         """
         UPDATE hr_version
-        SET job_title = NULL
+        SET job_title = CASE
+            WHEN job_title = 'trưởng BP' THEN 'trưởng bộ phận'
+            WHEN job_title = 'trưởng phòng HCNS' THEN 'trưởng phòng hcns'
+            ELSE NULL
+        END
         WHERE job_title IS NOT NULL
           AND job_title NOT IN (
               'nhân viên',
               'trưởng nhóm',
-              'trưởng BP',
-              'kiểm soát',
-              'trưởng phòng HCNS',
+              'cửa hàng trưởng',
+              'asm',
+              'trưởng bộ phận',
+              'trưởng phòng',
+              'trưởng phòng hcns',
               'giám đốc'
           )
         """
