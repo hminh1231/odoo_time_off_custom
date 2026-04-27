@@ -95,10 +95,22 @@ class HrEmployeeGateTicket(models.Model):
                 self.env.ref("business_discuss_bots.user_bot_gate_ticket", raise_if_not_found=False)
                 or self.env.ref("base.user_root")
             )
+            bot_partner = bot_user.partner_id if bot_user else False
+            if not bot_partner:
+                return
+            channel_model = self.env["discuss.channel"].sudo()
+            mixed_channels = channel_model.search(
+                [
+                    ("channel_type", "=", "chat"),
+                    ("channel_member_ids.partner_id", "in", [bot_partner.id]),
+                    ("channel_member_ids.partner_id", "in", [approver.partner_id.id]),
+                ]
+            ).filtered(lambda c: len(c.channel_member_ids.partner_id) > 2)
+            if mixed_channels:
+                mixed_channels.unlink()
             chat = (
-                self.env["discuss.channel"]
+                channel_model
                 .with_user(bot_user)
-                .sudo()
                 ._get_or_create_chat([approver.partner_id.id], pin=True)
             )
             chat.with_user(bot_user).sudo().message_post(
@@ -107,27 +119,11 @@ class HrEmployeeGateTicket(models.Model):
                 subtype_xmlid="mail.mt_comment",
             )
         except Exception:
-            try:
-                bot_partner = bot_user.partner_id if bot_user else False
-                if not bot_partner:
-                    raise ValueError("gate ticket bot partner not found")
-                chat = (
-                    self.env["discuss.channel"]
-                    .sudo()
-                    .with_user(approver)
-                    ._get_or_create_chat([bot_partner.id], pin=True)
-                )
-                chat.with_user(bot_user).sudo().message_post(
-                    body=Markup(message_body) if not isinstance(message_body, Markup) else message_body,
-                    message_type="comment",
-                    subtype_xmlid="mail.mt_comment",
-                )
-            except Exception:
-                _logger.exception(
-                    "hr_employee_gate_ticket: failed to send gate-ticket bot chat ticket_id=%s user_id=%s",
-                    self.id,
-                    approver.id,
-                )
+            _logger.exception(
+                "hr_employee_gate_ticket: failed to send gate-ticket bot chat ticket_id=%s user_id=%s",
+                self.id,
+                approver.id,
+            )
 
     def action_submit(self):
         for ticket in self:
@@ -138,10 +134,8 @@ class HrEmployeeGateTicket(models.Model):
                 ticket._notify_approver(
                     ticket.approver_id,
                     _(
-                        'Nhân viên <b>%(employee)s</b> đang yêu cầu ra cổng.<br/>'
-                        'Mã phiếu: <b>%(ticket)s</b>',
+                        'Nhân viên <b>%(employee)s</b> đang yêu cầu ra cổng.',
                         employee=ticket.employee_id.name,
-                        ticket=ticket.name,
                     ),
                 )
 
@@ -156,10 +150,8 @@ class HrEmployeeGateTicket(models.Model):
                 ticket._notify_approver(
                     ticket.second_approver_id,
                     _(
-                        'Nhân viên <b>%(employee)s</b> đang yêu cầu ra cổng.<br/>'
-                        'Mã phiếu: <b>%(ticket)s</b>',
+                        'Nhân viên <b>%(employee)s</b> đang yêu cầu ra cổng.',
                         employee=ticket.employee_id.name,
-                        ticket=ticket.name,
                     ),
                 )
             if ticket.employee_id.user_id:
@@ -183,10 +175,8 @@ class HrEmployeeGateTicket(models.Model):
                 ticket._notify_approver(
                     ticket.third_approver_id,
                     _(
-                        'Nhân viên <b>%(employee)s</b> đang yêu cầu ra cổng.<br/>'
-                        'Mã phiếu: <b>%(ticket)s</b>',
+                        'Nhân viên <b>%(employee)s</b> đang yêu cầu ra cổng.',
                         employee=ticket.employee_id.name,
-                        ticket=ticket.name,
                     ),
                 )
                 if ticket.employee_id.user_id:
