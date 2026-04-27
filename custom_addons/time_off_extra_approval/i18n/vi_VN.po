@@ -15,6 +15,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
+#. module: time_off_extra_approval
 #. odoo-javascript
 #: code:addons/web/static/src/core/errors/error_dialogs.js:0
 msgid "Validation Error"
