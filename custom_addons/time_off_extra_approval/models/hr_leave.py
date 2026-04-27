@@ -407,8 +407,8 @@ class HolidaysRequest(models.Model):
                 title_raw = leave._read_job_title_safely(target_employee)
                 raise ValidationError(
                     _(
-                        "Only employees with job title from Department Head and above can skip work handover. "
-                        "Detected employee: %(employee)s, job title: %(title)s."
+                        "Chỉ nhân viên có chức danh từ Trưởng bộ phận trở lên mới được phép bỏ qua bàn giao công việc. "
+                        "Nhân viên hiện tại: %(employee)s, chức danh: %(title)s."
                     )
                     % {
                         "employee": target_employee.display_name or "-",
@@ -611,7 +611,7 @@ class HolidaysRequest(models.Model):
                 and not leave.handover_employee_ids
             ):
                 raise ValidationError(
-                    _("Please select at least one work handover recipient before submitting the time off request.")
+                    _("Vui lòng chọn ít nhất một người nhận bàn giao công việc trước khi gửi đơn xin nghỉ phép.")
                 )
 
     def _get_requested_interval(self):
@@ -2832,7 +2832,7 @@ class HolidaysRequest(models.Model):
         if missing_handover:
             raise UserError(
                 _(
-                    "Please select at least one work handover recipient before submitting the time off request."
+                    "Vui lòng chọn ít nhất một người nhận bàn giao công việc trước khi gửi đơn xin nghỉ phép."
                 )
             )
         try:

@@ -23,6 +23,8 @@
             "time_off_extra_approval/static/src/js/many2one_save_on_change_field.js",
             "time_off_extra_approval/static/src/js/timeoff_cancel_dialog_fix.js",
             "time_off_extra_approval/static/src/js/emergency_leave_form_controller.js",
+            "time_off_extra_approval/static/src/js/error_dialog_vi_patch.js",
+            "time_off_extra_approval/static/src/xml/error_dialog_vi_patch.xml",
         ],
     },
     "installable": True,

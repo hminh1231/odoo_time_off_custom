@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="time_off_extra_approval.WarningDialogVi" t-inherit="web.WarningDialog" t-inherit-mode="extension">
+        <xpath expr="//button[contains(@class, 'o-default-button')]" position="replace">
+            <button class="btn btn-primary o-default-button" t-on-click="props.close">Đóng</button>
+        </xpath>
+    </t>
+
+    <t t-name="time_off_extra_approval.RedirectWarningDialogVi" t-inherit="web.RedirectWarningDialog" t-inherit-mode="extension">
+        <xpath expr="//button[contains(@class, 'btn-secondary')]" position="replace">
+            <button class="btn btn-secondary" t-on-click="props.close">Đóng</button>
+        </xpath>
+    </t>
+
+    <t t-name="time_off_extra_approval.ErrorDialogVi" t-inherit="web.ErrorDialog" t-inherit-mode="extension">
+        <xpath expr="//button[contains(@class, 'o-default-button')]" position="replace">
+            <button class="btn btn-primary o-default-button" t-on-click="props.close">Đóng</button>
+        </xpath>
+    </t>
+</templates>
