@@ -42,6 +42,7 @@ _EMERGENCY_LEAVE_CTX = "emergency_leave_confirmed"
 _SKIP_EMERGENCY_LEAVE_CHECK_CTX = "skip_emergency_leave_check"
 _SKIP_SUBMIT_BOT_NOTIFY_CTX = "skip_handover_submit_bot_notify"
 _SKIP_OUTCOME_BOT_NOTIFY_CTX = "skip_outcome_bot_notify"
+_SKIP_RESPONSIBLE_SUBMIT_NOTIFY_CTX = "skip_responsible_submit_notify"
 _SHORT_LEAD_JOB_KEYS = frozenset({"nhân viên", "trưởng nhóm"})
 _SHORT_LEAD_DAYS = 3
 _DEFAULT_LEAD_DAYS = 7
@@ -2266,6 +2267,7 @@ class HolidaysRequest(models.Model):
             vals.get("handover_acceptance_ids") is not None and not self.env.context.get("skip_handover_line_sync")
         )
         submit_notify_target = self.env["hr.leave"]
+        responsible_submit_prev_states = {}
         outcome_notify_prev_states = {}
         if (
             vals.get("state") in ("validate", "refuse", "cancel")
@@ -2279,6 +2281,12 @@ class HolidaysRequest(models.Model):
             and not self.env.context.get(_SKIP_SUBMIT_BOT_NOTIFY_CTX)
         ):
             submit_notify_target = self.filtered(lambda l: l.state != "confirm" and l.handover_employee_ids)
+        if (
+            vals.get("state") == "confirm"
+            and not self.env.context.get("leave_fast_create")
+            and not self.env.context.get(_SKIP_RESPONSIBLE_SUBMIT_NOTIFY_CTX)
+        ):
+            responsible_submit_prev_states = {leave.id: leave.state for leave in self}
         if vals and self._vals_trigger_emergency_leave_check(vals):
             if len(self) > 1:
                 raise UserError(
@@ -2337,6 +2345,18 @@ class HolidaysRequest(models.Model):
                 self._mark_handover_requested_at()
             if vals.get("state") == "confirm" and submit_notify_target:
                 submit_notify_target._notify_handover_recipients_submit_via_bot()
+            if vals.get("state") == "confirm" and responsible_submit_prev_states:
+                submit_responsible_leaves = self.filtered(
+                    lambda l: l.validation_type == "employee_hr_responsibles"
+                    and l.state == "confirm"
+                    and responsible_submit_prev_states.get(l.id) != "confirm"
+                )
+                if submit_responsible_leaves:
+                    submit_responsible_leaves._ensure_responsible_approval_lines()
+                    submit_responsible_leaves._responsible_backfill_pending_since_if_missing()
+                    for leave in submit_responsible_leaves:
+                        leave._notify_responsible_approvers_submission()
+                        leave._notify_responsible_current_turn()
             if vals.get("state") in ("validate", "refuse", "cancel"):
                 self._feedback_all_work_handover_activities()
             elif "handover_employee_ids" in vals:
@@ -2665,6 +2685,11 @@ class HolidaysRequest(models.Model):
         """Direct notification to the approver whose pending step is currently active."""
         self.ensure_one()
         if self.validation_type != "employee_hr_responsibles":
+            _logger.info(
+                "time_off_extra_approval: skip current-turn notify leave_id=%s reason=validation_type_%s",
+                self.id,
+                self.validation_type,
+            )
             return
         line = False
         if user:
@@ -2676,17 +2701,50 @@ class HolidaysRequest(models.Model):
                 lambda l: l.state == "pending"
             ).sorted("sequence")[:1]
         if not line or not line.user_id.partner_id:
+            _logger.info(
+                "time_off_extra_approval: skip current-turn notify leave_id=%s reason=no_pending_line_or_partner user=%s",
+                self.id,
+                user.id if user else None,
+            )
             return
         if not self._handover_ready_for_approval():
-            return
-        self.message_post(
-            body=_(
-                "It is now your turn to approve time off request %(leave)s for %(employee)s."
+            _logger.info(
+                "time_off_extra_approval: skip current-turn notify leave_id=%s reason=handover_not_ready",
+                self.id,
             )
-            % {
-                "leave": self.display_name,
-                "employee": self.employee_id.name or "",
-            },
+            return
+        body_text = _(
+            "It is now your turn to approve time off request %(leave)s for %(employee)s."
+        ) % {
+            "leave": self.display_name,
+            "employee": self.employee_id.name or "",
+        }
+        # Avoid duplicate message_post notifications for the same approver step
+        # without introducing new database schema fields.
+        duplicate_message = self.env["mail.message"].sudo().search(
+            [
+                ("model", "=", self._name),
+                ("res_id", "=", self.id),
+                ("body", "=", body_text),
+                ("partner_ids", "in", [line.user_id.partner_id.id]),
+            ],
+            limit=1,
+        )
+        if duplicate_message:
+            _logger.info(
+                "time_off_extra_approval: skip current-turn notify leave_id=%s reason=duplicate_mail_message message_id=%s",
+                self.id,
+                duplicate_message.id,
+            )
+            return
+        _logger.info(
+            "time_off_extra_approval: current-turn notify leave_id=%s approver_user_id=%s approver_login=%s",
+            self.id,
+            line.user_id.id,
+            line.user_id.login,
+        )
+        self.message_post(
+            body=body_text,
             message_type="notification",
             subtype_xmlid="mail.mt_comment",
             partner_ids=[line.user_id.partner_id.id],
@@ -2697,6 +2755,12 @@ class HolidaysRequest(models.Model):
         """Send Discuss DM from approval bot to current responsible approver."""
         self.ensure_one()
         if not approver_user or approver_user.share or not approver_user.partner_id:
+            _logger.info(
+                "time_off_extra_approval: skip bot current-turn notify leave_id=%s reason=invalid_user share=%s has_partner=%s",
+                self.id,
+                bool(approver_user and approver_user.share),
+                bool(approver_user and approver_user.partner_id),
+            )
             return
         requester_name = self.employee_id.name or self.employee_id.display_name or self.display_name
         leave_date = self.request_date_from or (self.date_from and self.date_from.date())
@@ -2708,10 +2772,10 @@ class HolidaysRequest(models.Model):
             "date": leave_date_text,
         }
         try:
-            bot_user = (
-                self.env.ref("business_discuss_bots.user_bot_approval", raise_if_not_found=False)
-                or self.env.ref("base.user_root")
-            )
+            # Current-turn approver notifications must come from approval bot.
+            bot_user = self.env.ref("business_discuss_bots.user_bot_approval", raise_if_not_found=False)
+            if not bot_user:
+                bot_user = self.env.ref("base.user_root")
             chat = (
                 self.env["discuss.channel"]
                 .with_user(bot_user)
@@ -2722,6 +2786,12 @@ class HolidaysRequest(models.Model):
                 body=body,
                 message_type="comment",
                 subtype_xmlid="mail.mt_comment",
+            )
+            _logger.info(
+                "time_off_extra_approval: sent bot current-turn notify leave_id=%s approver_login=%s bot_user=%s",
+                self.id,
+                approver_user.login,
+                bot_user.login,
             )
         except Exception:
             _logger.exception(
@@ -2866,7 +2936,15 @@ class HolidaysRequest(models.Model):
         try:
             # write(state='confirm') inside super() already handles submit notifications.
             # Avoid duplicate DM sends from this action wrapper.
-            res = super(HolidaysRequest, self.with_context(**{_SKIP_SUBMIT_BOT_NOTIFY_CTX: True})).action_confirm()
+            res = super(
+                HolidaysRequest,
+                self.with_context(
+                    **{
+                        _SKIP_SUBMIT_BOT_NOTIFY_CTX: True,
+                        _SKIP_RESPONSIBLE_SUBMIT_NOTIFY_CTX: True,
+                    }
+                ),
+            ).action_confirm()
         except AttributeError:
             res = True
         subset = self.filtered(
@@ -2893,6 +2971,13 @@ class HolidaysRequest(models.Model):
         records._mark_handover_requested_at()
         # Notify once when records are created directly in submit state.
         records.filtered(lambda l: l.state == "confirm")._notify_handover_recipients_submit_via_bot()
+        submit_responsible_leaves = records.filtered(
+            lambda l: l.validation_type == "employee_hr_responsibles" and l.state == "confirm"
+        )
+        if submit_responsible_leaves:
+            for leave in submit_responsible_leaves:
+                leave._notify_responsible_approvers_submission()
+                leave._notify_responsible_current_turn()
         return records
 
     def _check_approval_update(self, state, raise_if_not_possible=True):
