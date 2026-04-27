@@ -5,7 +5,6 @@
             <field name="name">OdooBot Bàn giao việc</field>
             <field name="email">odoo.bot.handover@example.com</field>
             <field name="company_type">person</field>
-            <field name="autopost_bills" eval="False"/>
             <field name="image_1920" type="base64" file="business_discuss_bots/static/src/img/bot_handover.png"/>
         </record>
 
@@ -13,14 +12,12 @@
             <field name="name">OdooBot Duyệt đơn</field>
             <field name="email">odoo.bot.approval@example.com</field>
             <field name="company_type">person</field>
-            <field name="autopost_bills" eval="False"/>
             <field name="image_1920" type="base64" file="business_discuss_bots/static/src/img/bot_approval.png"/>
         </record>
         <record id="partner_bot_gate_ticket" model="res.partner">
             <field name="name">OdooBot Ra cổng</field>
             <field name="email">odoo.bot.gate.ticket@example.com</field>
             <field name="company_type">person</field>
-            <field name="autopost_bills" eval="False"/>
             <field name="image_1920" type="base64" file="business_discuss_bots/static/src/img/bot_gate_ticket.png"/>
         </record>
 
