@@ -27,3 +27,21 @@ Bộ add-on cho **Odoo 19** (các module đặt cạnh nhau tại thư mục add
 ## Ghi chú bản ổn định
 
 Tag **`timeoff-stable-2026-04-05`** đánh dấu bản đã kiểm tra trước khi chỉnh sửa thêm.
+
+## Deploy-ready cho công ty (pull về chạy)
+
+Repo đã có sẵn bộ file deploy tại `deploy/` để đồng bộ môi trường giữa máy dev và máy công ty.
+
+### Cách dùng nhanh
+
+1. Copy file mẫu:
+   - `deploy/.env.example` -> `deploy/.env`
+   - `deploy/odoo.conf.example` -> `deploy/odoo.conf`
+2. Chỉnh thông số DB trong 2 file trên cho đúng môi trường công ty.
+3. Chạy stack:
+   - `docker compose -f deploy/docker-compose.yml up -d`
+4. Sau mỗi lần `git pull`, chạy cập nhật module:
+   - Linux/macOS: `sh scripts/post_deploy.sh`
+   - Windows PowerShell: `.\scripts\post_deploy.ps1`
+
+Xem hướng dẫn chi tiết tại `deploy/README.md`.
