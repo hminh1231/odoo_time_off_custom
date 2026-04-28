@@ -8,10 +8,10 @@
             <xpath expr="//form" position="inside">
                 <app data-string="Localization" string="Localization" name="vn_language_switch" groups="base.group_system">
                     <block title="Language" name="vn_language_block">
-                        <setting id="vn_language_switch_setting" string="Interface language mode">
-                            <field name="ui_language_mode"/>
+                        <setting id="vn_language_switch_setting" string="Enable user language switch">
+                            <field name="enable_user_language_switch" widget="boolean_toggle"/>
                             <div class="text-muted">
-                                When changed, this updates language for all internal users.
+                                When enabled, each user can switch English/Vietnamese from the top-right user menu.
                             </div>
                         </setting>
                     </block>

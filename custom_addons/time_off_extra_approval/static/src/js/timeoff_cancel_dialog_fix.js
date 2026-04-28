@@ -1,5 +1,3 @@
-/** @odoo-module **/
-
 import { patch } from "@web/core/utils/patch";
 import { TimeOffDialogFormController } from "@hr_holidays/views/view_dialog/form_view_dialog";
 

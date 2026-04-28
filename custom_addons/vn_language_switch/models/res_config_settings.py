@@ -5,15 +5,10 @@ from odoo.exceptions import UserError
 class ResConfigSettings(models.TransientModel):
     _inherit = "res.config.settings"
 
-    ui_language_mode = fields.Selection(
-        selection=[
-            ("en_US", "English"),
-            ("vi_VN", "Tiếng Việt"),
-        ],
-        string="Odoo Interface Language",
-        default="en_US",
-        config_parameter="vn_language_switch.ui_language_mode",
-        help="Choose the interface language for internal users.",
+    enable_user_language_switch = fields.Boolean(
+        string="Enable user language switch",
+        config_parameter="vn_language_switch.enable_user_language_switch",
+        help="Allow each user to switch their own interface language between English and Vietnamese.",
     )
 
     def _ensure_language_is_available(self, lang_code):
@@ -31,13 +26,9 @@ class ResConfigSettings(models.TransientModel):
             lang.active = True
         return lang
 
-    def _apply_language_to_internal_users(self, lang_code):
-        users = self.env["res.users"].search([("share", "=", False)])
-        users.write({"lang": lang_code})
-
     def set_values(self):
         super().set_values()
         self.ensure_one()
-        selected_lang = self.ui_language_mode or "en_US"
-        self._ensure_language_is_available(selected_lang)
-        self._apply_language_to_internal_users(selected_lang)
+        if self.enable_user_language_switch:
+            self._ensure_language_is_available("en_US")
+            self._ensure_language_is_available("vi_VN")

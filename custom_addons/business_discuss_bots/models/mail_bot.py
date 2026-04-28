@@ -4,10 +4,6 @@ import unicodedata
 from markupsafe import Markup
 
 from odoo import models, _
-import logging
-
-
-_logger = logging.getLogger(__name__)
 
 
 class MailBot(models.AbstractModel):
@@ -29,12 +25,9 @@ class MailBot(models.AbstractModel):
     _GATE_TICKET_SUPPORTED_INTENTS = {"approval_status", "approval_who", "help"}
 
     def _get_answer(self, channel, body, values, command=False):
-        try:
-            answer = self._business_bot_route(channel, body, values, command)
-            if answer:
-                return answer
-        except Exception:
-            _logger.exception("business_discuss_bots: failed to route bot answer")
+        answer = self._business_bot_route(channel, body, values, command)
+        if answer:
+            return answer
         return super()._get_answer(channel, body, values, command=command)
 
     def _apply_logic(self, channel, values, command=None):
@@ -47,24 +40,20 @@ class MailBot(models.AbstractModel):
             values.get("message_type") != "comment" and not command
         ):
             return
-        try:
-            body = values.get("body", "").replace("\xa0", " ").strip().lower().strip(".!")
-            answer = self._get_answer(channel, body, values, command)
-            if not answer:
-                return
-            author_id = self._business_bot_author_id(channel) or default_author_id
-            answers = answer if isinstance(answer, list) else [answer]
-            for ans in answers:
-                channel.with_context(business_bot_skip_apply_logic=True).sudo().message_post(
-                    author_id=author_id,
-                    body=Markup(ans) if not isinstance(ans, Markup) else ans,
-                    message_type="comment",
-                    silent=True,
-                    subtype_xmlid="mail.mt_comment",
-                )
-        except Exception:
-            _logger.exception("business_discuss_bots: _apply_logic failed on channel %s", channel.id)
+        body = values.get("body", "").replace("\xa0", " ").strip().lower().strip(".!")
+        answer = self._get_answer(channel, body, values, command)
+        if not answer:
             return
+        author_id = self._business_bot_author_id(channel) or default_author_id
+        answers = answer if isinstance(answer, list) else [answer]
+        for ans in answers:
+            channel.with_context(business_bot_skip_apply_logic=True).sudo().message_post(
+                author_id=author_id,
+                body=Markup(ans) if not isinstance(ans, Markup) else ans,
+                message_type="comment",
+                silent=True,
+                subtype_xmlid="mail.mt_comment",
+            )
 
     def _business_bot_route(self, channel, body, values, command=False):
         if command or channel.channel_type != "chat":
