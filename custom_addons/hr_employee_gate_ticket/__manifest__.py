@@ -1,5 +1,5 @@
 {
-    'name': 'HR Employee Gate Ticket',
+    'name': 'GateTicket',
     'version': '19.0.1.0.0',
     'category': 'Human Resources/Attendances',
     'summary': 'Standalone HR Employee Gate Ticket app',
@@ -11,6 +11,11 @@
         'report/gate_ticket_report.xml',
         'views/hr_employee_gate_ticket_views.xml',
     ],
+    'assets': {
+        'web.assets_backend': [
+            'hr_employee_gate_ticket/static/src/js/gate_ticket_form.js',
+        ],
+    },
     'license': 'LGPL-3',
     'author': 'Custom',
     'installable': True,

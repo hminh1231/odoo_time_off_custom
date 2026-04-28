@@ -130,11 +130,13 @@ class HrEmployeeGateTicket(models.Model):
                 raise UserError(_('Only draft tickets can be submitted.'))
             ticket.state = 'confirm'
             if ticket.approver_id:
+                check_in_formatted = ticket.check_in.strftime('%H:%M ngày %d/%m/%Y') if ticket.check_in else ''
                 ticket._notify_approver(
                     ticket.approver_id,
                     _(
-                        'Nhân viên <b>%(employee)s</b> đang yêu cầu ra cổng.',
+                        'Nhân viên <b>%(employee)s</b> xin giấy ra cổng lúc %(time)s, Trưởng bộ phận vào GATETICKET -> GATEWAY ĐỂ PHÊ DUYỆT',
                         employee=ticket.employee_id.name,
+                        time=check_in_formatted,
                     ),
                 )
 
@@ -146,11 +148,13 @@ class HrEmployeeGateTicket(models.Model):
                 raise UserError(_('Only the assigned first approver or administrators can do first approval.'))
             ticket.state = 'second_approve'
             if ticket.second_approver_id:
+                check_in_formatted = ticket.check_in.strftime('%H:%M ngày %d/%m/%Y') if ticket.check_in else ''
                 ticket._notify_approver(
                     ticket.second_approver_id,
                     _(
-                        'Nhân viên <b>%(employee)s</b> đang yêu cầu ra cổng.',
+                        'Nhân viên <b>%(employee)s</b> xin giấy ra cổng lúc %(time)s, Trưởng bộ phận vào GATETICKET -> GATEWAY ĐỂ PHÊ DUYỆT',
                         employee=ticket.employee_id.name,
+                        time=check_in_formatted,
                     ),
                 )
             if ticket.employee_id.user_id:
