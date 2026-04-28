@@ -8,6 +8,7 @@ from markupsafe import Markup
 
 from odoo import Command, api, fields, models
 from odoo.exceptions import UserError, ValidationError
+from odoo.osv import expression
 from odoo.tools import sql
 from odoo.tools.misc import format_date
 from odoo.tools.translate import _
@@ -80,6 +81,36 @@ def _job_title_rank_map():
 
 class HolidaysRequest(models.Model):
     _inherit = "hr.leave"
+
+    @api.model
+    def _can_read_all_time_off_requests(self):
+        """Only employees from department head tier upward can read others' requests."""
+        if self.env.is_superuser():
+            return True
+        employee = self.env.user.employee_id
+        if not employee:
+            return False
+        threshold = _normalize_job_title_key(_DEPARTMENT_HEAD_JOB_TITLE_KEY)
+        rank_map = _job_title_rank_map()
+        threshold_rank = rank_map.get(threshold)
+        if threshold_rank is None:
+            return False
+        employee_title = self._read_job_title_safely(employee)
+        employee_rank = rank_map.get(_normalize_job_title_key(employee_title))
+        return employee_rank is not None and employee_rank >= threshold_rank
+
+    @api.model
+    def _apply_time_off_visibility_domain(self, domain):
+        """Restrict non-management tiers to their own time off requests only."""
+        if self._can_read_all_time_off_requests():
+            return domain
+        own_only_domain = [("employee_id.user_id", "=", self.env.user.id)]
+        return expression.AND([domain or [], own_only_domain])
+
+    @api.model
+    def _search(self, args, offset=0, limit=None, order=None, **kwargs):
+        args = self._apply_time_off_visibility_domain(args)
+        return super()._search(args, offset=offset, limit=limit, order=order, **kwargs)
 
     status_display_label = fields.Char(
         string="Status Display",
