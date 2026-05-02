@@ -231,6 +231,11 @@ class HolidaysRequest(models.Model):
         string="Handover recipient cannot edit list",
         compute="_compute_handover_recipient_list_readonly",
     )
+    handover_sheet_hidden_for_viewer = fields.Boolean(
+        string="Hide Work Handover To table",
+        compute="_compute_handover_sheet_hidden_for_viewer",
+        help="Handover recipients (not the applicant) do not see the editable roster; avoids confusion after accepting.",
+    )
     can_manage_handover_replacement = fields.Boolean(
         string="Can manage handover replacement",
         compute="_compute_can_manage_handover_replacement",
@@ -1037,6 +1042,8 @@ class HolidaysRequest(models.Model):
     @api.depends(
         "state",
         "employee_id",
+        "handover_employee_ids",
+        "handover_escalated",
         "handover_escalation_user_id",
         "handover_acceptance_ids.state",
         "handover_acceptance_ids.employee_id",
@@ -1046,13 +1053,35 @@ class HolidaysRequest(models.Model):
     def _compute_handover_recipient_list_readonly(self):
         for leave in self:
             leave.handover_recipient_list_readonly = False
-            if leave.state != "confirm":
+            if leave.state not in ("draft", "confirm"):
                 continue
-            viewer_emp = leave.env.user.sudo().employee_id
-            if not viewer_emp or not leave.employee_id or viewer_emp == leave.employee_id:
+            leave.handover_recipient_list_readonly = not leave._viewer_can_manage_handover_acceptance_sheet()
+
+    @api.depends(
+        "employee_id",
+        "handover_employee_ids",
+        "handover_escalated",
+        "handover_escalation_user_id",
+    )
+    @api.depends_context("uid")
+    def _compute_handover_sheet_hidden_for_viewer(self):
+        """Do not show the one2many roster to colleagues who were picked as handover recipients."""
+        for leave in self:
+            leave.handover_sheet_hidden_for_viewer = False
+            user = leave.env.user
+            viewer_emp = user.sudo().employee_id
+            if not viewer_emp or not leave.employee_id:
                 continue
-            if leave._current_user_is_pending_handover_recipient():
-                leave.handover_recipient_list_readonly = True
+            if viewer_emp == leave.employee_id:
+                continue
+            if (
+                leave.handover_escalated
+                and leave.handover_escalation_user_id
+                and user == leave.handover_escalation_user_id
+            ):
+                continue
+            if viewer_emp in leave.handover_employee_ids:
+                leave.handover_sheet_hidden_for_viewer = True
 
     @api.depends(
         "employee_id",
@@ -2026,6 +2055,33 @@ class HolidaysRequest(models.Model):
             return False
         line = self.handover_acceptance_ids.filtered(lambda l: l.employee_id == emp)[:1]
         return bool(line and line.state == "pending")
+
+    def _viewer_can_manage_handover_acceptance_sheet(self):
+        """Who may add/remove/edit Work Handover To lines on the Time Off request (excluding accept/refuse)."""
+        self.ensure_one()
+        if self.env.su:
+            return True
+        user = self.env.user
+        viewer_emp = user.sudo().employee_id
+        if viewer_emp and self.employee_id:
+            if (
+                self.handover_escalated
+                and self.handover_escalation_user_id
+                and user == self.handover_escalation_user_id
+            ):
+                return True
+            # Colleagues on the handover list never manage the roster, even if they are Time Off Officers.
+            if viewer_emp in self.handover_employee_ids and viewer_emp != self.employee_id:
+                return False
+        if user.has_group(
+            "hr_holidays.group_hr_holidays_user"
+        ) or user.has_group("hr_holidays.group_hr_holidays_manager"):
+            return True
+        if not viewer_emp or not self.employee_id:
+            return False
+        if viewer_emp == self.employee_id:
+            return not self.handover_escalated
+        return False
 
     def _handover_ready_for_approval(self):
         self.ensure_one()

@@ -1,4 +1,7 @@
-from odoo import api, fields, models
+from odoo import _, api, fields, models
+from odoo.exceptions import UserError
+
+_HANDOVER_PEER_RESPONSE_FIELDS = frozenset({"state", "responded_at", "refusal_reason"})
 
 
 class HrLeaveHandoverAcceptance(models.Model):
@@ -65,6 +68,20 @@ class HrLeaveHandoverAcceptance(models.Model):
             for idx, sibling in enumerate(leave.handover_acceptance_ids, start=1):
                 sibling.sequence = idx
 
+    def _handover_line_is_recipient_pending_response_write(self, vals):
+        """Allow accept/refuse to update status fields only for this recipient's pending row."""
+        self.ensure_one()
+        if self.state != "pending":
+            return False
+        if not vals:
+            return False
+        if set(vals) - _HANDOVER_PEER_RESPONSE_FIELDS:
+            return False
+        viewer = self.env.user.sudo().employee_id
+        if not viewer or viewer != self.employee_id:
+            return False
+        return "state" in vals and vals.get("state") in ("accepted", "refused")
+
     def _resequence_by_leave(self, leave_ids):
         if not leave_ids:
             return
@@ -77,6 +94,16 @@ class HrLeaveHandoverAcceptance(models.Model):
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
+            leave_id = vals.get("leave_id")
+            if leave_id:
+                leave = self.env["hr.leave"].browse(leave_id)
+                if leave.exists() and not leave._viewer_can_manage_handover_acceptance_sheet():
+                    raise UserError(
+                        _(
+                            "Bạn không được phép chỉnh sửa danh sách người nhận bàn giao trên đơn này. "
+                            "Chỉ người nộp đơn (hoặc nhân sự được phép) mới được thêm hoặc xóa người bàn giao."
+                        )
+                    )
             if "sequence" in vals and vals.get("sequence"):
                 continue
             leave_id = vals.get("leave_id")
@@ -90,6 +117,22 @@ class HrLeaveHandoverAcceptance(models.Model):
         return lines
 
     def write(self, vals):
+        if self.env.su:
+            return super().write(vals)
+        for line in self:
+            leave = line.leave_id
+            if not leave:
+                continue
+            if leave._viewer_can_manage_handover_acceptance_sheet():
+                continue
+            if line._handover_line_is_recipient_pending_response_write(vals):
+                continue
+            raise UserError(
+                _(
+                    "Bạn không được phép chỉnh sửa danh sách người nhận bàn giao trên đơn này. "
+                    "Chỉ người nộp đơn (hoặc nhân sự được phép) mới được thêm, sửa hoặc xóa người bàn giao."
+                )
+            )
         if self.env.context.get("skip_handover_resequence"):
             return super().write(vals)
         old_leave_ids = self.mapped("leave_id").ids
@@ -100,6 +143,16 @@ class HrLeaveHandoverAcceptance(models.Model):
         return res
 
     def unlink(self):
+        if not self.env.su:
+            for line in self:
+                leave = line.leave_id
+                if leave.exists() and not leave._viewer_can_manage_handover_acceptance_sheet():
+                    raise UserError(
+                        _(
+                            "Bạn không được phép xóa dòng người nhận bàn giao. "
+                            "Chỉ người nộp đơn (hoặc nhân sự được phép) mới được thay đổi danh sách này."
+                        )
+                    )
         leave_ids = self.mapped("leave_id").ids
         res = super().unlink()
         self._resequence_by_leave(leave_ids)

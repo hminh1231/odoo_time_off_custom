@@ -41,6 +41,7 @@
                 <field name="handover_escalation_pick_prompt" invisible="1"/>
                 <field name="handover_assigned_recipient_banner" invisible="1"/>
                 <field name="handover_recipient_list_readonly" invisible="1"/>
+                <field name="handover_sheet_hidden_for_viewer" invisible="1"/>
                 <div
                     class="alert alert-info"
                     role="status"
@@ -59,7 +60,7 @@
                 <field
                     name="handover_acceptance_ids"
                     string="Work Handover To"
-                    invisible="can_manage_handover_replacement or can_respond_handover or skip_work_handover"
+                    invisible="can_manage_handover_replacement or can_respond_handover or skip_work_handover or handover_sheet_hidden_for_viewer"
                     readonly="state not in ('draft', 'confirm') or handover_recipient_list_readonly or can_manage_handover_replacement"
                 >
                     <list editable="bottom" create="1" delete="1">
