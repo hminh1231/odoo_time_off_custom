@@ -44,7 +44,7 @@
                             <field name="second_approver_id"/>
                         </group>
                         <group>
-                            <field name="third_approver_id"/>
+                            <field name="third_approver_id" invisible="1"/>
                         </group>
                     </group>
                 </sheet>
@@ -68,7 +68,7 @@
                 <field name="gate_items" optional="hide"/>
                 <field name="approver_id" optional="show"/>
                 <field name="second_approver_id" optional="show" groups="hr_attendance.group_hr_attendance_user"/>
-                <field name="third_approver_id" optional="show" groups="hr_attendance.group_hr_attendance_user"/>
+                <field name="third_approver_id" invisible="1"/>
                 <field name="state" widget="badge"
                        decoration-info="state == 'draft'"
                        decoration-warning="state == 'confirm'"
