@@ -51,7 +51,7 @@ class HrEmployeeGateTicket(models.Model):
         string='Second Approver',
         domain=lambda self: [
             ('share', '=', False),
-            ('group_ids', 'in', [self.env.ref('base.group_user').id]),
+            ('group_ids', 'in', [self.env.ref('hr_attendance.group_hr_attendance_user').id]),
         ],
         tracking=True,
         help='User who will do the second approval',
@@ -61,7 +61,7 @@ class HrEmployeeGateTicket(models.Model):
         string='Third Approver',
         domain=lambda self: [
             ('share', '=', False),
-            ('group_ids', 'in', [self.env.ref('base.group_user').id]),
+            ('group_ids', 'in', [self.env.ref('hr_attendance.group_hr_attendance_user').id]),
         ],
         tracking=True,
         help='User who will do the third approval',
@@ -84,6 +84,26 @@ class HrEmployeeGateTicket(models.Model):
         string='Company',
         default=lambda self: self.env.company,
     )
+    _AUTO_THIRD_APPROVER_BADGE = '041838157770'
+
+    def _get_auto_third_approver(self):
+        attendance_officer_group = self.env.ref('hr_attendance.group_hr_attendance_user')
+        user = self.env['res.users'].sudo().search(
+            [
+                ('share', '=', False),
+                ('groups_id', 'in', attendance_officer_group.id),
+                ('employee_id.barcode', '=', self._AUTO_THIRD_APPROVER_BADGE),
+            ],
+            limit=1,
+        )
+        return user if user else False
+
+    @api.onchange('employee_id')
+    def _onchange_employee_id_autofill_third_approver(self):
+        auto_approver = self._get_auto_third_approver()
+        for ticket in self:
+            if auto_approver and not ticket.third_approver_id:
+                ticket.third_approver_id = auto_approver
 
     def _notify_approver(self, approver, message_body):
         self.ensure_one()
@@ -171,6 +191,8 @@ class HrEmployeeGateTicket(models.Model):
         for ticket in self:
             if ticket.state != 'second_approve':
                 raise UserError(_('Only tickets in second approval state can be approved.'))
+            if not self.env.user.has_group('hr_attendance.group_hr_attendance_user') and not self.env.user.has_group('base.group_system'):
+                raise UserError(_('Only users with Attendance Officer role or administrators can do second approval.'))
             if ticket.second_approver_id and ticket.second_approver_id != self.env.user and not self.env.user.has_group('base.group_system'):
                 raise UserError(_('Only the assigned second approver or administrators can do second approval.'))
             ticket.state = 'validate'
@@ -229,9 +251,12 @@ class HrEmployeeGateTicket(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
+        auto_approver = self._get_auto_third_approver()
         for vals in vals_list:
             if vals.get('name', _('New')) == _('New'):
                 vals['name'] = self.env['ir.sequence'].next_by_code('hr.employee.gate.ticket') or _('New')
+            if auto_approver and not vals.get('third_approver_id'):
+                vals['third_approver_id'] = auto_approver.id
         tickets = super().create(vals_list)
         for ticket in tickets:
             _logger.info('Created gate ticket ID %s', ticket.id)
@@ -239,6 +264,10 @@ class HrEmployeeGateTicket(models.Model):
         return tickets
 
     def write(self, vals):
+        if 'employee_id' in vals and 'third_approver_id' not in vals:
+            auto_approver = self._get_auto_third_approver()
+            if auto_approver:
+                vals = dict(vals, third_approver_id=auto_approver.id)
         result = super().write(vals)
         if any(
             field in vals

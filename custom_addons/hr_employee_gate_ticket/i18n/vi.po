@@ -1,0 +1,156 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+# 	* hr_employee_gate_ticket
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 19.0\n"
+"POT-Creation-Date: 2026-05-03 00:00+0000\n"
+"PO-Revision-Date: 2026-05-03 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Language: vi\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "GateTicket"
+msgstr "Giấy ra cổng"
+
+msgid "Standalone HR Employee Gate Ticket app"
+msgstr "Ứng dụng giấy ra cổng độc lập cho nhân sự"
+
+msgid "HR Employee Gate Ticket"
+msgstr "Giấy ra cổng nhân viên"
+
+msgid "Reference"
+msgstr "Mã"
+
+msgid "Employee"
+msgstr "Nhân viên"
+
+msgid "Check In"
+msgstr "Giờ ra"
+
+msgid "Reason"
+msgstr "Lý do"
+
+msgid "Items"
+msgstr "Vật dụng"
+
+msgid "Checkout Time"
+msgstr "Giờ vào"
+
+msgid "First Approver"
+msgstr "Người duyệt cấp 1"
+
+msgid "Second Approver"
+msgstr "Người duyệt cấp 2"
+
+msgid "Third Approver"
+msgstr "Người duyệt cấp 3"
+
+msgid "Status"
+msgstr "Trạng thái"
+
+msgid "To Submit"
+msgstr "Chờ gửi"
+
+msgid "First Approval"
+msgstr "Duyệt cấp 1"
+
+msgid "Second Approval"
+msgstr "Duyệt cấp 2"
+
+msgid "Approved"
+msgstr "Đã duyệt"
+
+msgid "Refused"
+msgstr "Từ chối"
+
+msgid "Company"
+msgstr "Công ty"
+
+msgid "User who can do the first approval"
+msgstr "Người có thể duyệt cấp 1"
+
+msgid "User who will do the second approval"
+msgstr "Người sẽ duyệt cấp 2"
+
+msgid "User who will do the third approval"
+msgstr "Người sẽ duyệt cấp 3"
+
+msgid "Only draft tickets can be submitted."
+msgstr "Chỉ phiếu ở trạng thái nháp mới có thể gửi."
+
+msgid "Only tickets in first approval or refused state can be approved."
+msgstr "Chỉ phiếu ở trạng thái duyệt cấp 1 hoặc đã từ chối mới có thể duyệt."
+
+msgid "Only the assigned first approver or administrators can do first approval."
+msgstr "Chỉ người duyệt cấp 1 được chỉ định hoặc quản trị viên mới có thể duyệt cấp 1."
+
+msgid "Only tickets in second approval state can be approved."
+msgstr "Chỉ phiếu ở trạng thái duyệt cấp 2 mới có thể duyệt."
+
+msgid "Only users with Attendance Officer role or administrators can do second approval."
+msgstr "Chỉ người dùng có vai trò Officer trong Chấm công hoặc quản trị viên mới có thể duyệt cấp 2."
+
+msgid "Only the assigned second approver or administrators can do second approval."
+msgstr "Chỉ người duyệt cấp 2 được chỉ định hoặc quản trị viên mới có thể duyệt cấp 2."
+
+msgid "Gateway ticket fully approved."
+msgstr "Giấy ra cổng đã được duyệt hoàn tất."
+
+msgid "Only confirmed, second approval, or approved tickets can be refused."
+msgstr "Chỉ phiếu đã xác nhận, duyệt cấp 2 hoặc đã duyệt mới có thể từ chối."
+
+msgid "Your gateway ticket has been approved by <b>%(approver)s</b>. Waiting for second approval."
+msgstr "Đơn ra cổng của bạn đã được duyệt bởi <b>%(approver)s</b>. Đang chờ duyệt cấp 2."
+
+msgid "Your gateway ticket has been <b>refused</b> by <b>%(approver)s</b>."
+msgstr "Đơn ra cổng của bạn đã bị <b>từ chối</b> bởi <b>%(approver)s</b>."
+
+msgid "Gateway ticket for <b>%(employee)s</b> has been refused by <b>%(refuser)s</b>."
+msgstr "Giấy ra cổng của <b>%(employee)s</b> đã bị <b>%(refuser)s</b> từ chối."
+
+msgid "Gateway Ticket"
+msgstr "Giấy ra cổng"
+
+msgid "Submit"
+msgstr "Gửi"
+
+msgid "First Approve"
+msgstr "Duyệt cấp 1"
+
+msgid "Second Approve"
+msgstr "Duyệt cấp 2"
+
+msgid "Refuse"
+msgstr "Từ chối"
+
+msgid "Reset to Draft"
+msgstr "Đặt về nháp"
+
+msgid "Approvers"
+msgstr "Người duyệt"
+
+msgid "Gateway Tickets"
+msgstr "Danh sách giấy ra cổng"
+
+msgid "Overview"
+msgstr "Tổng quan"
+
+msgid "Gateway"
+msgstr "Phê duyệt"
+
+msgid "No gateway tickets found"
+msgstr "Không tìm thấy giấy ra cổng"
+
+msgid "Click the \"New\" button to create a new gateway ticket."
+msgstr "Nhấn nút \"Mới\" để tạo giấy ra cổng mới."
+
+msgid "HR Employee Gate Ticket"
+msgstr "Giấy ra cổng nhân viên"
+
+msgid "New"
+msgstr "Mới"

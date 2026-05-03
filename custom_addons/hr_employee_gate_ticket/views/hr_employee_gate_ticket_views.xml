@@ -41,10 +41,10 @@
                     <group string="Approvers">
                         <group>
                             <field name="approver_id"/>
-                            <field name="second_approver_id"/>
+                            <field name="second_approver_id" groups="hr_attendance.group_hr_attendance_user"/>
                         </group>
                         <group>
-                            <field name="third_approver_id"/>
+                            <field name="third_approver_id" groups="hr_attendance.group_hr_attendance_user"/>
                         </group>
                     </group>
                 </sheet>
@@ -67,8 +67,8 @@
                 <field name="gate_ticket"/>
                 <field name="gate_items" optional="hide"/>
                 <field name="approver_id" optional="show"/>
-                <field name="second_approver_id" optional="show"/>
-                <field name="third_approver_id" optional="show"/>
+                <field name="second_approver_id" optional="show" groups="hr_attendance.group_hr_attendance_user"/>
+                <field name="third_approver_id" optional="show" groups="hr_attendance.group_hr_attendance_user"/>
                 <field name="state" widget="badge"
                        decoration-info="state == 'draft'"
                        decoration-warning="state == 'confirm'"

@@ -3,7 +3,7 @@
     'version': '19.0.1.0.0',
     'category': 'Human Resources/Attendances',
     'summary': 'Standalone HR Employee Gate Ticket app',
-    'depends': ['base', 'mail', 'hr'],
+    'depends': ['base', 'mail', 'hr', 'hr_attendance'],
     'data': [
         'security/hr_employee_gate_ticket_security.xml',
         'security/ir.model.access.csv',
