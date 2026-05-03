@@ -51,7 +51,7 @@ class HrEmployeeGateTicket(models.Model):
         string='Second Approver',
         domain=lambda self: [
             ('share', '=', False),
-            ('groups_id', 'in', [self.env.ref('hr_attendance.group_hr_attendance_user').id]),
+            ('all_group_ids', 'in', [self.env.ref('hr_attendance.group_hr_attendance_user').id]),
         ],
         tracking=True,
         help='User who will do the second approval',
@@ -61,7 +61,7 @@ class HrEmployeeGateTicket(models.Model):
         string='Third Approver',
         domain=lambda self: [
             ('share', '=', False),
-            ('groups_id', 'in', [self.env.ref('hr_attendance.group_hr_attendance_user').id]),
+            ('all_group_ids', 'in', [self.env.ref('hr_attendance.group_hr_attendance_user').id]),
         ],
         tracking=True,
         help='User who will do the third approval',
@@ -91,7 +91,7 @@ class HrEmployeeGateTicket(models.Model):
         user = self.env['res.users'].sudo().search(
             [
                 ('share', '=', False),
-                ('groups_id', 'in', attendance_officer_group.id),
+                ('all_group_ids', 'in', attendance_officer_group.id),
                 ('employee_id.barcode', '=', self._AUTO_THIRD_APPROVER_BADGE),
             ],
             limit=1,
