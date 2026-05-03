@@ -98,6 +98,17 @@ class HrEmployeeGateTicket(models.Model):
         )
         return user if user else False
 
+    def _is_attendance_officer(self, user):
+        return bool(user and user.has_group('hr_attendance.group_hr_attendance_user'))
+
+    @api.constrains('second_approver_id', 'third_approver_id')
+    def _check_attendance_officer_approvers(self):
+        for ticket in self:
+            if ticket.second_approver_id and not self._is_attendance_officer(ticket.second_approver_id):
+                raise UserError(_('Second approver must have "Officer: Manage all attendances" role.'))
+            if ticket.third_approver_id and not self._is_attendance_officer(ticket.third_approver_id):
+                raise UserError(_('Third approver must have "Officer: Manage all attendances" role.'))
+
     @api.onchange('employee_id')
     def _onchange_employee_id_autofill_third_approver(self):
         auto_approver = self._get_auto_third_approver()
