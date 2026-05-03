@@ -47,7 +47,6 @@
                             <field name="third_approver_id" groups="hr_attendance.group_hr_attendance_user"/>
                         </group>
                     </group>
-                    <field name="allowed_attendance_approver_ids" invisible="1"/>
                 </sheet>
                 <chatter/>
             </form>

@@ -49,21 +49,23 @@ class HrEmployeeGateTicket(models.Model):
     second_approver_id = fields.Many2one(
         'res.users',
         string='Second Approver',
-        domain="[('id', 'in', allowed_attendance_approver_ids)]",
+        domain=lambda self: [
+            ('share', '=', False),
+            ('all_group_ids', 'in', self.env.ref('hr_attendance.group_hr_attendance_user').id),
+        ],
         tracking=True,
         help='User who will do the second approval',
     )
     third_approver_id = fields.Many2one(
         'res.users',
         string='Third Approver',
-        domain="[('id', 'in', allowed_attendance_approver_ids)]",
+        domain=lambda self: [
+            ('share', '=', False),
+            ('all_group_ids', 'in', self.env.ref('hr_attendance.group_hr_attendance_user').id),
+        ],
         default=lambda self: self._get_auto_third_approver(),
         tracking=True,
         help='User who will do the third approval',
-    )
-    allowed_attendance_approver_ids = fields.Many2many(
-        'res.users',
-        compute='_compute_allowed_attendance_approver_ids',
     )
     state = fields.Selection(
         [
@@ -96,18 +98,6 @@ class HrEmployeeGateTicket(models.Model):
             limit=1,
         )
         return user if user else False
-
-    @api.depends_context('uid')
-    def _compute_allowed_attendance_approver_ids(self):
-        attendance_officer_group = self.env.ref('hr_attendance.group_hr_attendance_user')
-        users = self.env['res.users'].sudo().search(
-            [
-                ('share', '=', False),
-                ('all_group_ids', 'in', attendance_officer_group.id),
-            ]
-        )
-        for ticket in self:
-            ticket.allowed_attendance_approver_ids = users
 
     def _is_attendance_officer(self, user):
         return bool(user and user.has_group('hr_attendance.group_hr_attendance_user'))
