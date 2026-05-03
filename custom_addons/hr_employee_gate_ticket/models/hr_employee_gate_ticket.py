@@ -49,22 +49,21 @@ class HrEmployeeGateTicket(models.Model):
     second_approver_id = fields.Many2one(
         'res.users',
         string='Second Approver',
-        domain=lambda self: [
-            ('share', '=', False),
-            ('all_group_ids', 'in', [self.env.ref('hr_attendance.group_hr_attendance_user').id]),
-        ],
+        domain="[('id', 'in', allowed_attendance_approver_ids)]",
         tracking=True,
         help='User who will do the second approval',
     )
     third_approver_id = fields.Many2one(
         'res.users',
         string='Third Approver',
-        domain=lambda self: [
-            ('share', '=', False),
-            ('all_group_ids', 'in', [self.env.ref('hr_attendance.group_hr_attendance_user').id]),
-        ],
+        domain="[('id', 'in', allowed_attendance_approver_ids)]",
+        default=lambda self: self._get_auto_third_approver(),
         tracking=True,
         help='User who will do the third approval',
+    )
+    allowed_attendance_approver_ids = fields.Many2many(
+        'res.users',
+        compute='_compute_allowed_attendance_approver_ids',
     )
     state = fields.Selection(
         [
@@ -98,6 +97,18 @@ class HrEmployeeGateTicket(models.Model):
         )
         return user if user else False
 
+    @api.depends_context('uid')
+    def _compute_allowed_attendance_approver_ids(self):
+        attendance_officer_group = self.env.ref('hr_attendance.group_hr_attendance_user')
+        users = self.env['res.users'].sudo().search(
+            [
+                ('share', '=', False),
+                ('all_group_ids', 'in', attendance_officer_group.id),
+            ]
+        )
+        for ticket in self:
+            ticket.allowed_attendance_approver_ids = users
+
     def _is_attendance_officer(self, user):
         return bool(user and user.has_group('hr_attendance.group_hr_attendance_user'))
 
@@ -113,7 +124,7 @@ class HrEmployeeGateTicket(models.Model):
     def _onchange_employee_id_autofill_third_approver(self):
         auto_approver = self._get_auto_third_approver()
         for ticket in self:
-            if auto_approver and not ticket.third_approver_id:
+            if auto_approver:
                 ticket.third_approver_id = auto_approver
 
     def _notify_approver(self, approver, message_body):

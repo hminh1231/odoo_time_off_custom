@@ -41,12 +41,13 @@
                     <group string="Approvers">
                         <group>
                             <field name="approver_id"/>
-                            <field name="second_approver_id" domain="[('share', '=', False), ('all_group_ids', 'in', [ref('hr_attendance.group_hr_attendance_user')])]"/>
+                            <field name="second_approver_id"/>
                         </group>
                         <group>
-                            <field name="third_approver_id" groups="hr_attendance.group_hr_attendance_user" domain="[('share', '=', False), ('all_group_ids', 'in', [ref('hr_attendance.group_hr_attendance_user')])]"/>
+                            <field name="third_approver_id" groups="hr_attendance.group_hr_attendance_user"/>
                         </group>
                     </group>
+                    <field name="allowed_attendance_approver_ids" invisible="1"/>
                 </sheet>
                 <chatter/>
             </form>
