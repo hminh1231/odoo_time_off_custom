@@ -51,7 +51,7 @@ class HrEmployeeGateTicket(models.Model):
         string='Second Approver',
         domain=lambda self: [
             ('share', '=', False),
-            ('group_ids', 'in', [self.env.ref('hr_attendance.group_hr_attendance_user').id]),
+            ('groups_id', 'in', [self.env.ref('hr_attendance.group_hr_attendance_user').id]),
         ],
         tracking=True,
         help='User who will do the second approval',
@@ -61,7 +61,7 @@ class HrEmployeeGateTicket(models.Model):
         string='Third Approver',
         domain=lambda self: [
             ('share', '=', False),
-            ('group_ids', 'in', [self.env.ref('hr_attendance.group_hr_attendance_user').id]),
+            ('groups_id', 'in', [self.env.ref('hr_attendance.group_hr_attendance_user').id]),
         ],
         tracking=True,
         help='User who will do the third approval',
