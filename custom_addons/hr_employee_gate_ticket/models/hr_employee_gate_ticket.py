@@ -140,6 +140,8 @@ class HrEmployeeGateTicket(models.Model):
     @api.constrains('approver_id', 'second_approver_id', 'third_approver_id')
     def _check_approvers(self):
         for ticket in self:
+            _logger.info('Checking approvers for ticket ID %s: approver_id=%s, second=%s, third=%s',
+                        ticket.id, ticket.approver_id, ticket.second_approver_id, ticket.third_approver_id)
             missing_approvers = []
             if not ticket.approver_id:
                 missing_approvers.append(_('First Approver'))
@@ -149,6 +151,7 @@ class HrEmployeeGateTicket(models.Model):
                 missing_approvers.append(_('Third Approver'))
 
             if missing_approvers:
+                _logger.warning('Validation failed for ticket ID %s. Missing approvers: %s', ticket.id, missing_approvers)
                 raise ValidationError(
                     _('Please select all approvers before saving. Missing: %s') % ', '.join(missing_approvers)
                 )
