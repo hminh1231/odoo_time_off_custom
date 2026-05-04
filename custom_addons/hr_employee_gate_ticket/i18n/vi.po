@@ -37,6 +37,26 @@ msgstr "Chỉ phiếu ở trạng thái nháp mới có thể gửi."
 
 #. module: hr_employee_gate_ticket
 #: code:addons/hr_employee_gate_ticket/models/hr_employee_gate_ticket.py:0
+msgid "First Approver"
+msgstr "Trưởng bộ phận"
+
+#. module: hr_employee_gate_ticket
+#: code:addons/hr_employee_gate_ticket/models/hr_employee_gate_ticket.py:0
+msgid "Second Approver"
+msgstr "Phòng HCNS"
+
+#. module: hr_employee_gate_ticket
+#: code:addons/hr_employee_gate_ticket/models/hr_employee_gate_ticket.py:0
+msgid "Third Approver"
+msgstr "Người duyệt cấp 3"
+
+#. module: hr_employee_gate_ticket
+#: code:addons/hr_employee_gate_ticket/models/hr_employee_gate_ticket.py:0
+msgid "Please select all approvers before submitting. Missing: %s"
+msgstr "Vui lòng chọn đầy đủ người phê duyệt trước khi gửi. Thiếu: %s"
+
+#. module: hr_employee_gate_ticket
+#: code:addons/hr_employee_gate_ticket/models/hr_employee_gate_ticket.py:0
 msgid "Only tickets in first approval or refused state can be approved."
 msgstr "Chỉ phiếu ở trạng thái duyệt cấp 1 hoặc đã từ chối mới có thể duyệt."
 

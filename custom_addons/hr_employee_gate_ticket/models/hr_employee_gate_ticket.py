@@ -180,6 +180,21 @@ class HrEmployeeGateTicket(models.Model):
         for ticket in self:
             if ticket.state != 'draft':
                 raise UserError(_('Only draft tickets can be submitted.'))
+
+            # Validate that all approvers are selected
+            missing_approvers = []
+            if not ticket.approver_id:
+                missing_approvers.append(_('First Approver'))
+            if not ticket.second_approver_id:
+                missing_approvers.append(_('Second Approver'))
+            if not ticket.third_approver_id:
+                missing_approvers.append(_('Third Approver'))
+
+            if missing_approvers:
+                raise UserError(
+                    _('Please select all approvers before submitting. Missing: %s') % ', '.join(missing_approvers)
+                )
+
             ticket.state = 'confirm'
             if ticket.approver_id:
                 check_in_formatted = ticket.check_in.strftime('%H:%M ngày %d/%m/%Y') if ticket.check_in else ''

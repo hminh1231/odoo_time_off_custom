@@ -45,22 +45,25 @@
                             </div>
 
                             <div style="margin-bottom: 10px;">
-                                <span>Giờ ra: </span>
+                                <span>Giờ vào: </span>
                                 <span style="border-bottom: 1px dotted black; display: inline-block; min-width: 80px; padding: 0 5px;">
                                     <t t-if="o.check_in">
-                                        <t t-esc="o.check_in.strftime('%H:%M') if o.check_in else ''"/>
+                                        <t t-set="check_in_local" t-value="o.check_in.astimezone(__import__('zoneinfo').ZoneInfo(o.employee_id.user_id.tz or 'Asia/Ho_Chi_Minh'))"/>
+                                        <t t-esc="check_in_local.strftime('%H:%M')"/>
                                     </t>
                                 </span>
-                                <span style="margin-left: 15px;">Giờ vào: </span>
+                                <span style="margin-left: 15px;">Giờ ra: </span>
                                 <span style="border-bottom: 1px dotted black; display: inline-block; min-width: 80px; padding: 0 5px;">
                                     <t t-if="o.checkout_time">
-                                        <t t-esc="o.checkout_time.strftime('%H:%M') if o.checkout_time else ''"/>
+                                        <t t-set="checkout_local" t-value="o.checkout_time.astimezone(__import__('zoneinfo').ZoneInfo(o.employee_id.user_id.tz or 'Asia/Ho_Chi_Minh'))"/>
+                                        <t t-esc="checkout_local.strftime('%H:%M')"/>
                                     </t>
                                 </span>
                                 <span style="margin-left: 15px;">ngày: </span>
                                 <span style="border-bottom: 1px dotted black; display: inline-block; min-width: 120px; padding: 0 5px;">
                                     <t t-if="o.check_in">
-                                        <t t-esc="o.check_in.strftime('%d/%m/%Y') if o.check_in else ''"/>
+                                        <t t-set="check_in_local" t-value="o.check_in.astimezone(__import__('zoneinfo').ZoneInfo(o.employee_id.user_id.tz or 'Asia/Ho_Chi_Minh'))"/>
+                                        <t t-esc="check_in_local.strftime('%d/%m/%Y')"/>
                                     </t>
                                 </span>
                             </div>
