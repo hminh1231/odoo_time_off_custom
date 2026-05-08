@@ -227,7 +227,7 @@ class HrEmployeeGateTicket(models.Model):
             '<th style="border:1px solid #ccc;padding:4px 10px;text-align:left;background:#f5f5f5;">Chi tiết</th>'
             '</tr>'
             '<tr>'
-            '<td style="border:1px solid #ccc;padding:4px 10px;">Giờ vào</td>'
+            '<td style="border:1px solid #ccc;padding:4px 10px;">Tạo lúc</td>'
             '<td style="border:1px solid #ccc;padding:4px 10px;">%(check_in)s</td>'
             '</tr>'
             '<tr>'
