@@ -2837,12 +2837,25 @@ class HolidaysRequest(models.Model):
         requester_name = self.employee_id.name or self.employee_id.display_name or self.display_name
         leave_date = self.request_date_from or (self.date_from and self.date_from.date())
         leave_date_text = leave_date.strftime("%d/%m/%Y") if leave_date else ""
-        body = _(
-            "%(requester)s đã gửi đơn xin nghỉ vào %(date)s, vui lòng vào mục Time Off để duyệt đơn hoặc từ chối."
-        ) % {
-            "requester": requester_name,
-            "date": leave_date_text,
-        }
+        base = (self.get_base_url() or "").rstrip("/")
+        leave_url = f"{base}/web#id={self.id}&model=hr.leave&view_type=form"
+        intro = Markup(
+            _(
+                "Nhân viên: <b>{requester}</b> xin nghỉ phép<br/>"
+                "Ngày nghỉ: <b>{date}</b><br/>"
+                "Vui lòng bấm vào Time Off để xác nhận hoặc từ chối đơn.<br/><br/>"
+            )
+        ).format(
+            requester=escape(str(requester_name)),
+            date=escape(str(leave_date_text)),
+        )
+        button_html = Markup(
+            '<a href="{href}" target="_blank" rel="noreferrer noopener" '
+            'style="display:inline-block;padding:8px 18px;background-color:#714B67;'
+            'color:#ffffff;border-radius:6px;text-decoration:none;font-weight:600;'
+            'font-size:14px;line-height:1.2;">{label}</a>'
+        ).format(href=leave_url, label=_("Time Off"))
+        body = intro + button_html
         try:
             # Current-turn approver notifications must come from approval bot.
             bot_user = self.env.ref("business_discuss_bots.user_bot_approval", raise_if_not_found=False)
