@@ -45,7 +45,7 @@
                             </div>
 
                             <div style="margin-bottom: 10px;">
-                                <span>Giờ vào: </span>
+                                <span>Tạo lúc: </span>
                                 <span style="border-bottom: 1px dotted black; display: inline-block; min-width: 80px; padding: 0 5px;">
                                     <t t-if="o.check_in">
                                         <t t-esc="context_timestamp(o.check_in).strftime('%H:%M')"/>

@@ -31,7 +31,7 @@ class HrEmployeeGateTicket(models.Model):
         tracking=True,
     )
     check_in = fields.Datetime(
-        string='Checkin',
+        string='Created Time',
         required=True,
         default=fields.Datetime.now,
         tracking=True,

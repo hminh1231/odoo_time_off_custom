@@ -91,6 +91,21 @@ msgid "Approvers"
 msgstr "Người duyệt"
 
 #. module: hr_employee_gate_ticket
+#: model:ir.model.fields.selection,name:hr_employee_gate_ticket.selection__hr_employee_gate_ticket__state__draft
+msgid "To Submit"
+msgstr "Đã gửi"
+
+#. module: hr_employee_gate_ticket
+#: model:ir.model.fields.selection,name:hr_employee_gate_ticket.selection__hr_employee_gate_ticket__state__confirm
+msgid "First Approval"
+msgstr "Duyệt lần 1"
+
+#. module: hr_employee_gate_ticket
+#: model:ir.model.fields.selection,name:hr_employee_gate_ticket.selection__hr_employee_gate_ticket__state__second_approve
+msgid "Second Approval"
+msgstr "Duyệt lần 2"
+
+#. module: hr_employee_gate_ticket
 #: model:ir.ui.view,arch_db:hr_employee_gate_ticket.hr_employee_gate_ticket_view_form
 msgid "Submit"
 msgstr "Gửi"
@@ -132,8 +147,8 @@ msgstr "Người duyệt cấp 3"
 
 #. module: hr_employee_gate_ticket
 #: model:ir.model.fields,field_description:hr_employee_gate_ticket.field_hr_employee_gate_ticket__check_in
-msgid "Checkin"
-msgstr "Giờ vào"
+msgid "Created Time"
+msgstr "Tạo lúc"
 
 #. module: hr_employee_gate_ticket
 #: model:ir.model.fields,field_description:hr_employee_gate_ticket.field_hr_employee_gate_ticket__checkout_time
