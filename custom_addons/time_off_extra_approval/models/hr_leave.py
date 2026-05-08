@@ -1692,24 +1692,19 @@ class HolidaysRequest(models.Model):
                 continue
             line = self.handover_acceptance_ids.filtered(lambda l: l.employee_id == recipient)[:1]
             work_content = (line.handover_work_content or "").strip()
-            if work_content:
-                body = _(
-                    "Bạn được %(requester)s bàn giao công việc khi họ nghỉ vào ngày %(date)s "
-                    "với nội dung công việc là: %(content)s. "
-                    "Vui lòng bấm vào mục Time Off để chấp nhận hoặc từ chối."
-                ) % {
-                    "requester": requester_name,
-                    "date": date_text,
-                    "content": work_content,
-                }
-            else:
-                body = _(
-                    "Bạn được %(requester)s bàn giao công việc khi họ nghỉ vào ngày %(date)s. "
-                    "Vui lòng bấm vào mục Time Off để chấp nhận hoặc từ chối."
-                ) % {
-                    "requester": requester_name,
-                    "date": date_text,
-                }
+            content_text = work_content or _("Không có")
+            body = Markup(
+                _(
+                    "Nhân viên: <b>%(requester)s</b> nhờ bàn giao công việc nghỉ ốm<br/>"
+                    "Ngày nghỉ: <b>%(date)s</b><br/>"
+                    "Nội dung: %(content)s<br/>"
+                    "Vui lòng bấm vào Time Off để xác nhận công việc bàn giao."
+                )
+            ) % {
+                "requester": requester_name,
+                "date": date_text,
+                "content": content_text,
+            }
             try:
                 chat = channel_model.with_user(bot_user)._get_or_create_chat([user.partner_id.id], pin=True)
                 chat.with_user(bot_user).sudo().message_post(
