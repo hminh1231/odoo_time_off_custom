@@ -4,7 +4,7 @@ import unicodedata
 from datetime import date, datetime, time, timedelta
 from numbers import Integral
 
-from markupsafe import Markup
+from markupsafe import Markup, escape
 
 from odoo import Command, api, fields, models
 from odoo.exceptions import UserError, ValidationError
@@ -1682,36 +1682,57 @@ class HolidaysRequest(models.Model):
         )
         date_from = self.request_date_from or (self.date_from and self.date_from.date())
         date_text = date_from.strftime("%d/%m/%Y") if date_from else ""
+        base = (self.get_base_url() or "").rstrip("/")
+        leave_url = f"{base}/web#id={self.id}&model=hr.leave&view_type=form"
         bot_user = self.env.ref("business_discuss_bots.user_bot_handover", raise_if_not_found=False) or self.env.ref(
             "base.user_root"
         )
+        bot_partner_id = bot_user.partner_id.id if bot_user and bot_user.partner_id else False
         channel_model = self.env["discuss.channel"].sudo()
+        sent_count = 0
         for recipient in employees:
             user = recipient.user_id
-            if not user or user.share or not user.partner_id:
+            if not user or not user.partner_id:
+                _logger.info(
+                    "time_off_extra_approval: skip handover bot DM leave_id=%s employee_id=%s (no user or partner)",
+                    self.id,
+                    recipient.id,
+                )
                 continue
             line = self.handover_acceptance_ids.filtered(lambda l: l.employee_id == recipient)[:1]
             work_content = (line.handover_work_content or "").strip()
             content_text = work_content or _("Không có")
-            body = Markup(
+            # Avoid %% formatting for user/translated text (can break on % in PO strings or handover text).
+            intro = Markup(
                 _(
-                    "Nhân viên: <b>%(requester)s</b> nhờ bàn giao công việc nghỉ ốm<br/>"
-                    "Ngày nghỉ: <b>%(date)s</b><br/>"
-                    "Nội dung: %(content)s<br/>"
-                    "Vui lòng bấm vào Time Off để xác nhận công việc bàn giao."
+                    "Nhân viên: <b>{requester}</b> nhờ bàn giao công việc nghỉ ốm<br/>"
+                    "Ngày nghỉ: <b>{date}</b><br/>"
+                    "Nội dung: "
                 )
-            ) % {
-                "requester": requester_name,
-                "date": date_text,
-                "content": content_text,
+            ).format(requester=requester_name, date=date_text)
+            button_html = Markup(
+                '<a href="{href}" target="_blank" rel="noreferrer noopener" '
+                'style="display:inline-block;padding:8px 18px;background-color:#714B67;'
+                'color:#ffffff;border-radius:6px;text-decoration:none;font-weight:600;'
+                'font-size:14px;line-height:1.2;">{label}</a>'
+            ).format(href=leave_url, label=_("Mở Time Off"))
+            body = (
+                intro
+                + escape(str(content_text))
+                + Markup(_("<br/>Vui lòng bấm vào Time Off để xác nhận công việc bàn giao.<br/><br/>"))
+                + button_html
+            )
+            post_vals = {
+                "body": body,
+                "message_type": "comment",
+                "subtype_xmlid": "mail.mt_comment",
             }
+            if bot_partner_id:
+                post_vals["author_id"] = bot_partner_id
             try:
                 chat = channel_model.with_user(bot_user)._get_or_create_chat([user.partner_id.id], pin=True)
-                chat.with_user(bot_user).sudo().message_post(
-                    body=body,
-                    message_type="comment",
-                    subtype_xmlid="mail.mt_comment",
-                )
+                chat.with_user(bot_user).sudo().message_post(**post_vals)
+                sent_count += 1
             except Exception:
                 try:
                     bot_partner = bot_user.partner_id if bot_user else False
@@ -1723,17 +1744,20 @@ class HolidaysRequest(models.Model):
                         .with_user(user)
                         ._get_or_create_chat([bot_partner.id], pin=True)
                     )
-                    chat.with_user(bot_user).sudo().message_post(
-                        body=body,
-                        message_type="comment",
-                        subtype_xmlid="mail.mt_comment",
-                    )
+                    chat.with_user(bot_user).sudo().message_post(**post_vals)
+                    sent_count += 1
                 except Exception:
                     _logger.exception(
                         "time_off_extra_approval: failed to send handover submit bot chat leave_id=%s recipient_id=%s",
                         self.id,
                         recipient.id,
                     )
+        if not sent_count:
+            _logger.warning(
+                "time_off_extra_approval: handover bot DM reached no recipients leave_id=%s employee_ids=%s",
+                self.id,
+                employees.ids,
+            )
 
     def _notify_handover_recipients_submit_via_bot(self):
         """Send Discuss DM from handover bot when requester submits the leave."""
