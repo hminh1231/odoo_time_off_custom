@@ -1,3 +1,22 @@
+/* Bảng Managed Departments (Employees=No): chặn tương tác + con trỏ.
+   ListRenderer đặt class .cursor-pointer trực tiếp trên td (web.ListRenderer.RecordRow) —
+   độ cụ thể cao hơn selector * nên trước đây vẫn hiện bàn tay. */
+/* Không gắn thêm .o_hr_employee_no_interaction: class lock chỉ có trên bản readonly. */
+.o_field_widget.o_hr_managed_dept_lock {
+    user-select: none;
+
+    .o_list_table tbody tr.o_data_row td.o_data_cell,
+    .o_list_table .o_data_cell.cursor-pointer,
+    .o_list_table .cursor-pointer {
+        cursor: default !important;
+    }
+
+    &,
+    * {
+        pointer-events: none !important;
+    }
+}
+
 .o_hr_employee_no_interaction.o_form_view {
     .o_form_renderer {
         position: relative;

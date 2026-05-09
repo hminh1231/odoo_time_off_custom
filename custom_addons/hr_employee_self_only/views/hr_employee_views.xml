@@ -31,4 +31,29 @@
             </xpath>
         </field>
     </record>
+
+    <!-- Inherit managed-departments view so xpath resolves (field is not on base hr.view_employee_form). -->
+    <record id="view_employee_form_managed_departments_privacy" model="ir.ui.view">
+        <field name="name">hr.employee.form.managed.departments.privacy</field>
+        <field name="model">hr.employee</field>
+        <field name="inherit_id" ref="hr_employee_managed_departments.view_employee_form_managed_departments"/>
+        <field name="priority" eval="20"/>
+        <field name="arch" type="xml">
+            <!-- Employees=No: Managed Departments read-only (same pattern as department_id). -->
+            <xpath expr="//field[@name='managed_department_ids']" position="replace">
+                <field name="managed_department_ids"
+                       string="Managed Departments"
+                       options="{'no_create': True}"
+                       context="{'list_view_ref': 'hr_employee_managed_departments.view_hr_department_tree_managed_employee'}"
+                       invisible="not is_department_director or employee_form_force_readonly_ui"/>
+                <field name="managed_department_ids"
+                       string="Managed Departments"
+                       class="o_hr_managed_dept_lock"
+                       readonly="1"
+                       options="{'no_create': True, 'no_open': True}"
+                       context="{'list_view_ref': 'hr_employee_managed_departments.view_hr_department_tree_managed_employee'}"
+                       invisible="not is_department_director or not employee_form_force_readonly_ui"/>
+            </xpath>
+        </field>
+    </record>
 </odoo>
