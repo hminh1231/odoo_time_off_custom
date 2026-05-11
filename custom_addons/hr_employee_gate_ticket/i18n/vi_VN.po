@@ -102,12 +102,12 @@ msgstr "Gửi"
 #. module: hr_employee_gate_ticket
 #: model:ir.ui.view,arch_db:hr_employee_gate_ticket.hr_employee_gate_ticket_view_form
 msgid "First Approve"
-msgstr "Duyệt cấp 1"
+msgstr "Duyệt"
 
 #. module: hr_employee_gate_ticket
 #: model:ir.ui.view,arch_db:hr_employee_gate_ticket.hr_employee_gate_ticket_view_form
 msgid "Second Approve"
-msgstr "Duyệt cấp 2"
+msgstr "Duyệt"
 
 #. module: hr_employee_gate_ticket
 #: model:ir.ui.view,arch_db:hr_employee_gate_ticket.hr_employee_gate_ticket_view_form
@@ -117,7 +117,7 @@ msgstr "Từ chối"
 #. module: hr_employee_gate_ticket
 #: model:ir.ui.view,arch_db:hr_employee_gate_ticket.hr_employee_gate_ticket_view_form
 msgid "Reset to Draft"
-msgstr "Đặt về nháp"
+msgstr "Lưu vào nháp"
 
 #. module: hr_employee_gate_ticket
 #: model:ir.model.fields,field_description:hr_employee_gate_ticket.field_hr_employee_gate_ticket__approver_id
