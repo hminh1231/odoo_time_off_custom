@@ -1854,29 +1854,36 @@ class HolidaysRequest(models.Model):
             partner_ids=[dept_head_user.partner_id.id],
         )
         requester_name = self.employee_id.name or self.employee_id.display_name or self.display_name
-        bot_body = _(
-            "Sau %(hours)s giờ, do không có ai nhận bàn giao đơn cho %(requester)s, "
-            "vui lòng vào mục Time Off để quyết định."
-        ) % {
-            "hours": hours,
-            "requester": requester_name,
-        }
+        button_html = self._notify_handover_bot_leave_form_open_button_markup()
+        bot_body = (
+            Markup(
+                _(
+                    "Sau {hours} giờ, do không có ai nhận bàn giao đơn cho <b>{requester}</b>, "
+                    "vui lòng vào mục Time Off để quyết định.<br/><br/>"
+                )
+            ).format(hours=hours, requester=requester_name)
+            + button_html
+        )
         try:
             bot_user = (
                 self.env.ref("business_discuss_bots.user_bot_handover", raise_if_not_found=False)
                 or self.env.ref("base.user_root")
             )
+            bot_partner_id = bot_user.partner_id.id if bot_user and bot_user.partner_id else False
             chat = (
                 self.env["discuss.channel"]
                 .sudo()
                 .with_user(dept_head_user)
                 ._get_or_create_chat([bot_user.partner_id.id], pin=True)
             )
-            chat.with_user(bot_user).sudo().message_post(
-                body=bot_body,
-                message_type="comment",
-                subtype_xmlid="mail.mt_comment",
-            )
+            post_vals = {
+                "body": bot_body,
+                "message_type": "comment",
+                "subtype_xmlid": "mail.mt_comment",
+            }
+            if bot_partner_id:
+                post_vals["author_id"] = bot_partner_id
+            chat.with_user(bot_user).sudo().message_post(**post_vals)
             self.sudo().write({"handover_last_bot_escalation_signature": signature})
         except Exception:
             _logger.exception(
