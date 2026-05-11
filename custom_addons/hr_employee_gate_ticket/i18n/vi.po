@@ -81,7 +81,7 @@ msgid "Gateway ticket fully approved."
 msgstr "Giấy ra cổng đã được duyệt hoàn tất."
 
 #. module: hr_employee_gate_ticket
-#: model:ir.ui.view,arch_db:hr_employee_gate_ticket.hr_employee_gate_ticket_view_form
+#: model_terms:ir.ui.view,arch_db:hr_employee_gate_ticket.hr_employee_gate_ticket_view_form
 msgid "Gateway Ticket"
 msgstr "Giấy ra cổng"
 
@@ -90,7 +90,7 @@ msgid "Gateway Tickets"
 msgstr "Danh sách giấy ra cổng"
 
 #. module: hr_employee_gate_ticket
-#: model:ir.ui.view,arch_db:hr_employee_gate_ticket.hr_employee_gate_ticket_view_form
+#: model_terms:ir.ui.view,arch_db:hr_employee_gate_ticket.hr_employee_gate_ticket_view_form
 msgid "Approvers"
 msgstr "Người duyệt"
 
@@ -120,27 +120,27 @@ msgid "Refused"
 msgstr "Đã từ chối"
 
 #. module: hr_employee_gate_ticket
-#: model:ir.ui.view,arch_db:hr_employee_gate_ticket.hr_employee_gate_ticket_view_form
+#: model_terms:ir.ui.view,arch_db:hr_employee_gate_ticket.hr_employee_gate_ticket_view_form
 msgid "Submit"
 msgstr "Gửi"
 
 #. module: hr_employee_gate_ticket
-#: model:ir.ui.view,arch_db:hr_employee_gate_ticket.hr_employee_gate_ticket_view_form
+#: model_terms:ir.ui.view,arch_db:hr_employee_gate_ticket.hr_employee_gate_ticket_view_form
 msgid "First Approve"
 msgstr "Duyệt"
 
 #. module: hr_employee_gate_ticket
-#: model:ir.ui.view,arch_db:hr_employee_gate_ticket.hr_employee_gate_ticket_view_form
+#: model_terms:ir.ui.view,arch_db:hr_employee_gate_ticket.hr_employee_gate_ticket_view_form
 msgid "Second Approve"
 msgstr "Duyệt"
 
 #. module: hr_employee_gate_ticket
-#: model:ir.ui.view,arch_db:hr_employee_gate_ticket.hr_employee_gate_ticket_view_form
+#: model_terms:ir.ui.view,arch_db:hr_employee_gate_ticket.hr_employee_gate_ticket_view_form
 msgid "Refuse"
 msgstr "Từ chối"
 
 #. module: hr_employee_gate_ticket
-#: model:ir.ui.view,arch_db:hr_employee_gate_ticket.hr_employee_gate_ticket_view_form
+#: model_terms:ir.ui.view,arch_db:hr_employee_gate_ticket.hr_employee_gate_ticket_view_form
 msgid "Reset to Draft"
 msgstr "Lưu vào nháp"
 
