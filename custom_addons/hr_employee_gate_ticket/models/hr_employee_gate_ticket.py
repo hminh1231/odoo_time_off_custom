@@ -471,7 +471,7 @@ class HrEmployeeGateTicket(models.Model):
                 ]
             )
             if old_attachments:
-                old_attachments.unlink()
+                old_attachments.with_context(gate_ticket_regenerating=True).unlink()
             self.env['ir.attachment'].create(attachment_vals)
         except Exception:
             _logger.exception('Error generating gate ticket PDF for %s', self.id)
