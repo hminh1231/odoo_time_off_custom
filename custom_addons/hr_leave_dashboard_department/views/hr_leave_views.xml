@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="hr_leave_view_form_dashboard_department" model="ir.ui.view">
+        <field name="name">hr.leave.view.form.dashboard.department</field>
+        <field name="model">hr.leave</field>
+        <field name="inherit_id" ref="hr_holidays.hr_leave_view_form_dashboard"/>
+        <field name="arch" type="xml">
+            <xpath expr="//group[@name='col_left']/field[@name='employee_id'][@widget='many2one_avatar_employee']" position="after">
+                <field name="department_id" readonly="1"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- time-off-overview uses model hr.leave.report.calendar + this form, not hr.leave dashboard -->
+    <record id="hr_leave_report_calendar_view_form_department" model="ir.ui.view">
+        <field name="name">hr.leave.report.calendar.view.form.department</field>
+        <field name="model">hr.leave.report.calendar</field>
+        <field name="inherit_id" ref="hr_holidays.hr_leave_report_calendar_view_form"/>
+        <field name="arch" type="xml">
+            <field name="employee_id" position="after">
+                <field name="department_id" readonly="1"/>
+            </field>
+        </field>
+    </record>
+</odoo>
