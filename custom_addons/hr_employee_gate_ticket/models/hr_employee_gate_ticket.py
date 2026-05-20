@@ -202,7 +202,7 @@ class HrEmployeeGateTicket(models.Model):
     def _build_ticket_info_message(self, intro_markup):
         """Build a Markup message with intro text, a details table, and a ticket link."""
         self.ensure_one()
-        ticket_url = self._notify_get_action_link('view')
+        ticket_url = '/web#id=%s&model=hr.employee.gate.ticket&view_type=form' % self.id
         tz_offset = timedelta(hours=7)
         created_formatted = (self.create_date + tz_offset).strftime('%H:%M ngày %d/%m/%Y') if self.create_date else ''
         check_in_formatted = (self.check_in + tz_offset).strftime('%H:%M ngày %d/%m/%Y') if self.check_in else ''
