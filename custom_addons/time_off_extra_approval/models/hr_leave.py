@@ -15,7 +15,6 @@ from odoo.tools.misc import format_date
 from odoo.tools.translate import _
 
 from odoo.addons.hr_job_title_vn.models.hr_version import JOB_TITLE_SELECTION
-
 _logger = logging.getLogger(__name__)
 
 _MULTI_STEP_RESET_CTX = "time_off_multi_step_reset_skip"
@@ -31,7 +30,7 @@ _DIRECTOR_JOB_TITLE_KEY = "giám đốc"
 _MAX_EMPLOYEE_HR_RESPONSIBLES = 15
 # Special multi-director list can exceed the usual cap (chain + all directors).
 _MAX_EMPLOYEE_HR_RESPONSIBLES_MULTI_DIRECTOR = 40
-_HANDOVER_ACTIVITY_XMLID = "time_off_extra_approval.mail_act_leave_work_handover"
+_HANDOVER_ACTIVITY_XMLID = "time_off_work_handover.mail_act_leave_work_handover"
 # Handover acknowledgement rows and activities apply while the request awaits approval.
 _HANDOVER_ACTIVE_STATES = ("confirm", "validate1")
 _TODO_ACTIVITY_XMLID = "mail.mail_activity_data_todo"
@@ -3186,6 +3185,45 @@ class HolidaysRequest(models.Model):
             )
             self._notify_responsible_current_turn_via_approval_bot(line.user_id)
 
+    @api.model
+    def _format_approval_bot_date(self, value):
+        """Format a date as DD/MM/YYYY for approval-bot notifications."""
+        if not value:
+            return ""
+        if isinstance(value, datetime):
+            value = value.date()
+        return value.strftime("%d/%m/%Y")
+
+    def _get_approval_bot_leave_notification_details(self):
+        """Display values for the OdooBot Duyệt đơn leave-request DM."""
+        self.ensure_one()
+        employee = self.employee_id
+        requester_name = employee.name or employee.display_name or self.display_name
+        id_hrm = (getattr(employee, "id_hrm", None) or "").strip() or "—"
+        department = (employee.department_id.name or "").strip() or "—"
+        date_from = self.request_date_from or (self.date_from and self.date_from.date())
+        date_to = self.request_date_to or (self.date_to and self.date_to.date())
+        date_from_text = self._format_approval_bot_date(date_from)
+        if date_to and date_from and date_to != date_from:
+            period_text = _("%(from)s đến ngày %(to)s") % {
+                "from": date_from_text,
+                "to": self._format_approval_bot_date(date_to),
+            }
+        else:
+            period_text = date_from_text or "—"
+        total_days = (self.duration_display or "").strip()
+        if not total_days and self.number_of_days:
+            total_days = "%g" % self.number_of_days
+        reason = (self.notes or self.private_name or self.name or "").strip() or "—"
+        return {
+            "requester": requester_name,
+            "id_hrm": id_hrm,
+            "department": department,
+            "period": period_text,
+            "total_days": total_days or "—",
+            "reason": reason,
+        }
+
     def _notify_responsible_current_turn_via_approval_bot(self, approver_user):
         """Send Discuss DM from approval bot to current responsible approver."""
         self.ensure_one()
@@ -3197,18 +3235,25 @@ class HolidaysRequest(models.Model):
                 bool(approver_user and approver_user.partner_id),
             )
             return
-        requester_name = self.employee_id.name or self.employee_id.display_name or self.display_name
-        leave_date = self.request_date_from or (self.date_from and self.date_from.date())
-        leave_date_text = leave_date.strftime("%d/%m/%Y") if leave_date else ""
+        details = self._get_approval_bot_leave_notification_details()
         intro = Markup(
             _(
-                "Nhân viên: <b>{requester}</b> xin nghỉ phép<br/>"
-                "Ngày nghỉ: <b>{date}</b><br/>"
-                "Vui lòng bấm vào Time Off để xác nhận hoặc từ chối đơn.<br/><br/>"
+                "<b>ĐƠN XIN NGHỈ PHÉP</b><br/>"
+                "Nhân viên: <b>{requester}</b><br/>"
+                "Mã nhân viên: <b>{id_hrm}</b><br/>"
+                "Bộ phận: <b>{department}</b><br/>"
+                "Thời gian nghỉ: <b>{period}</b><br/>"
+                "Tổng số ngày nghỉ: <b>{total_days}</b><br/>"
+                "Lý do: <b>{reason}</b><br/>"
+                'Vui lòng bấm vào "Time Off" để phê duyệt<br/><br/>'
             )
         ).format(
-            requester=escape(str(requester_name)),
-            date=escape(str(leave_date_text)),
+            requester=escape(str(details["requester"])),
+            id_hrm=escape(str(details["id_hrm"])),
+            department=escape(str(details["department"])),
+            period=escape(str(details["period"])),
+            total_days=escape(str(details["total_days"])),
+            reason=escape(str(details["reason"])),
         )
         button_html = self._notify_approval_bot_leave_form_open_button_markup()
         body = intro + button_html

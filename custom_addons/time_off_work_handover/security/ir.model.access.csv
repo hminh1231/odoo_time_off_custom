@@ -1,0 +1,4 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_hr_leave_handover_acceptance_officer,time_off_work_handover.handover.acceptance.officer,model_hr_leave_handover_acceptance,hr_holidays.group_hr_holidays_user,1,1,1,1
+access_hr_leave_handover_acceptance_manager,time_off_work_handover.handover.acceptance.manager,model_hr_leave_handover_acceptance,hr_holidays.group_hr_holidays_manager,1,1,1,1
+access_hr_leave_handover_refuse_wizard_user,time_off_work_handover.handover.refuse.wizard.user,model_hr_leave_handover_refuse_wizard,base.group_user,1,1,1,1

@@ -30,15 +30,7 @@
                 />
             </xpath>
             <xpath expr="//field[@name='name']" position="after">
-                <field name="is_emergency_leave" invisible="1"/>
                 <field name="can_skip_work_handover" invisible="1"/>
-                <div
-                    class="alert alert-warning"
-                    role="status"
-                    invisible="not is_emergency_leave"
-                >
-                    This request is recorded as emergency leave (insufficient advance notice).
-                </div>
                 <field name="handover_escalation_pick_prompt" invisible="1"/>
                 <field name="handover_assigned_recipient_banner" invisible="1"/>
                 <field name="handover_recipient_list_readonly" invisible="1"/>
@@ -195,16 +187,7 @@
                 <attribute name="readonly">id</attribute>
                 <attribute name="options">{'no_create': True, 'no_open': True, 'no_create_edit': True, 'request_type': 'leave'}</attribute>
             </xpath>
-            <xpath expr="//sheet" position="inside">
-                <field name="is_emergency_leave" invisible="1"/>
-                <div
-                    class="alert alert-warning mb-2"
-                    role="status"
-                    invisible="not is_emergency_leave"
-                >
-                    This request is recorded as emergency leave (insufficient advance notice).
-                </div>
-                <field name="can_respond_handover" invisible="1"/>
+            <xpath expr="//sheet" position="inside"><field name="can_respond_handover" invisible="1"/>
                 <field name="handover_escalation_pick_prompt" invisible="1"/>
                 <field name="handover_assigned_recipient_banner" invisible="1"/>
                 <field name="handover_recipient_list_readonly" invisible="1"/>
