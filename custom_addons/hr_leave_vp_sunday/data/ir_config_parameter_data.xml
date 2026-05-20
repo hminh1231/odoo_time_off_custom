@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="config_vp_sunday_mode_default" model="ir.config_parameter">
+        <field name="key">hr_leave_vp_sunday.mode</field>
+        <field name="value">block</field>
+    </record>
+</odoo>

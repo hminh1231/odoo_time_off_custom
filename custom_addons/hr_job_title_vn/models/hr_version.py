@@ -7,6 +7,7 @@ JOB_TITLE_SELECTION = [
     ("nhân viên", "Nhân viên"),
     ("trưởng nhóm", "Trưởng nhóm"),
     ("cửa hàng trưởng", "Cửa hàng trưởng"),
+    ("rsm", "RSM"),
     ("asm", "ASM"),
     ("trưởng bộ phận", "Trưởng bộ phận"),
     ("trưởng phòng", "Trưởng phòng"),

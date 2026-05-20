@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="res_config_settings_view_form_inherit_hr_leave_vp_sunday" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.inherit.hr.leave.vp.sunday</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="hr.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//block[@name='work_organization_setting_container']" position="after">
+                <block title="Time Off (VP)" name="hr_leave_vp_sunday_setting_container">
+                    <setting
+                        id="vp_sunday_mode_setting"
+                        string="Sunday rules for VP department"
+                        help="Employees with department code VP (Mã bộ phận). Block prevents selecting Sundays; Exclude allows selection but does not count them.">
+                        <field name="vp_sunday_mode" class="o_light_label"/>
+                    </setting>
+                </block>
+            </xpath>
+        </field>
+    </record>
+</odoo>

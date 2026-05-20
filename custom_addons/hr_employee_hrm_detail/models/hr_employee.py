@@ -1,8 +1,79 @@
-from odoo import fields, models
+from odoo import api, fields, models
+from odoo.exceptions import ValidationError
+from odoo.tools.translate import _
 
 
 class HrEmployee(models.Model):
     _inherit = 'hr.employee'
+
+    def _get_id_hrm_duplicate(self, id_hrm):
+        """Return another employee using the same ID HRM, or an empty recordset."""
+        id_hrm = (id_hrm or '').strip()
+        if not id_hrm:
+            return self.env['hr.employee']
+        domain = [('id_hrm', '=', id_hrm)]
+        if self.ids:
+            domain.append(('id', 'not in', self.ids))
+        return self.env['hr.employee'].search(domain, limit=1)
+
+    def _raise_id_hrm_duplicate_error(self, id_hrm, duplicate):
+        id_hrm = (id_hrm or '').strip()
+        raise ValidationError(
+            _('ID HRM %s đã tồn tại cho nhân viên %s') % (id_hrm, duplicate.name)
+        )
+
+    @api.constrains('id_hrm')
+    def _check_id_hrm_unique(self):
+        for employee in self:
+            id_hrm = (employee.id_hrm or '').strip()
+            if not id_hrm:
+                continue
+            duplicate = employee._get_id_hrm_duplicate(id_hrm)
+            if duplicate:
+                employee._raise_id_hrm_duplicate_error(id_hrm, duplicate)
+
+    @api.onchange('id_hrm')
+    def _onchange_id_hrm_unique(self):
+        id_hrm = (self.id_hrm or '').strip()
+        if not id_hrm:
+            return
+        self.id_hrm = id_hrm
+        duplicate = self._get_id_hrm_duplicate(id_hrm)
+        if duplicate:
+            self.id_hrm = False
+            return {
+                'warning': {
+                    'title': _('ID HRM trùng'),
+                    'message': _('ID HRM %s đã tồn tại cho nhân viên %s')
+                    % (id_hrm, duplicate.name),
+                },
+            }
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            id_hrm = (vals.get('id_hrm') or '').strip()
+            if not id_hrm:
+                continue
+            vals['id_hrm'] = id_hrm
+            duplicate = self._get_id_hrm_duplicate(id_hrm)
+            if duplicate:
+                vals['id_hrm'] = False
+                self._raise_id_hrm_duplicate_error(id_hrm, duplicate)
+        return super().create(vals_list)
+
+    def write(self, vals):
+        if 'id_hrm' in vals:
+            id_hrm = (vals.get('id_hrm') or '').strip()
+            vals = dict(vals, id_hrm=id_hrm or False)
+            if id_hrm:
+                for employee in self:
+                    duplicate = employee._get_id_hrm_duplicate(id_hrm)
+                    if duplicate:
+                        vals['id_hrm'] = False
+                        employee.id_hrm = False
+                        employee._raise_id_hrm_duplicate_error(id_hrm, duplicate)
+        return super().write(vals)
 
     # Regional and ID Information
     mien = fields.Char(string='Miền', groups='hr.group_hr_user')
@@ -24,7 +95,12 @@ class HrEmployee(models.Model):
     ], string='Trạng thái nhân viên', default='active', groups='hr.group_hr_user')
 
     # Department Information
-    ma_bo_phan = fields.Char(string='Mã bộ phận', groups='hr.group_hr_user')
+    ma_bo_phan = fields.Selection([
+        ('BẮC', 'BẮC'),
+        ('NAM', 'NAM'),
+        ('ĐTT', 'ĐTT'),
+        ('VP', 'VP'),
+    ], string='Mã bộ phận', groups='hr.group_hr_user')
     ten_bo_phan = fields.Char(string='Tên bộ phận', groups='hr.group_hr_user')
     bp_ke_toan = fields.Char(string='BP Kế toán', groups='hr.group_hr_user')
 
