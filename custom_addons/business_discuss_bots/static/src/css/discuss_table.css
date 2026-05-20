@@ -1,0 +1,4 @@
+.o-discuss-text-body:has(table) {
+    overflow-y: visible !important;
+    display: block !important;
+}

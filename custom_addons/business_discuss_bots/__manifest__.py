@@ -12,6 +12,7 @@
     ],
     "assets": {
         "web.assets_backend": [
+            "business_discuss_bots/static/src/css/discuss_table.css",
             "business_discuss_bots/static/src/js/thread_model_patch.js",
         ],
     },
