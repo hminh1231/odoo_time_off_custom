@@ -31,6 +31,7 @@ class HolidaysType(models.Model):
         selection_add=[
             ("multi_step_6", "6-step approval (Demo)"),
             ("employee_hr_responsibles", "Approve via employee HR responsibles"),
+            ("vp_chain", "Store chain approval (by job title)"),
         ],
     )
 

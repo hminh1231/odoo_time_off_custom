@@ -147,3 +147,10 @@ class HrEmployee(models.Model):
 
     # Former Employee Flag
     nhan_vien_cu = fields.Boolean(string='Nhân viên cũ', default=False, groups='hr.group_hr_user')
+
+    # Time off summary (manual, HR-managed)
+    phep_chuan = fields.Float(string='Phép chuẩn', groups='hr.group_hr_user')
+    tong_so_phep = fields.Float(string='Tổng số phép', groups='hr.group_hr_user')
+    da_su_dung = fields.Float(string='Đã sử dụng', groups='hr.group_hr_user')
+    con_lai = fields.Float(string='Còn lại', groups='hr.group_hr_user')
+    ngay_het_han = fields.Date(string='Ngày hết hạn', groups='hr.group_hr_user')

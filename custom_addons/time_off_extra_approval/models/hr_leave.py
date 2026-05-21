@@ -19,6 +19,10 @@ _logger = logging.getLogger(__name__)
 
 _MULTI_STEP_RESET_CTX = "time_off_multi_step_reset_skip"
 
+# All validation_type values that share the responsible-approval-line machinery.
+# "vp_chain" is the DB selection key for the "Store chain approval" flow.
+_RESPONSIBLE_FLOW_TYPES = ("employee_hr_responsibles", "vp_chain")
+
 # Order for sequential HR-responsible approval: by job title (keys from hr_job_title_vn), lowest first.
 # Excludes the generic employee tier so approvers map to management chain only.
 _HR_RESPONSIBLE_APPROVAL_JOB_TITLE_ORDER = tuple(
@@ -854,7 +858,7 @@ class HolidaysRequest(models.Model):
                 # Determine approval-flow state from underlying workflow data
                 # (instead of relying on a display label compute order).
                 in_approval_flow = False
-                if leave.validation_type == "employee_hr_responsibles":
+                if leave.validation_type in _RESPONSIBLE_FLOW_TYPES:
                     in_approval_flow = bool(
                         leave.responsible_approval_line_ids.filtered(
                             lambda line: line.state == "pending"
@@ -1105,7 +1109,7 @@ class HolidaysRequest(models.Model):
                 leave.extra_approver_user_ids = step and step._get_all_approver_users() or self.env["res.users"]
                 continue
 
-            if leave.validation_type == "employee_hr_responsibles":
+            if leave.validation_type in _RESPONSIBLE_FLOW_TYPES:
                 leave.extra_approver_user_ids = leave._get_responsible_approval_users()
                 continue
 
@@ -1152,14 +1156,15 @@ class HolidaysRequest(models.Model):
                 continue
 
             # Custom flows: compute from current workflow state directly.
-            if leave.validation_type == "employee_hr_responsibles":
+            if leave.validation_type in _RESPONSIBLE_FLOW_TYPES:
                 pending = leave.responsible_approval_line_ids.filtered(
                     lambda l: l.state == "pending" and l.user_id and not l.user_id.share
                 ).sorted(lambda l: (l.sequence, l.id))
                 if not pending:
                     leave.approval_actionable_user_ids = Users
                     continue
-                mode = leave.holiday_status_id.employee_responsible_approval_mode or "any"
+                # store chain is always sequential; employee_hr_responsibles respects its configured mode.
+                mode = "sequential" if leave.validation_type == "vp_chain" else (leave.holiday_status_id.employee_responsible_approval_mode or "any")
                 if mode == "sequential":
                     leave.approval_actionable_user_ids = leave._responsible_pending_current_wave().mapped("user_id")
                 else:
@@ -2458,7 +2463,7 @@ class HolidaysRequest(models.Model):
         )
         if self._handover_ready_for_approval():
             self._notify_requester_handover_complete_via_bot()
-            if self.validation_type == "employee_hr_responsibles" and self.state in ("confirm", "validate1"):
+            if self.validation_type in _RESPONSIBLE_FLOW_TYPES and self.state in ("confirm", "validate1"):
                 self._notify_responsible_current_turn()
         return True
 
@@ -2742,9 +2747,8 @@ class HolidaysRequest(models.Model):
             reset_leaves.with_context(**{_MULTI_STEP_RESET_CTX: True}).write({"multi_step_current": 1})
         self._ensure_responsible_approval_lines()
         to_timer = self.filtered(
-            lambda l: l.validation_type == "employee_hr_responsibles"
+            lambda l: l.validation_type in _RESPONSIBLE_FLOW_TYPES
             and l.state in ("confirm", "validate1")
-            and (l.holiday_status_id.employee_responsible_approval_mode or "any") == "sequential"
             and l.responsible_approval_line_ids
         )
         if to_timer:
@@ -2756,7 +2760,7 @@ class HolidaysRequest(models.Model):
                 submit_notify_target._notify_handover_recipients_submit_via_bot()
             if vals.get("state") == "confirm" and responsible_submit_prev_states:
                 submit_responsible_leaves = self.filtered(
-                    lambda l: l.validation_type == "employee_hr_responsibles"
+                    lambda l: l.validation_type in _RESPONSIBLE_FLOW_TYPES
                     and l.state == "confirm"
                     and responsible_submit_prev_states.get(l.id) != "confirm"
                 )
@@ -2817,7 +2821,7 @@ class HolidaysRequest(models.Model):
     def _compute_can_approve(self):
         super()._compute_can_approve()
         for leave in self.filtered(
-            lambda h: h.validation_type in ("employee_hr_responsibles", "multi_step_6")
+            lambda h: h.validation_type in (*_RESPONSIBLE_FLOW_TYPES, "multi_step_6")
         ):
             leave.can_approve = False
         for leave in self:
@@ -2836,7 +2840,7 @@ class HolidaysRequest(models.Model):
     def _compute_can_validate(self):
         super()._compute_can_validate()
         for leave in self.filtered(
-            lambda h: h.validation_type in ("employee_hr_responsibles", "multi_step_6")
+            lambda h: h.validation_type in (*_RESPONSIBLE_FLOW_TYPES, "multi_step_6")
         ):
             leave.can_validate = False
         for leave in self:
@@ -2855,7 +2859,7 @@ class HolidaysRequest(models.Model):
     def _compute_can_refuse(self):
         super()._compute_can_refuse()
         for leave in self.filtered(
-            lambda h: h.validation_type in ("employee_hr_responsibles", "multi_step_6")
+            lambda h: h.validation_type in (*_RESPONSIBLE_FLOW_TYPES, "multi_step_6")
         ):
             leave.can_refuse = False
         for leave in self:
@@ -2868,7 +2872,7 @@ class HolidaysRequest(models.Model):
         return user in self.extra_approver_user_ids
 
     def _get_responsible_for_approval(self):
-        if self.validation_type == "employee_hr_responsibles":
+        if self.validation_type in _RESPONSIBLE_FLOW_TYPES:
             return self._get_responsible_approval_users()
         if self.validation_type == "multi_step_6":
             return self._get_multi_step_approvers()
@@ -2907,17 +2911,19 @@ class HolidaysRequest(models.Model):
         for leave in self:
             can = False
             # validate1: can appear on mixed/old data; still allow Responsible actions if approval lines exist.
-            if leave.validation_type == "employee_hr_responsibles" and leave.state in ("confirm", "validate1"):
+            if leave.validation_type in _RESPONSIBLE_FLOW_TYPES and leave.state in ("confirm", "validate1"):
                 if leave.state == "validate1" and not leave.responsible_approval_line_ids:
                     can = False
                 else:
-                    mode = leave.holiday_status_id.employee_responsible_approval_mode
+                    # store chain is always sequential.
+                    is_store = leave.validation_type == "vp_chain"
+                    mode = "sequential" if is_store else (leave.holiday_status_id.employee_responsible_approval_mode or "any")
                     approvers = leave._get_responsible_approval_users()
                     is_manager = leave.env.user.has_group("hr_holidays.group_hr_holidays_manager")
                     # Sequential: every user (including Time Off Administrators) must wait for the current
                     # pending line so "Waiting For Me" / Kanban buttons match chain order — not all admins at once.
                     if mode == "sequential":
-                        if leave._employee_hr_blocks_self_approval_non_director(leave.env.user):
+                        if not is_store and leave._employee_hr_blocks_self_approval_non_director(leave.env.user):
                             can = False
                         elif (
                             not leave.responsible_approval_line_ids
@@ -2970,13 +2976,14 @@ class HolidaysRequest(models.Model):
             if leave.state not in ("confirm", "validate1"):
                 continue
             vt = leave.validation_type
-            if vt == "employee_hr_responsibles":
+            if vt in _RESPONSIBLE_FLOW_TYPES:
                 pending = leave.responsible_approval_line_ids.filtered(
                     lambda line: line.state == "pending"
                 ).sorted(lambda ln: (ln.sequence, ln.id))
                 if not pending:
                     continue
-                mode = leave.holiday_status_id.employee_responsible_approval_mode or "any"
+                # store chain is always sequential.
+                mode = "sequential" if vt == "vp_chain" else (leave.holiday_status_id.employee_responsible_approval_mode or "any")
                 total = len(leave.responsible_approval_line_ids)
                 if mode == "sequential":
                     wave = leave._responsible_pending_current_wave()
@@ -3012,31 +3019,43 @@ class HolidaysRequest(models.Model):
     def _init_responsible_approval_lines(self):
         line_model = self.env["hr.leave.responsible.approval"].sudo()
         for leave in self:
-            if leave.validation_type != "employee_hr_responsibles" or not leave.employee_id:
+            if leave.validation_type not in _RESPONSIBLE_FLOW_TYPES or not leave.employee_id:
                 continue
             if leave.responsible_approval_line_ids:
                 continue
             lt = leave.holiday_status_id
             approvers = leave._get_responsible_approval_users()
-            if leave._is_multi_director_special_employee() and (
-                not leave._employee_hr_chain_contains_director(approvers)
-            ):
-                raise UserError(
-                    _(
-                        "Loại nghỉ được cấu hình nhân viên đặc biệt (chặn Giám đốc) nhưng không có người duyệt nào "
-                        "mang chức danh Giám đốc (user nội bộ) trong chuỗi duyệt. Kiểm tra sơ đồ tổ chức hoặc bảng "
-                        "thứ tự Giám đốc trên loại nghỉ."
-                    )
-                )
-            if leave._is_multi_director_special_employee() and lt.special_director_sequential_approval:
-                if lt.special_director_order_line_ids and not leave._get_configured_director_order_users():
+
+            # Director-chain validations only apply to employee_hr_responsibles.
+            if leave.validation_type == "employee_hr_responsibles":
+                if leave._is_multi_director_special_employee() and (
+                    not leave._employee_hr_chain_contains_director(approvers)
+                ):
                     raise UserError(
                         _(
-                            "Đã bật 'Duyệt theo thứ tự Giám đốc' và có dòng trong bảng, nhưng không có Giám đốc nào "
-                            "hợp lệ (chức danh Giám đốc và user nội bộ). Vui lòng sửa danh sách."
+                            "Loại nghỉ được cấu hình nhân viên đặc biệt (chặn Giám đốc) nhưng không có người duyệt nào "
+                            "mang chức danh Giám đốc (user nội bộ) trong chuỗi duyệt. Kiểm tra sơ đồ tổ chức hoặc bảng "
+                            "thứ tự Giám đốc trên loại nghỉ."
                         )
                     )
+                if leave._is_multi_director_special_employee() and lt.special_director_sequential_approval:
+                    if lt.special_director_order_line_ids and not leave._get_configured_director_order_users():
+                        raise UserError(
+                            _(
+                                "Đã bật 'Duyệt theo thứ tự Giám đốc' và có dòng trong bảng, nhưng không có Giám đốc nào "
+                                "hợp lệ (chức danh Giám đốc và user nội bộ). Vui lòng sửa danh sách."
+                            )
+                        )
+
             if not approvers:
+                if leave.validation_type == "vp_chain":
+                    raise UserError(
+                        _(
+                            "Không tìm thấy người duyệt nào cho luồng store chain. "
+                            "Kiểm tra chức danh công việc và Mã bộ phận của nhân viên, "
+                            "và đảm bảo mã chấm công của các cấp phê duyệt đã được cấu hình."
+                        )
+                    )
                 if lt.employee_responsible_source == "org_chart":
                     raise UserError(
                         _(
@@ -3045,9 +3064,10 @@ class HolidaysRequest(models.Model):
                         )
                     )
                 raise UserError(_("Nhân viên này chưa được cấu hình người phụ trách HR."))
+
             slot_limit = (
                 _MAX_EMPLOYEE_HR_RESPONSIBLES_MULTI_DIRECTOR
-                if leave._is_multi_director_special_employee()
+                if leave.validation_type == "employee_hr_responsibles" and leave._is_multi_director_special_employee()
                 else _MAX_EMPLOYEE_HR_RESPONSIBLES
             )
             if len(approvers) > slot_limit:
@@ -3065,7 +3085,12 @@ class HolidaysRequest(models.Model):
                     "user_id": user.id,
                     "sequence": seq,
                 }
-                if lt.employee_responsible_approval_mode == "sequential" and seq == min_seq:
+                # store chain is always sequential; employee_hr_responsibles uses its configured mode.
+                is_sequential = (
+                    leave.validation_type == "vp_chain"
+                    or lt.employee_responsible_approval_mode == "sequential"
+                )
+                if is_sequential and seq == min_seq:
                     vals["pending_since"] = now
                 line_model.create(vals)
 
@@ -3077,7 +3102,7 @@ class HolidaysRequest(models.Model):
         Step label until someone saved again.
         """
         to_init = self.filtered(
-            lambda l: l.validation_type == "employee_hr_responsibles"
+            lambda l: l.validation_type in _RESPONSIBLE_FLOW_TYPES
             and l.state == "confirm"
             and l.employee_id
             and not l.responsible_approval_line_ids
@@ -3090,11 +3115,12 @@ class HolidaysRequest(models.Model):
         )
 
     def _responsible_backfill_pending_since_if_missing(self):
-        """Sequential HR Responsibles: active pending step must have pending_since or timeout never runs."""
+        """Sequential responsible-flow: active pending step must have pending_since or timeout never runs."""
         for leave in self:
-            if leave.validation_type != "employee_hr_responsibles":
+            if leave.validation_type not in _RESPONSIBLE_FLOW_TYPES:
                 continue
-            if leave.holiday_status_id.employee_responsible_approval_mode != "sequential":
+            # store chain is always sequential; employee_hr_responsibles checks its mode.
+            if leave.validation_type == "employee_hr_responsibles" and leave.holiday_status_id.employee_responsible_approval_mode != "sequential":
                 continue
             wave = leave._responsible_pending_current_wave()
             if not wave:
@@ -3109,7 +3135,7 @@ class HolidaysRequest(models.Model):
     def _notify_responsible_approvers_submission(self):
         """FYI notification to all configured approvers when a leave is submitted."""
         self.ensure_one()
-        if self.validation_type != "employee_hr_responsibles":
+        if self.validation_type not in _RESPONSIBLE_FLOW_TYPES:
             return
         users = self._get_responsible_approval_users().filtered(
             lambda u: u.partner_id and not u.share
@@ -3129,7 +3155,7 @@ class HolidaysRequest(models.Model):
     def _notify_responsible_current_turn(self, user=None):
         """Notify approver(s) for the active sequential wave (one user, or all parallel directors)."""
         self.ensure_one()
-        if self.validation_type != "employee_hr_responsibles":
+        if self.validation_type not in _RESPONSIBLE_FLOW_TYPES:
             _logger.info(
                 "time_off_extra_approval: skip current-turn notify leave_id=%s reason=validation_type_%s",
                 self.id,
@@ -3380,11 +3406,12 @@ class HolidaysRequest(models.Model):
         self.ensure_one()
         step_label = self.approval_current_step_label or _("Đang chờ duyệt")
         approver_descriptions = []
-        if self.validation_type == "employee_hr_responsibles":
+        if self.validation_type in _RESPONSIBLE_FLOW_TYPES:
             pending = self.responsible_approval_line_ids.filtered(
                 lambda line: line.state == "pending"
             ).sorted("sequence")
-            mode = self.holiday_status_id.employee_responsible_approval_mode or "any"
+            # store chain is always sequential.
+            mode = "sequential" if self.validation_type == "vp_chain" else (self.holiday_status_id.employee_responsible_approval_mode or "any")
             current_lines = (
                 self._responsible_pending_current_wave()
                 if mode == "sequential"
@@ -3440,7 +3467,7 @@ class HolidaysRequest(models.Model):
         except AttributeError:
             res = True
         subset = self.filtered(
-            lambda l: l.validation_type == "employee_hr_responsibles" and l.state == "confirm"
+            lambda l: l.validation_type in _RESPONSIBLE_FLOW_TYPES and l.state == "confirm"
         )
         if subset:
             subset._ensure_responsible_approval_lines()
@@ -3464,7 +3491,7 @@ class HolidaysRequest(models.Model):
         # Notify once when records are created directly in submit state.
         records.filtered(lambda l: l.state == "confirm")._notify_handover_recipients_submit_via_bot()
         submit_responsible_leaves = records.filtered(
-            lambda l: l.validation_type == "employee_hr_responsibles" and l.state == "confirm"
+            lambda l: l.validation_type in _RESPONSIBLE_FLOW_TYPES and l.state == "confirm"
         )
         if submit_responsible_leaves:
             for leave in submit_responsible_leaves:
@@ -3523,6 +3550,14 @@ class HolidaysRequest(models.Model):
                     if not is_manager and self.env.user not in holiday._get_responsible_approval_users():
                         if raise_if_not_possible:
                             raise UserError(_("Bạn không được phép duyệt/từ chối đơn nghỉ phép này trong luồng phụ trách hiện tại."))
+                        return False
+                continue
+
+            if val_type == "vp_chain":
+                if state in ("validate", "refuse"):
+                    if not is_manager and self.env.user not in holiday._get_responsible_approval_users():
+                        if raise_if_not_possible:
+                            raise UserError(_("Bạn không được phép duyệt/từ chối đơn nghỉ phép này trong luồng store chain."))
                         return False
                 continue
 
@@ -3681,21 +3716,23 @@ class HolidaysRequest(models.Model):
 
     def action_responsible_approve(self):
         self.ensure_one()
-        if self.validation_type != "employee_hr_responsibles":
+        if self.validation_type not in _RESPONSIBLE_FLOW_TYPES:
             raise UserError(_("Đơn nghỉ phép này chưa được cấu hình luồng Người phụ trách HR của nhân viên."))
         if self.state not in ("confirm", "validate1"):
             raise UserError(_("Đơn nghỉ phép phải ở trạng thái 'Chờ duyệt' hoặc 'Duyệt cấp 2'."))
         self._ensure_handover_ready_for_approval()
 
+        is_store = self.validation_type == "vp_chain"
         is_manager = self.env.user.has_group("hr_holidays.group_hr_holidays_manager")
         is_responsible = self.env.user in self._get_responsible_approval_users()
-        mode = self.holiday_status_id.employee_responsible_approval_mode
+        # store chain is always sequential.
+        mode = "sequential" if is_store else (self.holiday_status_id.employee_responsible_approval_mode or "any")
         if mode == "sequential":
             if not is_responsible:
                 raise UserError(_("Bạn không được phép duyệt đơn nghỉ phép này."))
         elif not is_manager and not is_responsible:
             raise UserError(_("Bạn không được phép duyệt đơn nghỉ phép này."))
-        if (mode == "sequential" or not is_manager) and self._employee_hr_blocks_self_approval_non_director():
+        if not is_store and (mode == "sequential" or not is_manager) and self._employee_hr_blocks_self_approval_non_director():
             raise UserError(
                 _(
                     "Only employees with job title \"Director\" may approve their own time off in this workflow. "
@@ -3745,21 +3782,22 @@ class HolidaysRequest(models.Model):
         self.ensure_one()
         if not (reason or "").strip():
             return self.action_open_responsible_refuse_wizard()
-        if self.validation_type != "employee_hr_responsibles":
+        if self.validation_type not in _RESPONSIBLE_FLOW_TYPES:
             raise UserError(_("Đơn nghỉ phép này chưa được cấu hình luồng Người phụ trách HR của nhân viên."))
         if self.state not in ("confirm", "validate1"):
             raise UserError(_("Đơn nghỉ phép phải ở trạng thái 'Chờ duyệt' hoặc 'Duyệt cấp 2'."))
         self._ensure_handover_ready_for_approval()
 
+        is_store = self.validation_type == "vp_chain"
         is_manager = self.env.user.has_group("hr_holidays.group_hr_holidays_manager")
         is_responsible = self.env.user in self._get_responsible_approval_users()
-        mode = self.holiday_status_id.employee_responsible_approval_mode
+        mode = "sequential" if is_store else (self.holiday_status_id.employee_responsible_approval_mode or "any")
         if mode == "sequential":
             if not is_responsible:
                 raise UserError(_("Bạn không được phép từ chối đơn nghỉ phép này."))
         elif not is_manager and not is_responsible:
             raise UserError(_("Bạn không được phép từ chối đơn nghỉ phép này."))
-        if (mode == "sequential" or not is_manager) and self._employee_hr_blocks_self_approval_non_director():
+        if not is_store and (mode == "sequential" or not is_manager) and self._employee_hr_blocks_self_approval_non_director():
             raise UserError(
                 _(
                     "Only employees with job title \"Director\" may refuse their own time off in this workflow. "
@@ -3854,11 +3892,11 @@ class HolidaysRequest(models.Model):
 
     @api.model
     def cron_escalate_responsible_approval_timeouts(self):
-        """Sequential Employee HR Responsibles: skip current step after escalation delay (default 2h)."""
+        """Sequential responsible flows (employee_hr_responsibles, vp_chain/store chain): skip current step after escalation delay."""
         leaves = self.sudo().search(
             [
                 ("state", "in", ("confirm", "validate1")),
-                ("validation_type", "=", "employee_hr_responsibles"),
+                ("validation_type", "in", list(_RESPONSIBLE_FLOW_TYPES)),
             ]
         )
         for leave in leaves:

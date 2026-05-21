@@ -7,6 +7,7 @@
         "hr_holidays",
         "hr_employee_multi_responsible",
         "hr_job_title_vn",
+        "hr_employee_hrm_detail",
         "business_discuss_bots",
     ],
     "post_init_hook": "post_init_hook",
