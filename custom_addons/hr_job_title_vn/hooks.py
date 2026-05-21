@@ -14,9 +14,13 @@ def pre_init_hook(env):
         WHERE job_title IS NOT NULL
           AND job_title NOT IN (
               'nhân viên',
+              'giám sát',
               'trưởng nhóm',
               'cửa hàng trưởng',
               'asm',
+              'rsm',
+              'admin',
+              'admin tổng',
               'trưởng bộ phận',
               'trưởng phòng',
               'trưởng phòng hcns',

@@ -5,10 +5,13 @@ from odoo import fields, models
 # Static list: Odoo passes the model as first arg to callable selection helpers; use a list, not a 0-arg function.
 JOB_TITLE_SELECTION = [
     ("nhân viên", "Nhân viên"),
+    ("giám sát", "Giám sát"),
     ("trưởng nhóm", "Trưởng nhóm"),
     ("cửa hàng trưởng", "Cửa hàng trưởng"),
-    ("rsm", "RSM"),
     ("asm", "ASM"),
+    ("rsm", "RSM"),
+    ("admin", "Admin"),
+    ("admin tổng", "Admin tổng"),
     ("trưởng bộ phận", "Trưởng bộ phận"),
     ("trưởng phòng", "Trưởng phòng"),
     ("trưởng phòng hcns", "Trưởng phòng HCNS"),
@@ -24,11 +27,3 @@ class HrVersion(models.Model):
         string="Job Title",
         tracking=True,
     )
-
-    def write(self, vals):
-        res = super().write(vals)
-        if "job_title" in vals:
-            for ver in self:
-                if ver.employee_id:
-                    ver.employee_id._check_manager_job_title_hierarchy()
-        return res

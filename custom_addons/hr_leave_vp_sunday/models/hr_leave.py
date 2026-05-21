@@ -5,7 +5,7 @@ from odoo import api, models
 from odoo.exceptions import ValidationError
 from odoo.tools.translate import _
 
-from .hr_employee import MODE_BLOCK, VP_DEPARTMENT_CODE
+from .hr_employee import MODE_BLOCK, VP_REGION_CODE
 
 
 class HrLeave(models.Model):
@@ -13,7 +13,7 @@ class HrLeave(models.Model):
 
     def _vp_sunday_block_applies(self):
         self.ensure_one()
-        if not self.employee_id or self.employee_id.ma_bo_phan != VP_DEPARTMENT_CODE:
+        if not self.employee_id or self.employee_id.mien != VP_REGION_CODE:
             return False
         return self.env["hr.employee"]._vp_sunday_mode() == MODE_BLOCK
 
@@ -40,7 +40,7 @@ class HrLeave(models.Model):
             ):
                 raise ValidationError(
                     _(
-                        "Nhân viên bộ phận VP không được đăng ký nghỉ phép vào ngày Chủ nhật."
+                        "Nhân viên miền VP không được đăng ký nghỉ phép vào ngày Chủ nhật."
                     )
                 )
 
@@ -55,7 +55,7 @@ class HrLeave(models.Model):
                 "warning": {
                     "title": _("Chủ nhật không được phép"),
                     "message": _(
-                        "Nhân viên bộ phận VP không được chọn ngày Chủ nhật trong khoảng nghỉ phép."
+                        "Nhân viên miền VP không được chọn ngày Chủ nhật trong khoảng nghỉ phép."
                     ),
                 }
             }

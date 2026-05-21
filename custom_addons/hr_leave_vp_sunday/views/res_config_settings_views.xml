@@ -6,11 +6,11 @@
         <field name="inherit_id" ref="hr.res_config_settings_view_form"/>
         <field name="arch" type="xml">
             <xpath expr="//block[@name='work_organization_setting_container']" position="after">
-                <block title="Time Off (VP)" name="hr_leave_vp_sunday_setting_container">
+                <block title="Time Off (miền VP)" name="hr_leave_vp_sunday_setting_container">
                     <setting
                         id="vp_sunday_mode_setting"
-                        string="Sunday rules for VP department"
-                        help="Employees with department code VP (Mã bộ phận). Block prevents selecting Sundays; Exclude allows selection but does not count them.">
+                        string="Sunday rules for VP region"
+                        help="Employees with region (Miền) VP. Block prevents selecting Sundays; Exclude allows selection but does not count them.">
                         <field name="vp_sunday_mode" class="o_light_label"/>
                     </setting>
                 </block>

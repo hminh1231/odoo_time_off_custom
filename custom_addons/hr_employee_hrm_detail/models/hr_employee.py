@@ -76,7 +76,12 @@ class HrEmployee(models.Model):
         return super().write(vals)
 
     # Regional and ID Information
-    mien = fields.Char(string='Miền', groups='hr.group_hr_user')
+    mien = fields.Selection([
+        ('Bắc', 'Bắc'),
+        ('Nam', 'Nam'),
+        ('ĐTT', 'ĐTT'),
+        ('VP', 'VP'),
+    ], string='Miền', groups='hr.group_hr_user')
     id_hrm = fields.Char(string='ID HRM', groups='hr.group_hr_user')
 
     # Accounting and Attendance Codes
@@ -95,12 +100,7 @@ class HrEmployee(models.Model):
     ], string='Trạng thái nhân viên', default='active', groups='hr.group_hr_user')
 
     # Department Information
-    ma_bo_phan = fields.Selection([
-        ('BẮC', 'BẮC'),
-        ('NAM', 'NAM'),
-        ('ĐTT', 'ĐTT'),
-        ('VP', 'VP'),
-    ], string='Mã bộ phận', groups='hr.group_hr_user')
+    ma_bo_phan = fields.Char(string='Mã bộ phận', groups='hr.group_hr_user')
     ten_bo_phan = fields.Char(string='Tên bộ phận', groups='hr.group_hr_user')
     bp_ke_toan = fields.Char(string='BP Kế toán', groups='hr.group_hr_user')
 

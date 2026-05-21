@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 from odoo import api, fields, models
 
-VP_DEPARTMENT_CODE = "VP"
+VP_REGION_CODE = "VP"
 MODE_BLOCK = "block"
 MODE_EXCLUDE = "exclude"
 ICP_MODE_KEY = "hr_leave_vp_sunday.mode"
@@ -20,9 +20,9 @@ class HrEmployee(models.Model):
             .get_param(ICP_MODE_KEY, MODE_BLOCK)
         )
 
-    def _is_vp_department(self):
+    def _is_vp_region(self):
         self.ensure_one()
-        return self.ma_bo_phan == VP_DEPARTMENT_CODE
+        return self.mien == VP_REGION_CODE
 
     @api.model
     def _mark_sundays_unusual(self, unusual_days, start_date, end_date):
@@ -37,7 +37,7 @@ class HrEmployee(models.Model):
         unusual_days = super()._get_unusual_days(date_from, date_to)
         if self._vp_sunday_mode() != MODE_BLOCK:
             return unusual_days
-        vp_employees = self.filtered(lambda e: e._is_vp_department())
+        vp_employees = self.filtered(lambda e: e._is_vp_region())
         if not vp_employees:
             return unusual_days
         date_from_date = datetime.strptime(date_from, "%Y-%m-%d %H:%M:%S").date()
@@ -50,7 +50,7 @@ class HrEmployee(models.Model):
 
     def _vp_sunday_exclude_applies(self):
         self.ensure_one()
-        return self._is_vp_department() and self._vp_sunday_mode() == MODE_EXCLUDE
+        return self._is_vp_region() and self._vp_sunday_mode() == MODE_EXCLUDE
 
     @staticmethod
     def _exclude_sundays_from_work_time(work_time_per_day):

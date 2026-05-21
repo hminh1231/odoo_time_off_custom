@@ -12,11 +12,11 @@ class ResConfigSettings(models.TransientModel):
             (MODE_BLOCK, "Block Sunday selection"),
             (MODE_EXCLUDE, "Allow Sunday but exclude from duration"),
         ],
-        string="VP department — Sunday on time off",
+        string="VP region — Sunday on time off",
         config_parameter=ICP_MODE_KEY,
         default=MODE_BLOCK,
         help=(
-            "Applies to employees whose department code (Mã bộ phận) is VP. "
+            "Applies to employees whose region (Miền) is VP. "
             "Block: Sundays are disabled on the calendar and rejected on save. "
             "Exclude: Sundays in the range are not counted in leave duration."
         ),

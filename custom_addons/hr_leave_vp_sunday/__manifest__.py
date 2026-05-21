@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 {
     "name": "Time Off — VP Sunday Rules",
-    "version": "19.0.1.0.0",
+    "version": "19.0.1.0.1",
     "category": "Human Resources",
-    "summary": "Block or exclude Sundays from time off for VP department employees",
+    "summary": "Block or exclude Sundays from time off for VP region employees",
     "description": """
-        For employees with department code VP (ma_bo_phan from hr_employee_hrm_detail):
+        For employees with region VP (Miền from hr_employee_hrm_detail):
 
         * **Block** (default): Sundays cannot be selected on the time-off calendar and are rejected on save.
         * **Exclude from count**: Sundays may appear in the range but are not counted in duration.
