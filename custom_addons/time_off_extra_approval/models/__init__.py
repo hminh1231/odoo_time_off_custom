@@ -1,3 +1,4 @@
+from . import hr_employee
 from . import hr_leave_type
 from . import hr_leave_type_special_employee_line
 from . import hr_leave_type_special_director_order_line

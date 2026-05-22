@@ -4112,3 +4112,25 @@ class HolidaysRequest(models.Model):
             self._notify_responsible_current_turn()
         else:
             self._action_validate(check_state=False)
+
+    @api.model
+    def open_pending_requests(self):
+        """Open pending time-off leave requests (confirm / validate1) for the contextual employee."""
+        user_employee = self.env.user.employee_id
+        employee = self.env["hr.employee"]._get_contextual_employee()
+        context = {"search_default_to_approve": True}
+        if employee != user_employee:
+            view_name = "hr_holidays.hr_leave_view_tree"
+            context["search_default_employee_id"] = employee.id
+            domain = [("employee_id", "=", employee.id), ("state", "in", ("confirm", "validate1"))]
+        else:
+            view_name = "hr_holidays.hr_leave_view_tree_my"
+            domain = [("employee_id", "=", employee.id), ("state", "in", ("confirm", "validate1"))]
+        return {
+            "name": _("Pending Time-Off Requests"),
+            "type": "ir.actions.act_window",
+            "res_model": "hr.leave",
+            "views": [[self.env.ref(view_name).id, "list"], [False, "form"]],
+            "domain": domain,
+            "context": context,
+        }
