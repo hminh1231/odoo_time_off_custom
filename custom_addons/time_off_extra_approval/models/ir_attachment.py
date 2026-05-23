@@ -6,7 +6,7 @@ from odoo import api, models
 _logger = logging.getLogger(__name__)
 
 _DOCX_MIMETYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-_GOTENBERG_URL = "http://localhost:3003"
+_GOTENBERG_URL = "http://gotenberg:3000"
 
 
 class IrAttachment(models.Model):
