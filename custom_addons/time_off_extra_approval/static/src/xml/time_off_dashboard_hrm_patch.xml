@@ -1,16 +1,29 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <templates xml:space="preserve">
     <t t-inherit="hr_holidays.TimeOffDashboard" t-inherit-mode="extension">
-        <xpath expr="//div[hasclass('o_timeoff_card')]/div[strong[@class='o_timeoff_name']]" position="before">
-            <div class="d-flex flex-column justify-content-center align-items-center w-100">
-                <strong class="o_timeoff_name">Đã sử dụng</strong>
-                <span class="o_timeoff_duration"><t t-esc="state.daSuDung"/></span>
-            </div>
-        </xpath>
-        <xpath expr="//div[hasclass('o_timeoff_card')]/div[strong[@class='o_timeoff_name']]" position="after">
-            <div class="d-flex flex-column justify-content-center align-items-center w-100">
-                <strong class="o_timeoff_name">Còn lại</strong>
-                <span class="o_timeoff_duration"><t t-esc="state.conLai"/></span>
+        <xpath expr="//div[hasclass('o_timeoff_card')]/div[strong[@class='o_timeoff_name']]" position="replace">
+            <div class="d-flex w-100 h-100" style="flex-direction:row!important;">
+                <div class="d-flex flex-column justify-content-center align-items-center flex-grow-1">
+                    <strong class="o_timeoff_name">Pending Requests</strong>
+                    <span t-on-click="openPendingRequests"
+                        t-att-class="'o_timeoff_duration' + (state.allocationRequests ? ' cursor-pointer' : '')">
+                        <t t-esc="state.allocationRequests"/>
+                    </span>
+                    <a class="text-uppercase o_timeoff_details p-1" t-on-click="newAllocationRequest">
+                        <t t-if="employeeId">Grant Time</t>
+                        <t t-else="">New Allocation Request</t>
+                    </a>
+                </div>
+                <div class="vr my-2"/>
+                <div class="d-flex flex-column justify-content-center align-items-center flex-grow-1">
+                    <strong class="o_timeoff_name">Đã sử dụng</strong>
+                    <span class="o_timeoff_duration"><t t-esc="state.daSuDung"/></span>
+                </div>
+                <div class="vr my-2"/>
+                <div class="d-flex flex-column justify-content-center align-items-center flex-grow-1">
+                    <strong class="o_timeoff_name">Còn lại</strong>
+                    <span class="o_timeoff_duration"><t t-esc="state.conLai"/></span>
+                </div>
             </div>
         </xpath>
     </t>
