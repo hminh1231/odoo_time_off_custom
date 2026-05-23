@@ -8,6 +8,7 @@ from . import hr_leave_handover_replacement_draft
 from . import hr_leave_handover_refuse_wizard
 from . import hr_leave
 from . import hr_leave_store_chain
+from . import hr_leave_p1_p2_split
 from . import hr_leave_allocation
 from . import hr_leave_multi_step
 from . import hr_leave_responsible_approval

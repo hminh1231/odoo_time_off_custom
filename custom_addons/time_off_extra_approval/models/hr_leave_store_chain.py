@@ -5,24 +5,21 @@ All approval mechanics (responsible_approval_line_ids, action_responsible_approv
 notifications, timeout escalation) are shared with employee_hr_responsibles.
 
 Approval flows:
-  Nhân viên CH    → CHT → ASM → RSM  (pool by Mã bộ phận)
-                  → org-chart above RSM (sequential) → Admin
   Cửa hàng trưởng → ASM → RSM         (pool by Mã bộ phận)
                   → org-chart above RSM (sequential) → Admin
-  ASM             → RSM               (pool by Mã bộ phận)
-                  → org-chart above RSM (sequential) → Admin
-  RSM             → org-chart above RSM (sequential) → Admin
-  Giám sát (Miền Nam) → org-chart manager chain → … → Human Resources Manager (final)
 
-Pool for CHT / ASM / RSM steps: employee with that job title sharing the same
-Mã bộ phận as the requester (1:1 per code in practice).
-After RSM: walk parent_id chain from RSM upward; Admin (Thủy) always appended last.
-Admin and Hạnh KT / HCNS Ngọc Anh are hardcoded via Odoo badge ID (barcode field).
+ASM, RSM, and Giám sát use the leave type's configured org-chart approvers
+(employee_hr_responsibles, sequential) — they do not enter this store chain.
+
+Balance check (con_lai):
+  All job titles in _CON_LAI_CHECKED_JOB_TITLES are blocked from creating or
+  confirming a leave when their con_lai ≤ 0, regardless of the leave type's
+  validation flow.
 """
 
 import logging
 
-from odoo import models
+from odoo import api, models
 from odoo.exceptions import ValidationError
 from odoo.tools.translate import _
 
@@ -32,21 +29,22 @@ _logger = logging.getLogger(__name__)
 # TODO: replace each placeholder with the real Odoo badge ID (barcode field).
 # ---------------------------------------------------------------------------
 _BADGE_ADMIN = "TODO_ADMIN_BADGE_ID"   # also used as Thủy (Admin) for refusal notification
-_BADGE_HANH_KT = "TODO_HANH_KT_BADGE_ID"
-_BADGE_HCNS_NGOC_ANH = "TODO_HCNS_NGOC_ANH_BADGE_ID"
 # ---------------------------------------------------------------------------
 
 # Job title keys (from hr_job_title_vn) that trigger the store chain flow.
 _STORE_CHAIN_JOB_TITLES = frozenset({
+    "cửa hàng trưởng",
+})
+
+# Job title keys whose con_lai must be > 0 before any leave can be created or confirmed.
+# Covers all retail/store staff regardless of which approval flow their leave type uses.
+_CON_LAI_CHECKED_JOB_TITLES = frozenset({
     "nhân viên ch",
     "cửa hàng trưởng",
     "asm",
     "rsm",
     "giám sát",
 })
-
-# Job position name (hr.job) that terminates the Giám sát Miền Nam org-chain.
-_HR_MANAGER_JOB_POSITION = "Human Resources Manager"
 
 
 class HrLeaveStoreChain(models.Model):
@@ -177,29 +175,6 @@ class HrLeaveStoreChain(models.Model):
         _add(self._store_chain_find_user_by_badge(_BADGE_ADMIN))
         return self.env["res.users"].browse(user_ids)
 
-    def _store_chain_giam_sat_approver_users(self):
-        """Walk parent_id org chain for Giám sát Miền Nam, stopping inclusively at Human Resources Manager."""
-        self.ensure_one()
-        user_ids = []
-        seen = set()
-        cur = self.employee_id.sudo().parent_id
-        while cur:
-            if cur.user_id and not cur.user_id.share:
-                uid = cur.user_id.id
-                if uid not in seen:
-                    user_ids.append(uid)
-                    seen.add(uid)
-                job_position = (cur.job_id.name or "").strip()
-                if job_position == _HR_MANAGER_JOB_POSITION:
-                    break
-            cur = cur.parent_id
-        if not user_ids:
-            _logger.warning(
-                "time_off_extra_approval: store chain — Giám sát org chain is empty for employee %s",
-                self.employee_id.name,
-            )
-        return self.env["res.users"].browse(user_ids)
-
     def _get_store_chain_approver_users(self):
         """Build the ordered approver list for the store chain flow.
 
@@ -220,45 +195,13 @@ class HrLeaveStoreChain(models.Model):
                 user_ids.append(user.id)
                 seen.add(user.id)
 
-        if title == "nhân viên ch":
-            # Nhân viên CH → CHT → ASM → RSM (pool by ma_bo_phan) → org-chain above RSM → Admin
-            _add(self._store_chain_find_user_by_title_and_dept("cửa hàng trưởng", ma_bo_phan))
-            _add(self._store_chain_find_user_by_title_and_dept("asm", ma_bo_phan))
-            rsm_emp = self._store_chain_find_employee_by_title_and_dept("rsm", ma_bo_phan)
-            _add(rsm_emp.user_id if rsm_emp and rsm_emp.user_id and not rsm_emp.user_id.share else self.env["res.users"])
-            for user in self._store_chain_after_rsm_approver_users(rsm_emp):
-                _add(user)
-
-        elif title == "cửa hàng trưởng":
+        if title == "cửa hàng trưởng":
             # CHT → ASM → RSM (pool by ma_bo_phan) → org-chain above RSM → Admin
             _add(self._store_chain_find_user_by_title_and_dept("asm", ma_bo_phan))
             rsm_emp = self._store_chain_find_employee_by_title_and_dept("rsm", ma_bo_phan)
             _add(rsm_emp.user_id if rsm_emp and rsm_emp.user_id and not rsm_emp.user_id.share else self.env["res.users"])
             for user in self._store_chain_after_rsm_approver_users(rsm_emp):
                 _add(user)
-
-        elif title == "asm":
-            # ASM → RSM (pool by ma_bo_phan) → org-chain above RSM → Admin
-            rsm_emp = self._store_chain_find_employee_by_title_and_dept("rsm", ma_bo_phan)
-            _add(rsm_emp.user_id if rsm_emp and rsm_emp.user_id and not rsm_emp.user_id.share else self.env["res.users"])
-            for user in self._store_chain_after_rsm_approver_users(rsm_emp):
-                _add(user)
-
-        elif title == "rsm":
-            # RSM → org-chain above RSM → Admin
-            rsm_emp = emp.sudo()
-            for user in self._store_chain_after_rsm_approver_users(rsm_emp):
-                _add(user)
-
-        elif title == "giám sát":
-            mien = (emp.sudo().mien or "").strip()
-            if mien == "Nam":
-                # Giám sát Miền Nam → org-chart manager chain → … → Human Resources Manager
-                for user in self._store_chain_giam_sat_approver_users():
-                    _add(user)
-            else:
-                _add(self._store_chain_find_user_by_badge(_BADGE_HANH_KT))
-                _add(self._store_chain_find_user_by_badge(_BADGE_HCNS_NGOC_ANH))
 
         return Users.browse(user_ids)
 
@@ -327,30 +270,37 @@ class HrLeaveStoreChain(models.Model):
             )
 
     # ------------------------------------------------------------------
-    # Balance check
+    # Balance check (con_lai) — applies to all retail job titles
     # ------------------------------------------------------------------
 
-    def _store_chain_check_leave_balance(self):
-        """Raise ValidationError if the employee's remaining leave (con_lai) is ≤ 0."""
-        self.ensure_one()
-        if not self._is_store_chain_flow():
-            return
-        emp = self.employee_id.sudo()
-        if not emp:
-            return
-        if (emp.con_lai or 0) <= 0:
-            raise ValidationError(
-                _(
-                    "Nhân viên %(name)s không còn đủ ngày phép (Còn lại: %(remaining)s). "
-                    "Không thể tạo đơn xin nghỉ.",
-                    name=emp.name,
-                    remaining=emp.con_lai or 0,
+    def _check_con_lai_balance(self):
+        """Raise ValidationError for any retail employee whose con_lai ≤ 0."""
+        for leave in self:
+            emp = leave.employee_id.sudo()
+            if not emp:
+                continue
+            title = (emp.job_title or "").strip().lower()
+            if title not in _CON_LAI_CHECKED_JOB_TITLES:
+                continue
+            if (emp.con_lai or 0) <= 0:
+                raise ValidationError(
+                    _(
+                        "Nhân viên %(name)s không còn đủ ngày phép (Còn lại: %(remaining)s). "
+                        "Không thể tạo đơn xin nghỉ.",
+                        name=emp.name,
+                        remaining=emp.con_lai or 0,
+                    )
                 )
-            )
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        records = super().create(vals_list)
+        if not self.env.context.get("leave_fast_create"):
+            records._check_con_lai_balance()
+        return records
 
     def action_confirm(self):
-        for leave in self:
-            leave._store_chain_check_leave_balance()
+        self._check_con_lai_balance()
         return super().action_confirm()
 
     # ------------------------------------------------------------------
