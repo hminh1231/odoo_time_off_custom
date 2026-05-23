@@ -184,35 +184,3 @@ class HrEmployee(models.Model):
 
     # Former Employee Flag
     nhan_vien_cu = fields.Boolean(string='Nhân viên cũ', default=False, groups='hr.group_hr_user')
-
-    # Time off summary
-    phep_chuan = fields.Float(string='Phép chuẩn', groups='hr.group_hr_user')
-    tong_so_phep = fields.Float(string='Tổng số phép', groups='hr.group_hr_user')
-    da_su_dung = fields.Float(
-        string='Đã sử dụng',
-        compute='_compute_time_off_summary',
-        store=True,
-        groups='hr.group_hr_user',
-    )
-    con_lai = fields.Float(
-        string='Còn lại',
-        compute='_compute_time_off_summary',
-        store=True,
-        groups='hr.group_hr_user',
-    )
-    ngay_het_han = fields.Date(string='Ngày hết hạn', groups='hr.group_hr_user')
-
-    @api.depends('tong_so_phep')
-    def _compute_time_off_summary(self):
-        LeaveType = self.env['hr.leave.type'].sudo()
-        leave_types = LeaveType.search([('requires_allocation', '=', 'yes')])
-        for employee in self:
-            if not leave_types:
-                employee.da_su_dung = 0.0
-                employee.con_lai = employee.tong_so_phep
-                continue
-            data = leave_types.get_allocation_data(employee)
-            emp_data = data.get(employee, [])
-            total_taken = sum(item[1].get('virtual_leaves_taken', 0.0) for item in emp_data)
-            employee.da_su_dung = total_taken
-            employee.con_lai = employee.tong_so_phep - total_taken

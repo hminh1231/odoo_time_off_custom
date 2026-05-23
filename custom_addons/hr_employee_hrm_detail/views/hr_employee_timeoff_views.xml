@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="hr_employee_view_form_hrm_timeoff" model="ir.ui.view">
+        <field name="name">hr.employee.form.hrm.timeoff</field>
+        <field name="model">hr.employee</field>
+        <field name="inherit_id" ref="hr.view_employee_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='personal_information']" position="inside">
+                <group string="Time off" groups="hr.group_hr_user">
+                    <group>
+                        <field name="phep_chuan"/>
+                        <field name="tong_so_phep"/>
+                        <field name="da_su_dung"/>
+                        <field name="con_lai"/>
+                        <field name="ngay_het_han"/>
+                    </group>
+                </group>
+            </xpath>
+        </field>
+    </record>
+</odoo>

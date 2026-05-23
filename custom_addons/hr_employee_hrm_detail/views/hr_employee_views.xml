@@ -44,15 +44,6 @@
                         <field name="ghi_chu"/>
                     </group>
                 </group>
-                <group string="Time off" groups="hr.group_hr_user">
-                    <group>
-                        <field name="phep_chuan"/>
-                        <field name="tong_so_phep"/>
-                        <field name="da_su_dung"/>
-                        <field name="con_lai"/>
-                        <field name="ngay_het_han"/>
-                    </group>
-                </group>
             </xpath>
         </field>
     </record>
