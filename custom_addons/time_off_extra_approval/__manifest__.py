@@ -12,18 +12,10 @@
     ],
     "post_init_hook": "post_init_hook",
     "data": [
-        "data/ir_cron_data.xml",
         "security/extra_approvers_security.xml",
         "security/hr_leave_type_write_access.xml",
         "security/ir.model.access.csv",
-        "security/hr_leave_handover_replacement_draft_access.xml",
-        "views/hr_leave_form_emergency_views.xml",
-        "views/hr_leave_multi_step_views.xml",
-        "views/hr_leave_refuse_wizard_views.xml",
         "views/hr_leave_type_views.xml",
-        "views/hr_leave_search_views.xml",
-        "views/hr_leave_kanban_extra_approval.xml",
-        "views/hr_leave_list_extra_approval.xml",
     ],
     "assets": {
         "web.assets_backend": [

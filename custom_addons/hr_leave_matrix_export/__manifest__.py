@@ -1,10 +1,10 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 {
     "name": "Time Off Matrix Excel Export",
-    "version": "19.0.1.0.8",
+    "version": "19.0.1.0.11",
     "category": "Human Resources/Time Off",
-    "summary": "Export time off list as employee × day matrix (N1, N2, …) to Excel",
-    "depends": ["hr_holidays", "web"],
+    "summary": "Export time off as department matrix sheet (HRM layout)",
+    "depends": ["hr_holidays", "web", "hr_employee_hrm_detail"],
     "data": [
         "security/ir.model.access.csv",
         "wizard/hr_leave_matrix_export_wizard_views.xml",

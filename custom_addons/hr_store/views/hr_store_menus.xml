@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <menuitem
+            id="menu_hr_store"
+            name="Cửa hàng"
+            action="hr_store_action"
+            parent="hr.menu_config_employee"
+            groups="hr.group_hr_manager"
+            sequence="4"/>
+    </data>
+</odoo>

@@ -50,6 +50,7 @@ Hook `post_init` của từng module cập nhật `ir.model.data` (xmlid) nếu 
 - [x] Module `time_off_responsible_approval` (models phụ, data, security, `models/hr_leave.py` ~1400 dòng)
 - [x] `time_off_extra_approval/models/hr_leave.py` thu còn ~700 dòng (emergency, discuss link, glue `write`/`create`/`action_confirm`, extra approver rules)
 - [x] Views/assets handover → `time_off_work_handover`; multi-step/refuse wizard → `time_off_responsible_approval`
+- [x] Tách `hr_leave.py` runtime: `time_off_work_handover/models/hr_leave.py` (bàn giao + OdooBot Bàn giao), `time_off_responsible_approval/models/hr_leave.py` (duyệt + OdooBot Duyệt đơn), core glue trong `time_off_extra_approval`
 - [ ] Test đầy đủ trên DB staging sau upgrade
 - [ ] (Tuỳ chọn) Gỡ cài `time_off_work_handover` nếu công ty không dùng bàn giao
 

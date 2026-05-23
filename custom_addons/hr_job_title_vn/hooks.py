@@ -19,6 +19,7 @@ def pre_init_hook(env):
               'cửa hàng trưởng',
               'asm',
               'rsm',
+              'quản lý kho',
               'admin',
               'admin tổng',
               'trưởng bộ phận',

@@ -100,7 +100,44 @@ class HrEmployee(models.Model):
     ], string='Trạng thái nhân viên', default='active', groups='hr.group_hr_user')
 
     # Department Information
-    ma_bo_phan = fields.Char(string='Mã bộ phận', groups='hr.group_hr_user')
+    ma_bo_phan_id = fields.Many2one(
+        'hr.store.code',
+        string='Mã bộ phận',
+        groups='hr.group_hr_user',
+    )
+    ma_bo_phan = fields.Char(
+        string='Mã bộ phận (mã)',
+        related='ma_bo_phan_id.code',
+        store=True,
+        readonly=False,
+        groups='hr.group_hr_user',
+    )
+
+    def _get_ma_bo_phan_domain(self):
+        if self.mien:
+            return [('mien', '=', self.mien)]
+        return []
+
+    @api.onchange('mien')
+    def _onchange_mien_ma_bo_phan(self):
+        if self.ma_bo_phan_id and self.mien and self.ma_bo_phan_id.mien != self.mien:
+            self.ma_bo_phan_id = False
+        return {'domain': {'ma_bo_phan_id': self._get_ma_bo_phan_domain()}}
+
+    @api.constrains('mien', 'ma_bo_phan_id')
+    def _check_ma_bo_phan_mien(self):
+        for employee in self:
+            if (
+                employee.mien
+                and employee.ma_bo_phan_id
+                and employee.ma_bo_phan_id.mien
+                and employee.ma_bo_phan_id.mien != employee.mien
+            ):
+                raise ValidationError(
+                    _('Mã bộ phận %s không thuộc miền %s')
+                    % (employee.ma_bo_phan_id.code, employee.mien)
+                )
+
     ten_bo_phan = fields.Char(string='Tên bộ phận', groups='hr.group_hr_user')
     bp_ke_toan = fields.Char(string='BP Kế toán', groups='hr.group_hr_user')
 

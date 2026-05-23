@@ -2,6 +2,7 @@
 
 import calendar
 import json
+import re
 from collections import defaultdict
 from datetime import date, timedelta
 from io import BytesIO
@@ -10,6 +11,20 @@ import xlsxwriter
 
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError
+
+# Column layout (same order as the reference sheet)
+COL_APPROVE = 0
+COL_STATUS = 1
+COL_ID_HRM = 2
+COL_NAME = 3
+COL_DAY_START = 4
+
+STATUS_LABELS = {
+    "active": "Chính thức",
+    "probation": "Thử việc",
+    "leave": "Nghỉ phép",
+    "terminated": "Đã nghỉ việc",
+}
 
 
 class HrLeaveMatrixExportWizard(models.TransientModel):
@@ -57,14 +72,49 @@ class HrLeaveMatrixExportWizard(models.TransientModel):
 
     @staticmethod
     def _leave_type_cell_label(leave_type):
+        """Mã ô Excel = phần trong ngoặc () của tên loại nghỉ, vd. 'Nghỉ Phép (P)' -> 'P'."""
         if not leave_type:
             return ""
         name = (leave_type.name or "").strip()
         if not name:
             return ""
-        if len(name) <= 5:
-            return name.upper()
-        return (name[:4].rstrip() + ".").upper()
+        match = re.search(r"\(([^)]+)\)\s*$", name)
+        if match:
+            return match.group(1).strip()
+        return ""
+
+    @staticmethod
+    def _weekend_kind(year, month, day):
+        wd = date(year, month, day).weekday()
+        if wd == 5:
+            return "sat"
+        if wd == 6:
+            return "sun"
+        return None
+
+    def _employee_status_label(self, employee):
+        if "trang_thai_nhan_vien" not in employee._fields:
+            return ""
+        status = employee.trang_thai_nhan_vien
+        if status in STATUS_LABELS:
+            return STATUS_LABELS[status]
+        if status:
+            selection = dict(
+                employee._fields["trang_thai_nhan_vien"]._description_selection(self.env)
+            )
+            return selection.get(status, status)
+        return ""
+
+    def _employee_id_hrm(self, employee):
+        return (getattr(employee, "id_hrm", None) or "").strip()
+
+    def _employee_department_name(self, employee):
+        if employee.department_id:
+            return (employee.department_id.name or "").strip()
+        ten_bo_phan = (getattr(employee, "ten_bo_phan", None) or "").strip()
+        if ten_bo_phan:
+            return ten_bo_phan
+        return _("Other")
 
     def _build_matrix(self, year, month, base_domain):
         last_day = calendar.monthrange(year, month)[1]
@@ -77,7 +127,6 @@ class HrLeaveMatrixExportWizard(models.TransientModel):
         domain = base_domain + overlap_domain if base_domain else overlap_domain
         leaves = self.env["hr.leave"].search(domain, order="employee_id, request_date_from, id")
 
-        # day (1..31) -> employee_id -> ordered unique labels
         cells = defaultdict(lambda: defaultdict(list))
         employees = self.env["hr.employee"]
         for leave in leaves:
@@ -85,8 +134,6 @@ class HrLeaveMatrixExportWizard(models.TransientModel):
                 continue
             employees |= leave.employee_id
             label = self._leave_type_cell_label(leave.holiday_status_id)
-            if not label:
-                label = "L"
             span_start = max(leave.request_date_from, month_start)
             span_end = min(leave.request_date_to, month_end)
             d = span_start
@@ -98,6 +145,87 @@ class HrLeaveMatrixExportWizard(models.TransientModel):
 
         return employees, cells, last_day
 
+    def _group_employees_by_department(self, employees):
+        """Return [(department_name, employee_recordset), ...] sorted by department then name."""
+        by_dept = defaultdict(lambda: self.env["hr.employee"])
+        for emp in employees:
+            dept_name = self._employee_department_name(emp)
+            by_dept[dept_name] |= emp
+        groups = []
+        for dept_name in sorted(by_dept.keys(), key=lambda n: (n == _("Other"), str(n).upper())):
+            emps = by_dept[dept_name].sorted(lambda e: (e.name or "").upper())
+            groups.append((dept_name, emps))
+        return groups
+
+    def _workbook_formats(self, workbook):
+        border = {"border": 1, "border_color": "#B4C6E7"}
+        base = {**border, "valign": "vcenter"}
+        return {
+            "header": workbook.add_format(
+                {
+                    **base,
+                    "bold": True,
+                    "bg_color": "#BDD7EE",
+                    "align": "center",
+                    "text_wrap": True,
+                }
+            ),
+            "header_sat": workbook.add_format(
+                {
+                    **base,
+                    "bold": True,
+                    "bg_color": "#F8CBAD",
+                    "align": "center",
+                }
+            ),
+            "header_sun": workbook.add_format(
+                {
+                    **base,
+                    "bold": True,
+                    "bg_color": "#D9D2E9",
+                    "align": "center",
+                }
+            ),
+            "dept": workbook.add_format(
+                {
+                    **base,
+                    "bold": True,
+                    "bg_color": "#FFFFFF",
+                    "align": "left",
+                }
+            ),
+            "cell": workbook.add_format({**base, "align": "center"}),
+            "cell_stripe": workbook.add_format({**base, "bg_color": "#DDEBF7", "align": "center"}),
+            "name": workbook.add_format({**base, "align": "left", "text_wrap": True}),
+            "name_stripe": workbook.add_format(
+                {**base, "bg_color": "#DDEBF7", "align": "left", "text_wrap": True}
+            ),
+            "cell_sat": workbook.add_format({**base, "bg_color": "#FCE4D6", "align": "center"}),
+            "cell_sun": workbook.add_format({**base, "bg_color": "#E4DFEC", "align": "center"}),
+            "cell_sat_stripe": workbook.add_format(
+                {**base, "bg_color": "#F4D4C4", "align": "center"}
+            ),
+            "cell_sun_stripe": workbook.add_format(
+                {**base, "bg_color": "#DAD4E4", "align": "center"}
+            ),
+        }
+
+    def _day_cell_format(self, formats, year, month, day, stripe):
+        kind = self._weekend_kind(year, month, day)
+        if kind == "sat":
+            return formats["cell_sat_stripe"] if stripe else formats["cell_sat"]
+        if kind == "sun":
+            return formats["cell_sun_stripe"] if stripe else formats["cell_sun"]
+        return formats["cell_stripe"] if stripe else formats["cell"]
+
+    def _header_format_for_day(self, formats, year, month, day):
+        kind = self._weekend_kind(year, month, day)
+        if kind == "sat":
+            return formats["header_sat"]
+        if kind == "sun":
+            return formats["header_sun"]
+        return formats["header"]
+
     def action_export_matrix_excel(self):
         self.ensure_one()
         if not self.env.user.has_group("base.group_allow_export"):
@@ -106,72 +234,77 @@ class HrLeaveMatrixExportWizard(models.TransientModel):
         year, month = int(self.year), int(self.month)
         base_domain = self._parse_domain()
         employees, cells, last_day = self._build_matrix(year, month, base_domain)
-        employees = employees.sorted(lambda e: (e.name or ""))
+        dept_groups = self._group_employees_by_department(employees)
 
         buffer = BytesIO()
         workbook = xlsxwriter.Workbook(buffer, {"in_memory": True})
         sheet = workbook.add_worksheet(_("Time off"))
+        formats = self._workbook_formats(workbook)
+        last_col = COL_DAY_START + last_day - 1
 
-        header_fmt = workbook.add_format(
-            {
-                "bold": True,
-                "bg_color": "#BDD7EE",  # xanh nhạt, dễ đọc hơn xám
-                "font_color": "#000000",
-                "border": 1,
-                "align": "center",
-                "valign": "vcenter",
-                "text_wrap": True,
-            }
-        )
-        name_header = "HỌ VÀ TÊN (dấu)"
-        # add_table() always rewrites the header row; without explicit "columns" it uses "Column1", "Column2", …
-        table_columns = [{"header": name_header, "header_format": header_fmt}]
+        headers = [
+            "Duyệt",
+            "TRẠNG THÁI NHÂN VIÊN",
+            "ID HRM",
+            "HỌ VÀ TÊN (dấu)",
+        ]
+        for col, title in enumerate(headers):
+            sheet.write(0, col, title, formats["header"])
         for day in range(1, last_day + 1):
-            table_columns.append({"header": f"N{day}", "header_format": header_fmt})
-
-        name_cell_fmt = workbook.add_format({"text_wrap": True, "valign": "top"})
-
-        row = 1
-        for emp in employees:
-            sheet.write(row, 0, emp.name or "", name_cell_fmt)
-            for day in range(1, last_day + 1):
-                labels = cells[day].get(emp.id) or []
-                sheet.write(row, day, ", ".join(labels) if labels else "")
-            row += 1
-
-        # xlsxwriter add_table() with header_row=True requires at least one data row
-        # (otherwise it returns -2 and no Table is written — only headers).
-        if row == 1:
-            sheet.write_row(1, 0, [""] * (last_day + 1))
-            row = 2
-
-        sheet.freeze_panes(1, 0)
-
-        last_row_idx = row - 1
-        last_col_idx = last_day  # A = name, B.. = N1..N(last_day)
-        table_name = "TimeOffMatrix_%s_%02d" % (year, month)
-        ret = sheet.add_table(
-            0,
-            0,
-            last_row_idx,
-            last_col_idx,
-            {
-                "name": table_name[:250],
-                "style": "Table Style Medium 9",
-                "autofilter": True,
-                "banded_rows": True,
-                "columns": table_columns,
-            },
-        )
-        if ret != 0:
-            raise UserError(
-                _("Could not create the Excel table (internal error %s). Try upgrading xlsxwriter.") % ret
+            col = COL_DAY_START + day - 1
+            sheet.write(
+                0,
+                col,
+                f"N{day}",
+                self._header_format_for_day(formats, year, month, day),
             )
 
-        # Độ rộng cột: cột họ tên đủ cho "HỌ VÀ TÊN (dấu)" + nút lọc; các cột N* hẹp vì mã ngắn
-        sheet.set_column(0, 0, 38)
+        row = 1
+        stripe_toggle = False
+        for dept_name, dept_employees in dept_groups:
+            sheet.write(row, COL_NAME, dept_name.upper(), formats["dept"])
+            for col in (COL_APPROVE, COL_STATUS, COL_ID_HRM):
+                sheet.write(row, col, "", formats["dept"])
+            for day in range(1, last_day + 1):
+                col = COL_DAY_START + day - 1
+                sheet.write(row, col, "", formats["dept"])
+            row += 1
+
+            for emp in dept_employees:
+                stripe = stripe_toggle
+                stripe_toggle = not stripe_toggle
+                name_fmt = formats["name_stripe"] if stripe else formats["name"]
+                base_fmt = formats["cell_stripe"] if stripe else formats["cell"]
+
+                sheet.write(row, COL_APPROVE, "", base_fmt)
+                sheet.write(row, COL_STATUS, self._employee_status_label(emp), base_fmt)
+                sheet.write(row, COL_ID_HRM, self._employee_id_hrm(emp), base_fmt)
+                sheet.write(row, COL_NAME, emp.name or "", name_fmt)
+
+                for day in range(1, last_day + 1):
+                    col = COL_DAY_START + day - 1
+                    labels = cells[day].get(emp.id) or []
+                    value = ", ".join(labels) if labels else ""
+                    sheet.write(
+                        row,
+                        col,
+                        value,
+                        self._day_cell_format(formats, year, month, day, stripe),
+                    )
+                row += 1
+
+        if row == 1:
+            sheet.write_row(1, 0, [""] * (last_col + 1), formats["cell"])
+            row = 2
+
+        sheet.freeze_panes(1, COL_NAME)
+
+        sheet.set_column(COL_APPROVE, COL_APPROVE, 6)
+        sheet.set_column(COL_STATUS, COL_STATUS, 18)
+        sheet.set_column(COL_ID_HRM, COL_ID_HRM, 10)
+        sheet.set_column(COL_NAME, COL_NAME, 32)
         if last_day >= 1:
-            sheet.set_column(1, last_day, 7)
+            sheet.set_column(COL_DAY_START, last_col, 5.5)
 
         workbook.close()
         buffer.seek(0)

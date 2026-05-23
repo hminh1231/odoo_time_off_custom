@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <record id="view_employee_filter_inherit_hr_store" model="ir.ui.view">
+            <field name="name">hr.employee.search.inherit.hr.store</field>
+            <field name="model">hr.employee</field>
+            <field name="inherit_id" ref="hr.view_employee_filter"/>
+            <field name="arch" type="xml">
+                <field name="department_id" position="after">
+                    <field name="store_id"/>
+                </field>
+                <xpath expr="//searchpanel/field[@name='department_id']" position="after">
+                    <field name="store_id" icon="fa-shopping-cart" enable_counters="1"/>
+                </xpath>
+                <filter name="group_department" position="after">
+                    <filter name="group_store" string="Store" domain="[]" context="{'group_by': 'store_id'}"/>
+                </filter>
+            </field>
+        </record>
+
+        <record id="view_employee_form_inherit_hr_store" model="ir.ui.view">
+            <field name="name">hr.employee.form.inherit.hr.store</field>
+            <field name="model">hr.employee</field>
+            <field name="inherit_id" ref="hr.view_employee_form"/>
+            <field name="arch" type="xml">
+                <field name="department_id" position="after">
+                    <field name="store_id" options="{'no_create_edit': False}"/>
+                </field>
+            </field>
+        </record>
+
+        <record id="view_employee_tree_inherit_hr_store" model="ir.ui.view">
+            <field name="name">hr.employee.list.inherit.hr.store</field>
+            <field name="model">hr.employee</field>
+            <field name="inherit_id" ref="hr.view_employee_tree"/>
+            <field name="arch" type="xml">
+                <field name="department_id" position="after">
+                    <field name="store_id" optional="show"/>
+                </field>
+            </field>
+        </record>
+
+        <record id="hr_employee_public_view_search_inherit_hr_store" model="ir.ui.view">
+            <field name="name">hr.employee.public.search.inherit.hr.store</field>
+            <field name="model">hr.employee.public</field>
+            <field name="inherit_id" ref="hr.hr_employee_public_view_search"/>
+            <field name="arch" type="xml">
+                <field name="department_id" position="after">
+                    <field name="store_id"/>
+                </field>
+                <xpath expr="//searchpanel/field[@name='department_id']" position="after">
+                    <field name="store_id" icon="fa-shopping-cart" enable_counters="1"/>
+                </xpath>
+                <filter name="group_department" position="after">
+                    <filter name="group_store" string="Store" domain="[]" context="{'group_by': 'store_id'}"/>
+                </filter>
+            </field>
+        </record>
+
+        <record id="hr_employee_public_view_form_inherit_hr_store" model="ir.ui.view">
+            <field name="name">hr.employee.public.form.inherit.hr.store</field>
+            <field name="model">hr.employee.public</field>
+            <field name="inherit_id" ref="hr.hr_employee_public_view_form"/>
+            <field name="arch" type="xml">
+                <field name="department_id" position="after">
+                    <field name="store_id"/>
+                </field>
+            </field>
+        </record>
+    </data>
+</odoo>
