@@ -4,15 +4,17 @@ def migrate(cr, version):
     # pointing at a wrong parent, which causes view-validation to fail when the
     # arch (which uses xpath against the base form) is re-written during upgrade.
     cr.execute("""
-        UPDATE ir_ui_view v
-           SET inherit_id = base.id
-          FROM ir_ui_view base
-          JOIN ir_model_data imd_base
-            ON imd_base.res_id = base.id
-           AND imd_base.module = 'hr_holidays'
-           AND imd_base.name   = 'hr_leave_view_form'
-          JOIN ir_model_data imd_v
-            ON imd_v.res_id = v.id
-           AND imd_v.name   = 'view_hr_leave_form_multi_step'
-         WHERE v.inherit_id IS DISTINCT FROM base.id
+        UPDATE ir_ui_view
+           SET inherit_id = (
+               SELECT res_id FROM ir_model_data
+                WHERE module = 'hr_holidays' AND name = 'hr_leave_view_form'
+           )
+         WHERE id IN (
+               SELECT res_id FROM ir_model_data
+                WHERE name = 'view_hr_leave_form_multi_step'
+           )
+           AND inherit_id IS DISTINCT FROM (
+               SELECT res_id FROM ir_model_data
+                WHERE module = 'hr_holidays' AND name = 'hr_leave_view_form'
+           )
     """)
