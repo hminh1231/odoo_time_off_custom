@@ -32,7 +32,8 @@ _SKIP_RESPONSIBLE_SUBMIT_NOTIFY_CTX = "skip_responsible_submit_notify"
 _logger = logging.getLogger(__name__)
 
 # Job title keys (lowercase) whose leaves are eligible for auto-split.
-_P1P2_JOB_TITLES = frozenset({"cửa hàng trưởng", "asm", "rsm"})
+# "nhóm trưởng" = store group leader; "trưởng nhóm" = internal team lead (excluded).
+_P1P2_JOB_TITLES = frozenset({"nhóm trưởng", "cửa hàng trưởng", "asm", "rsm"})
 
 # Context key to prevent re-entrant split when creating companion records.
 _SKIP_P1P2_SPLIT_CTX = "skip_p1p2_auto_split"

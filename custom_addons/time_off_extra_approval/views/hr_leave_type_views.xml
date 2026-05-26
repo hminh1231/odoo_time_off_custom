@@ -52,6 +52,7 @@
                                    string="Employee"
                                    options="{'no_create': True, 'no_create_edit': True}"
                                    context="{'list_view_ref': 'hr.view_employee_tree', 'search_view_ref': 'hr.view_employee_filter'}"/>
+                            <field name="org_chart_stop_position" string="Stop at Job Position"/>
                         </list>
                     </field>
                     <field name="special_director_sequential_approval"/>

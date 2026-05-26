@@ -30,7 +30,9 @@ _BADGE_ADMIN = "TODO_ADMIN_BADGE_ID"   # also used as Thủy (Admin) for refusal
 # ---------------------------------------------------------------------------
 
 # Job title keys (from hr_job_title_vn) that trigger the store chain flow.
+# "nhóm trưởng" = store group leader (part of chain); "trưởng nhóm" = internal team lead (separate title, not in chain).
 _STORE_CHAIN_JOB_TITLES = frozenset({
+    "nhóm trưởng",
     "cửa hàng trưởng",
 })
 
@@ -182,8 +184,8 @@ class HrLeaveStoreChain(models.Model):
                 user_ids.append(user.id)
                 seen.add(user.id)
 
-        if title == "cửa hàng trưởng":
-            # CHT → ASM → RSM (pool by ma_bo_phan) → org-chain above RSM → Admin
+        if title in ("nhóm trưởng", "cửa hàng trưởng"):
+            # Nhóm trưởng / CHT → ASM → RSM (pool by ma_bo_phan) → org-chain above RSM → Admin
             _add(self._store_chain_find_user_by_title_and_dept("asm", ma_bo_phan))
             rsm_emp = self._store_chain_find_employee_by_title_and_dept("rsm", ma_bo_phan)
             _add(rsm_emp.user_id if rsm_emp and rsm_emp.user_id and not rsm_emp.user_id.share else self.env["res.users"])

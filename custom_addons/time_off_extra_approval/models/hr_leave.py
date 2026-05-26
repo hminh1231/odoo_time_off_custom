@@ -19,7 +19,8 @@ _SKIP_EMERGENCY_LEAVE_CHECK_CTX = "skip_emergency_leave_check"
 _SKIP_SUBMIT_BOT_NOTIFY_CTX = "skip_handover_submit_bot_notify"
 _SKIP_OUTCOME_BOT_NOTIFY_CTX = "skip_outcome_bot_notify"
 _SKIP_RESPONSIBLE_SUBMIT_NOTIFY_CTX = "skip_responsible_submit_notify"
-_SHORT_LEAD_JOB_KEYS = frozenset({"nhân viên", "trưởng nhóm"})
+# Job titles that require only 3 calendar days advance notice
+_SHORT_LEAD_JOB_KEYS = frozenset({"trưởng nhóm", "nhóm trưởng", "cửa hàng trưởng"})
 _SHORT_LEAD_DAYS = 3
 _DEFAULT_LEAD_DAYS = 7
 # Must match time_off_responsible_approval.constants.DIRECTOR_JOB_TITLE_KEY

@@ -24,6 +24,18 @@ _HR_RESPONSIBLE_APPROVAL_JOB_TITLE_ORDER = tuple(
 _DIRECTOR_JOB_TITLE_KEY = approval_constants.DIRECTOR_JOB_TITLE_KEY
 _MAX_EMPLOYEE_HR_RESPONSIBLES = approval_constants.MAX_EMPLOYEE_HR_RESPONSIBLES
 _MAX_EMPLOYEE_HR_RESPONSIBLES_MULTI_DIRECTOR = approval_constants.MAX_EMPLOYEE_HR_RESPONSIBLES_MULTI_DIRECTOR
+# Org-chart walk stops after including the first approver whose Job Position (job_id.name, case-insensitive)
+# matches any value in the applicable stop set.
+_ORG_CHART_STOP_JOB_POSITIONS = frozenset({"sale admin"})
+_ORG_CHART_STOP_JOB_POSITIONS_GIAM_SAT = frozenset({"human resources manager"})
+
+# Job Position of the single observer who receives FYI bot DMs but cannot approve.
+_OBSERVER_JOB_POSITION = "admin observer"
+
+# Job titles whose org-chart flow triggers observer notification (all miền).
+_OBSERVER_JOB_TITLES = frozenset({"asm", "rsm"})
+# Job titles whose org-chart flow triggers observer only when Miền = "Bắc".
+_OBSERVER_JOB_TITLES_BAC = frozenset({"asm", "cửa hàng trưởng", "nhóm trưởng"})
 
 
 def _job_title_approval_sort_key(user, order_index):
@@ -687,17 +699,33 @@ class HrLeaveResponsibleApproval(models.Model):
         step = self._get_current_multi_step()
         return step and step._get_all_approver_users() or self.env["res.users"]
 
+    def _get_org_chart_stop_positions(self):
+        """Return the set of Job Position names (casefolded) at which the org-chart walk stops (inclusive).
+
+        Priority:
+          1. Special employee line with an explicit org_chart_stop_position set.
+          2. Job-title-based default (giám sát → HR Manager, everyone else → SALE ADMIN).
+        """
+        self.ensure_one()
+        special_line = self._get_special_employee_line()
+        if special_line and special_line.org_chart_stop_position:
+            return frozenset({special_line.org_chart_stop_position})
+        emp = self.employee_id.sudo()
+        if (emp.job_title or "").strip().lower() == "giám sát":
+            return _ORG_CHART_STOP_JOB_POSITIONS_GIAM_SAT
+        return _ORG_CHART_STOP_JOB_POSITIONS
+
     def _get_org_chart_approver_users_ordered(self):
         """Walk reporting line (parent_id) from direct manager upward: one approver per org level.
 
-        The previous implementation matched at most one person per *job title tier* along the chain, so
-        two managers with the same title (or a middle manager without a distinct tier) were skipped.
-        This matches the org chart: Tester 3 → Tester 2 → … up to the top, each with a linked user.
+        Stops after including the first approver whose Job Position (job_id.name, casefolded)
+        is in the stop set returned by _get_org_chart_stop_positions(). Higher levels are not added.
         """
         self.ensure_one()
         employee = self.employee_id
         if not employee:
             return self.env["res.users"]
+        stop_positions = self._get_org_chart_stop_positions()
         user_ids = []
         seen = set()
         Users = self.env["res.users"]
@@ -709,6 +737,8 @@ class HrLeaveResponsibleApproval(models.Model):
                 if uid not in seen:
                     user_ids.append(uid)
                     seen.add(uid)
+                if (mgr.job_id.name or "").strip().casefold() in stop_positions:
+                    break
             cur = mgr.parent_id
         return Users.browse(user_ids)
 
@@ -826,13 +856,47 @@ class HrLeaveResponsibleApproval(models.Model):
         user = user or self.env.user
         return user in self.extra_approver_user_ids
 
-    def _is_multi_director_special_employee(self):
+    def _get_observer_user(self):
+        """Return the single observer res.users (job_id.name == 'Admin Observer'), or empty."""
+        emp = self.env["hr.employee"].sudo().search(
+            [("job_id.name", "ilike", _OBSERVER_JOB_POSITION), ("user_id", "!=", False)],
+            limit=1,
+        )
+        if not emp or not emp.user_id or emp.user_id.share:
+            return self.env["res.users"]
+        return emp.user_id
+
+    def _leave_needs_observer_notify(self):
+        """Return True when this leave's flow should send FYI bot DMs to the observer."""
+        self.ensure_one()
+        emp = self.employee_id.sudo()
+        title = (emp.job_title or "").strip().lower()
+        mien = (emp.mien or "").strip()
+
+        # Special employee list (Dũng/Tuấn/Huy/Trà Phú/Long/Thế Anh/Vinh)
+        if self._get_special_employee_line():
+            return True
+        # ASM/RSM → Admin chain (all Miền)
+        if title in _OBSERVER_JOB_TITLES:
+            return True
+        # ASM others / CHT / NT in Miền Bắc
+        if title in _OBSERVER_JOB_TITLES_BAC and mien == "Bắc":
+            return True
+        return False
+
+    def _get_special_employee_line(self):
+        """Return the special employee line for this leave's employee, or empty recordset."""
         self.ensure_one()
         lt = self.holiday_status_id
         if not lt or not self.employee_id:
-            return False
-        specials = lt.special_director_employee_line_ids.mapped("employee_id")
-        return bool(specials and self.employee_id in specials)
+            return self.env["hr.leave.type.special.employee.line"]
+        return lt.special_director_employee_line_ids.filtered(
+            lambda l: l.employee_id == self.employee_id
+        )[:1]
+
+    def _is_multi_director_special_employee(self):
+        self.ensure_one()
+        return bool(self._get_special_employee_line())
 
     def _is_special_parallel_directors_leave(self):
         """Special employee flow: directors act in parallel (same step, simultaneous notify)."""
@@ -925,6 +989,10 @@ class HrLeaveResponsibleApproval(models.Model):
             subtype_xmlid="mail.mt_comment",
             partner_ids=users.mapped("partner_id").ids,
         )
+        if self._leave_needs_observer_notify():
+            observer = self._get_observer_user()
+            if observer:
+                self._notify_responsible_current_turn_via_approval_bot(observer)
 
     def _notify_responsible_current_turn(self, user=None):
         """Notify approver(s) for the active sequential wave (one user, or all parallel directors)."""
@@ -990,6 +1058,10 @@ class HrLeaveResponsibleApproval(models.Model):
                 partner_ids=[line.user_id.partner_id.id],
             )
             self._notify_responsible_current_turn_via_approval_bot(line.user_id)
+        if self._leave_needs_observer_notify():
+            observer = self._get_observer_user()
+            if observer and observer not in lines.mapped("user_id"):
+                self._notify_responsible_current_turn_via_approval_bot(observer)
 
     @api.model
     def _notify_responsible_current_turn_via_approval_bot(self, approver_user):

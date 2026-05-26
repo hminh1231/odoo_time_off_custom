@@ -2,6 +2,12 @@ from odoo import api, fields, models
 
 _SKIP_SPECIAL_EMPLOYEE_RESEQUENCE = "skip_special_employee_line_resequence"
 
+# Matches _ORG_CHART_STOP_JOB_POSITIONS / _ORG_CHART_STOP_JOB_POSITIONS_GIAM_SAT in responsible_approval.
+_STOP_POSITION_SELECTION = [
+    ("sale admin", "SALE ADMIN"),
+    ("human resources manager", "Human Resources Manager"),
+]
+
 
 def _sequence_as_int(seq):
     if seq is False or seq is None:
@@ -27,6 +33,12 @@ class HrLeaveTypeSpecialEmployeeLine(models.Model):
         string="Employee",
         required=True,
         ondelete="cascade",
+    )
+    org_chart_stop_position = fields.Selection(
+        selection=_STOP_POSITION_SELECTION,
+        string="Stop at Job Position",
+        help="Org-chart walk stops (inclusive) at the first approver with this Job Position. "
+             "Leave empty to use the default stop position for the employee's job title.",
     )
 
     _sql_constraints = [
