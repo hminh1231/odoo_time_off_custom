@@ -11,16 +11,14 @@ Approval flows:
 ASM, RSM, and Giám sát use the leave type's configured org-chart approvers
 (employee_hr_responsibles, sequential) — they do not enter this store chain.
 
-Balance check (con_lai):
-  All job titles in _CON_LAI_CHECKED_JOB_TITLES are blocked from creating or
-  confirming a leave when their con_lai ≤ 0, regardless of the leave type's
-  validation flow.
+Balance warning (con_lai):
+  When con_lai ≤ 0, hr_employee_hrm_detail shows a confirmation dialog on save
+  (all employees, all leave types). This module does not hard-block creation.
 """
 
 import logging
 
 from odoo import api, models
-from odoo.exceptions import ValidationError
 from odoo.tools.translate import _
 
 _logger = logging.getLogger(__name__)
@@ -35,17 +33,6 @@ _BADGE_ADMIN = "TODO_ADMIN_BADGE_ID"   # also used as Thủy (Admin) for refusal
 _STORE_CHAIN_JOB_TITLES = frozenset({
     "cửa hàng trưởng",
 })
-
-# Job title keys whose con_lai must be > 0 before any leave can be created or confirmed.
-# Covers all retail/store staff regardless of which approval flow their leave type uses.
-_CON_LAI_CHECKED_JOB_TITLES = frozenset({
-    "nhân viên ch",
-    "cửa hàng trưởng",
-    "asm",
-    "rsm",
-    "giám sát",
-})
-
 
 class HrLeaveStoreChain(models.Model):
     _inherit = "hr.leave"
@@ -268,40 +255,6 @@ class HrLeaveStoreChain(models.Model):
                 self.id,
                 admin_user.id,
             )
-
-    # ------------------------------------------------------------------
-    # Balance check (con_lai) — applies to all retail job titles
-    # ------------------------------------------------------------------
-
-    def _check_con_lai_balance(self):
-        """Raise ValidationError for any retail employee whose con_lai ≤ 0."""
-        for leave in self:
-            emp = leave.employee_id.sudo()
-            if not emp:
-                continue
-            title = (emp.job_title or "").strip().lower()
-            if title not in _CON_LAI_CHECKED_JOB_TITLES:
-                continue
-            if (emp.con_lai or 0) <= 0:
-                raise ValidationError(
-                    _(
-                        "Nhân viên %(name)s không còn đủ ngày phép (Còn lại: %(remaining)s). "
-                        "Không thể tạo đơn xin nghỉ.",
-                        name=emp.name,
-                        remaining=emp.con_lai or 0,
-                    )
-                )
-
-    @api.model_create_multi
-    def create(self, vals_list):
-        records = super().create(vals_list)
-        if not self.env.context.get("leave_fast_create"):
-            records._check_con_lai_balance()
-        return records
-
-    def action_confirm(self):
-        self._check_con_lai_balance()
-        return super().action_confirm()
 
     # ------------------------------------------------------------------
     # Override: plug into the shared responsible-flow machinery

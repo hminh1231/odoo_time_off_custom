@@ -929,6 +929,12 @@ class HrLeaveResponsibleApproval(models.Model):
     def _notify_responsible_current_turn(self, user=None):
         """Notify approver(s) for the active sequential wave (one user, or all parallel directors)."""
         self.ensure_one()
+        if (
+            self.split_group_id
+            and self._split_group_is_multi_segment()
+            and not self._is_split_group_primary_leave()
+        ):
+            return
         if self.validation_type != "employee_hr_responsibles":
             _logger.info(
                 "time_off_extra_approval: skip current-turn notify leave_id=%s reason=validation_type_%s",
@@ -1328,12 +1334,12 @@ class HrLeaveResponsibleApproval(models.Model):
                     and l.state == "confirm"
                     and responsible_submit_prev_states.get(l.id) != "confirm"
                 )
-                if submit_responsible_leaves:
+                if submit_responsible_leaves and not self.env.context.get(
+                    _SKIP_RESPONSIBLE_SUBMIT_NOTIFY_CTX
+                ):
                     submit_responsible_leaves._ensure_responsible_approval_lines()
                     submit_responsible_leaves._responsible_backfill_pending_since_if_missing()
-                    for leave in submit_responsible_leaves:
-                        leave._notify_responsible_approvers_submission()
-                        leave._notify_responsible_current_turn()
+                    submit_responsible_leaves._split_group_notify_submission_for_records()
             outcome_notify_prev_states = ctx.get("outcome_notify_prev_states") or {}
             if outcome_notify_prev_states:
                 for leave in self:
@@ -1353,15 +1359,15 @@ class HrLeaveResponsibleApproval(models.Model):
 
     def action_confirm(self):
         res = super().action_confirm()
+        if self.env.context.get(_SKIP_RESPONSIBLE_SUBMIT_NOTIFY_CTX):
+            return res
         subset = self.filtered(
             lambda l: l.validation_type == "employee_hr_responsibles" and l.state == "confirm"
         )
         if subset:
             subset._ensure_responsible_approval_lines()
             subset._responsible_backfill_pending_since_if_missing()
-            for leave in subset:
-                leave._notify_responsible_approvers_submission()
-                leave._notify_responsible_current_turn()
+            subset._split_group_notify_submission_for_records()
         return res
 
     @api.model_create_multi
@@ -1372,8 +1378,10 @@ class HrLeaveResponsibleApproval(models.Model):
         submit_responsible_leaves = records.filtered(
             lambda l: l.validation_type == "employee_hr_responsibles" and l.state == "confirm"
         )
-        if submit_responsible_leaves:
-            for leave in submit_responsible_leaves:
-                leave._notify_responsible_approvers_submission()
-                leave._notify_responsible_current_turn()
+        if (
+            submit_responsible_leaves
+            and not self.env.context.get(_SKIP_RESPONSIBLE_SUBMIT_NOTIFY_CTX)
+            and not self.env.context.get("leave_fast_create")
+        ):
+            submit_responsible_leaves._split_group_notify_submission_for_records()
         return records

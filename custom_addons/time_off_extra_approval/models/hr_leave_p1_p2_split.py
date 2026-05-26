@@ -27,6 +27,8 @@ from odoo import api, fields, models
 from odoo.exceptions import UserError
 from odoo.tools.translate import _
 
+_SKIP_RESPONSIBLE_SUBMIT_NOTIFY_CTX = "skip_responsible_submit_notify"
+
 _logger = logging.getLogger(__name__)
 
 # Job title keys (lowercase) whose leaves are eligible for auto-split.
@@ -106,9 +108,22 @@ class HrLeaveP1P2Split(models.Model):
     # Create — perform the split
     # ------------------------------------------------------------------
 
+    def _p1p2_any_will_split_vals_list(self, vals_list):
+        if self.env.context.get(_SKIP_P1P2_SPLIT_CTX):
+            return False
+        Leave = self.env["hr.leave"]
+        for vals in vals_list:
+            probe = Leave.new(dict(vals))
+            if Leave._p1p2_should_split(probe):
+                return True
+        return False
+
     @api.model_create_multi
     def create(self, vals_list):
-        records = super().create(vals_list)
+        ctx = dict(self.env.context)
+        if self._p1p2_any_will_split_vals_list(vals_list):
+            ctx[_SKIP_RESPONSIBLE_SUBMIT_NOTIFY_CTX] = True
+        records = super(HrLeaveP1P2Split, self.with_context(ctx)).create(vals_list)
         if self.env.context.get(_SKIP_P1P2_SPLIT_CTX):
             return records
         for leave in records:
@@ -164,13 +179,17 @@ class HrLeaveP1P2Split(models.Model):
             "split_group_id": group_id,
         })
 
-        # Create all companion records.
+        # Create all companion records (skip per-segment approver notify; ping once below).
         if companions_vals:
             self.with_context(**{
                 _SKIP_P1P2_SPLIT_CTX: True,
                 "leave_fast_create": True,
                 "mail_activity_automation_skip": True,
+                _SKIP_RESPONSIBLE_SUBMIT_NOTIFY_CTX: True,
             }).create(companions_vals)
+
+        if hasattr(leave, "_notify_split_group_after_companion_create"):
+            leave._notify_split_group_after_companion_create()
 
         _logger.info(
             "p1p2_split: leave %s → 1 P1 + %s P2 + %s O (con_lai=%s, requested=%s, employee=%s)",

@@ -7,9 +7,11 @@
         <field name="arch" type="xml">
             <xpath expr="//field[@name='employee_id'][@invisible='1']" position="after">
                 <field name="mien_allowed_leave_type_ids" invisible="1"/>
+                <field name="holiday_status_id_month_leave_type_locked" invisible="1"/>
             </xpath>
             <xpath expr="//field[@name='holiday_status_id'][@force_save='1']" position="attributes">
                 <attribute name="domain">[('id', 'in', mien_allowed_leave_type_ids)]</attribute>
+                <attribute name="readonly">state in ['cancel', 'refuse', 'validate', 'validate1'] or holiday_status_id_month_leave_type_locked</attribute>
                 <attribute name="context">{
                     'employee_id': employee_id,
                     'default_employee_id': employee_id,
@@ -17,6 +19,16 @@
                     'default_date_to': date_to,
                     'filter_leave_types_by_employee_mien': True
                 }</attribute>
+            </xpath>
+            <xpath expr="//field[@name='holiday_status_id'][@force_save='1']" position="after">
+                <field
+                    name="monthly_leave_split_preview"
+                    colspan="2"
+                    readonly="1"
+                    force_save="1"
+                    invisible="not monthly_leave_split_preview"
+                    widget="text"
+                />
             </xpath>
         </field>
     </record>

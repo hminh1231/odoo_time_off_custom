@@ -1,9 +1,22 @@
 # -*- coding: utf-8 -*-
 
+import re
+
 from odoo import api, fields, models
 from odoo.fields import Domain
 
 from .hr_leave_mien_config import MIEN_SELECTION
+
+# Mã loại phép = ngoặc () đầu tiên trong tên, vd. «Nghỉ phép (P1) - …» → P1.
+_LEAVE_TYPE_CODE_IN_PARENS_RE = re.compile(r"\(([^)]+)\)")
+
+
+def _normalize_leave_type_display_name(name):
+    """Chuẩn hóa ngoặc fullwidth và khoảng trắng thừa."""
+    if not name:
+        return ""
+    text = str(name).strip()
+    return text.replace("（", "(").replace("）", ")")
 
 # Chỉ lọc loại phép theo Miền khi tạo đơn nghỉ (holiday_status_id trên hr.leave).
 MIEN_LEAVE_TYPE_FILTER_CTX = "filter_leave_types_by_employee_mien"
@@ -22,6 +35,57 @@ class HrLeaveType(models.Model):
         compute="_compute_mien_display",
         string="Miền",
     )
+
+    @api.model
+    def code_from_name(self, display_name):
+        """Trích mã loại phép từ ngoặc () đầu tiên trong tên."""
+        name = _normalize_leave_type_display_name(display_name)
+        if not name:
+            return ""
+        match = _LEAVE_TYPE_CODE_IN_PARENS_RE.search(name)
+        return match.group(1).strip() if match else ""
+
+    @api.model
+    def _leave_type_name_variants(self, leave_type):
+        """Các biến thể tên (mọi ngôn ngữ cài đặt) để đối chiếu mã."""
+        names = set()
+        field = leave_type._fields.get("name")
+        if field and field.translate:
+            for lang_code, _label in self.env["res.lang"].get_installed():
+                names.add(
+                    _normalize_leave_type_display_name(
+                        leave_type.with_context(lang=lang_code).name
+                    )
+                )
+        names.add(_normalize_leave_type_display_name(leave_type.name))
+        return {n for n in names if n}
+
+    @api.model
+    def search_by_code(self, code, limit=1):
+        """Tìm loại ngày nghỉ theo mã trong () — quét toàn bộ loại phép."""
+        code_norm = (code or "").strip().upper()
+        if not code_norm:
+            return self.browse()
+        matches = self.browse()
+        for leave_type in self.sudo().search([]):
+            for name in self._leave_type_name_variants(leave_type):
+                if self.code_from_name(name).upper() == code_norm:
+                    matches |= leave_type
+                    break
+            if limit and len(matches) >= limit:
+                break
+        return matches
+
+    @api.model
+    def leave_type_from_selection(self, leave_type, code):
+        """Ưu tiên tìm theo mã; nếu không có thì dùng bản ghi đang chọn nếu mã khớp."""
+        code_norm = (code or "").strip().upper()
+        found = self.search_by_code(code, limit=1)
+        if found:
+            return found
+        if leave_type and self.code_from_name(leave_type.name).upper() == code_norm:
+            return leave_type
+        return self.browse()
 
     @api.depends("mien_line_ids", "mien_line_ids.config_id.mien")
     def _compute_mien_display(self):

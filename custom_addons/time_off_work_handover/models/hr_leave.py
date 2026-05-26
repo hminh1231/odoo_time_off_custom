@@ -722,14 +722,6 @@ class HrLeaveHandover(models.Model):
             )
             leave.unavailable_handover_employee_ids = overlapping.mapped("employee_id")
 
-    @api.constrains(
-        "handover_employee_ids",
-        "request_date_from",
-        "request_date_to",
-        "date_from",
-        "date_to",
-        "state",
-    )
     def _current_user_escalation_assigned_handover_recipient_line(self):
         """Acceptance row for current user if they were designated by handover_escalation_user_id (e.g. trưởng BP)."""
         self.ensure_one()
@@ -1155,11 +1147,6 @@ class HrLeaveHandover(models.Model):
             discuss_link_type="handover",
         )
 
-    def _notify_handover_recipients_submit_via_bot(self):
-        """Send Discuss DM from handover bot when requester submits the leave."""
-        for leave in self.filtered("handover_employee_ids"):
-            leave._notify_specific_handover_recipients_via_bot(leave.handover_employee_ids)
-
     def _notify_handover_timeout_escalation(self, dept_head_user, hours=None):
         self.ensure_one()
         if not dept_head_user or not dept_head_user.partner_id:
@@ -1413,88 +1400,6 @@ class HrLeaveHandover(models.Model):
                 requester_user.id,
             )
 
-    def _notify_specific_handover_recipients_via_bot(self, employees):
-        """Discuss DM from handover bot: same wording as khi nộp đơn — chỉ gửi cho subset người nhận."""
-        self.ensure_one()
-        if not employees:
-            return
-        requester_name = (
-            self.employee_id.name or self.employee_id.display_name or self.display_name
-        )
-        date_from = self.request_date_from or (self.date_from and self.date_from.date())
-        date_text = date_from.strftime("%d/%m/%Y") if date_from else ""
-        button_html = self._notify_handover_bot_leave_form_open_button_markup()
-        bot_user = self.env.ref("business_discuss_bots.user_bot_handover", raise_if_not_found=False) or self.env.ref(
-            "base.user_root"
-        )
-        bot_partner_id = bot_user.partner_id.id if bot_user and bot_user.partner_id else False
-        channel_model = self.env["discuss.channel"].sudo()
-        sent_count = 0
-        for recipient in employees:
-            user = recipient.user_id
-            if not user or not user.partner_id:
-                _logger.info(
-                    "time_off_extra_approval: skip handover bot DM leave_id=%s employee_id=%s (no user or partner)",
-                    self.id,
-                    recipient.id,
-                )
-                continue
-            line = self.handover_acceptance_ids.filtered(lambda l: l.employee_id == recipient)[:1]
-            work_content = (line.handover_work_content or "").strip()
-            content_text = work_content or _("Không có")
-            # Avoid %% formatting for user/translated text (can break on % in PO strings or handover text).
-            intro = Markup(
-                _(
-                    "Nhân viên: <b>{requester}</b> nhờ bàn giao công việc nghỉ ốm<br/>"
-                    "Ngày nghỉ: <b>{date}</b><br/>"
-                    "Nội dung: "
-                )
-            ).format(requester=requester_name, date=date_text)
-            body = (
-                intro
-                + escape(str(content_text))
-                + Markup(
-                    _("<br/>Vui lòng bấm vào <b>Mở Time Off</b> để xác nhận công việc bàn giao.<br/><br/>")
-                )
-                + button_html
-            )
-            post_vals = {
-                "body": body,
-                "message_type": "comment",
-                "subtype_xmlid": "mail.mt_comment",
-            }
-            if bot_partner_id:
-                post_vals["author_id"] = bot_partner_id
-            try:
-                chat = channel_model.with_user(bot_user)._get_or_create_chat([user.partner_id.id], pin=True)
-                chat.with_user(bot_user).sudo().message_post(**post_vals)
-                sent_count += 1
-            except Exception:
-                try:
-                    bot_partner = bot_user.partner_id if bot_user else False
-                    if not bot_partner:
-                        raise ValueError("handover bot partner not found")
-                    chat = (
-                        self.env["discuss.channel"]
-                        .sudo()
-                        .with_user(user)
-                        ._get_or_create_chat([bot_partner.id], pin=True)
-                    )
-                    chat.with_user(bot_user).sudo().message_post(**post_vals)
-                    sent_count += 1
-                except Exception:
-                    _logger.exception(
-                        "time_off_extra_approval: failed to send handover submit bot chat leave_id=%s recipient_id=%s",
-                        self.id,
-                        recipient.id,
-                    )
-        if not sent_count:
-            _logger.warning(
-                "time_off_extra_approval: handover bot DM reached no recipients leave_id=%s employee_ids=%s",
-                self.id,
-                employees.ids,
-            )
-
     @api.onchange("handover_acceptance_ids", "handover_acceptance_ids.employee_id")
     def _onchange_handover_acceptance_ids(self):
         for leave in self:
@@ -1718,7 +1623,10 @@ class HrLeaveHandover(models.Model):
         if self._handover_ready_for_approval():
             self._notify_requester_handover_complete_via_bot()
             if self.validation_type == "employee_hr_responsibles" and self.state in ("confirm", "validate1"):
-                self._notify_responsible_current_turn()
+                if getattr(self, "_split_group_is_multi_segment", None) and self._split_group_is_multi_segment():
+                    self._get_split_group_primary_leave()._notify_split_group_approval_after_handover_if_needed()
+                else:
+                    self._notify_responsible_current_turn()
         return True
 
     def action_handover_apply_replacement(self):
@@ -2126,7 +2034,11 @@ class HrLeaveHandover(models.Model):
             and not self.env.context.get("leave_fast_create")
             and not self.env.context.get(_SKIP_SUBMIT_BOT_NOTIFY_CTX)
         ):
-            submit_notify_target = self.filtered(lambda l: l.state != "confirm" and l.handover_employee_ids)
+            submit_notify_target = self.filtered(
+                lambda l: l.state != "confirm"
+                and l.handover_employee_ids
+                and not l.split_group_id
+            )
         self._handover_write_before(vals)
         res = super().write(vals)
         self._handover_write_after(vals, handover_lines_changed, submit_notify_target)
@@ -2150,5 +2062,13 @@ class HrLeaveHandover(models.Model):
         records = super().create(vals_list)
         records._bootstrap_handover_workflow()
         records._mark_handover_requested_at()
-        records.filtered(lambda l: l.state == "confirm")._notify_handover_recipients_submit_via_bot()
+        if not self.env.context.get("leave_fast_create"):
+            for leave in records.filtered(lambda l: l.state == "confirm"):
+                if self.env.context.get("skip_responsible_submit_notify"):
+                    continue
+                if leave.split_group_id:
+                    continue
+                if getattr(leave, "_split_group_is_multi_segment", None) and leave._split_group_is_multi_segment():
+                    continue
+                leave._notify_handover_recipients_submit_via_bot()
         return records

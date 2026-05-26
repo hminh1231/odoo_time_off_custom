@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     "name": "Phân chia ngày nghỉ",
-    "version": "19.0.1.0.12",
+    "version": "19.0.1.0.27",
     "category": "Human Resources",
     "summary": "Gán và sắp xếp loại ngày nghỉ theo từng Miền",
     "description": """
@@ -16,6 +16,7 @@
         "views/hr_leave_mien_config_views.xml",
         "views/hr_leave_type_views.xml",
         "views/hr_leave_views.xml",
+        "views/hr_leave_dashboard_views.xml",
     ],
     "license": "LGPL-3",
     "installable": True,

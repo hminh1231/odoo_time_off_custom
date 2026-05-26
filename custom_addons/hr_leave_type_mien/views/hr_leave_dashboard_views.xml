@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="hr_leave_view_form_dashboard_first_month_leave_p1" model="ir.ui.view">
+        <field name="name">hr.leave.dashboard.form.first.month.leave.p1</field>
+        <field name="model">hr.leave</field>
+        <field name="priority">96</field>
+        <field name="inherit_id" ref="hr_holidays.hr_leave_view_form_dashboard_new_time_off"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='holiday_status_id']" position="before">
+                <field name="holiday_status_id_month_leave_type_locked" invisible="1"/>
+            </xpath>
+            <xpath expr="//field[@name='holiday_status_id']" position="attributes">
+                <attribute name="readonly">id or holiday_status_id_month_leave_type_locked</attribute>
+            </xpath>
+        </field>
+    </record>
+</odoo>

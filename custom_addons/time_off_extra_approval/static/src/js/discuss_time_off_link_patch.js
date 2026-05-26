@@ -3,6 +3,8 @@
 import { Message } from "@mail/core/common/message";
 import { Store } from "@mail/core/common/store_service";
 import { browser } from "@web/core/browser/browser";
+import { ConfirmationDialog } from "@web/core/confirmation_dialog/confirmation_dialog";
+import { _t } from "@web/core/l10n/translation";
 import { patch } from "@web/core/utils/patch";
 import { onMounted, onWillDestroy } from "@odoo/owl";
 
@@ -14,8 +16,18 @@ const LEAVE_LINK_SELECTOR = [
     'a[href*="/discuss_leave/"]',
 ].join(", ");
 
+const APPROVAL_GROUP_SELECTOR =
+    'a[data-oe-type="approval_group"][data-oe-action][data-oe-id]';
+
 function findTimeOffLeaveLink(target) {
+    if (target?.closest?.(APPROVAL_GROUP_SELECTOR)) {
+        return null;
+    }
     return target?.closest?.(LEAVE_LINK_SELECTOR) ?? null;
+}
+
+function findApprovalGroupLink(target) {
+    return target?.closest?.(APPROVAL_GROUP_SELECTOR) ?? null;
 }
 
 function resolveLeaveId(link) {
@@ -62,6 +74,54 @@ function openLeaveForm(env, resId) {
     });
 }
 
+async function handleApprovalGroupAction(ev, store) {
+    const link = findApprovalGroupLink(ev.target);
+    if (!link) {
+        return false;
+    }
+    const resId = resolveLeaveId(link);
+    const action = link.dataset.oeAction;
+    if (!resId || !action) {
+        return false;
+    }
+    ev.preventDefault();
+    ev.stopPropagation();
+
+    const { orm, notification, dialog } = store.env.services;
+
+    const runApprove = async () => {
+        try {
+            await orm.call("hr.leave", "action_discuss_split_group_approve_all", [[resId]]);
+            notification.add(_t("Đã phê duyệt toàn bộ đơn nghỉ."), { type: "success" });
+        } catch (e) {
+            notification.add(e.data?.message || e.message, { type: "danger" });
+        }
+    };
+
+    const runRefuse = async () => {
+        try {
+            await orm.call("hr.leave", "action_discuss_split_group_refuse_all", [[resId]]);
+            notification.add(_t("Đã từ chối toàn bộ đơn nghỉ."), { type: "warning" });
+        } catch (e) {
+            notification.add(e.data?.message || e.message, { type: "danger" });
+        }
+    };
+
+    if (action === "approve_all") {
+        await runApprove();
+    } else if (action === "refuse_all") {
+        dialog.add(ConfirmationDialog, {
+            title: _t("Từ chối đơn nghỉ"),
+            body: _t("Bạn có chắc muốn từ chối toàn bộ các phần trong đơn này?"),
+            confirm: runRefuse,
+            confirmLabel: _t("Từ chối tất cả"),
+            cancel: () => {},
+            cancelLabel: _t("Hủy"),
+        });
+    }
+    return true;
+}
+
 function handleTimeOffLeaveLink(ev, store, thread) {
     const link = findTimeOffLeaveLink(ev.target);
     if (!link) {
@@ -78,8 +138,19 @@ function handleTimeOffLeaveLink(ev, store, thread) {
     return true;
 }
 
+async function handleTimeOffDiscussClick(ev, store, thread) {
+    if (await handleApprovalGroupAction(ev, store)) {
+        return true;
+    }
+    return handleTimeOffLeaveLink(ev, store, thread);
+}
+
 patch(Store.prototype, {
     handleClickOnLink(ev, thread) {
+        if (findApprovalGroupLink(ev.target)) {
+            void handleApprovalGroupAction(ev, this);
+            return true;
+        }
         if (handleTimeOffLeaveLink(ev, this, thread)) {
             return true;
         }
@@ -90,11 +161,11 @@ patch(Store.prototype, {
 patch(Message.prototype, {
     setup() {
         super.setup(...arguments);
-        const onTimeOffLinkTap = (ev) => {
+        const onTimeOffLinkTap = async (ev) => {
             if (!this.root.el?.contains(ev.target)) {
                 return;
             }
-            handleTimeOffLeaveLink(ev, this.store, this.props.thread);
+            await handleTimeOffDiscussClick(ev, this.store, this.props.thread);
         };
         onMounted(() => {
             this.root.el?.addEventListener("click", onTimeOffLinkTap, { capture: true });

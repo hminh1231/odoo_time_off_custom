@@ -1,6 +1,6 @@
 {
     "name": "Time Off Extra Approvers (Demo)",
-    "version": "19.0.7.0.2",
+    "version": "19.0.7.0.7",
     "category": "Human Resources",
     "summary": "Allow extra officers/offices to approve time off by leave type",
     "depends": [

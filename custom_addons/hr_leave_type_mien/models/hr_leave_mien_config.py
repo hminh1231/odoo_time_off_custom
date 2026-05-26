@@ -11,6 +11,15 @@ MIEN_SELECTION = [
     ("VP", "VP"),
 ]
 
+# Miền bắt buộc loại P1 cho đơn nghỉ đầu tiên trong tháng (theo lịch).
+FIRST_MONTH_LEAVE_P1_MIEN_CODES = frozenset({"Bắc", "Nam", "ĐTT"})
+# Mã loại phép = ngoặc () đầu tiên trong tên hr.leave.type, vd. «Nghỉ phép (P1) - …».
+P1_LEAVE_TYPE_CODE = "P1"
+P2_LEAVE_TYPE_CODE = "P2"
+O_LEAVE_TYPE_CODE = "O"
+# Tối đa 3 ngày phép (P1/P2) trong một tháng; từ ngày thứ 4 → (O).
+MAX_PAID_LEAVE_DAYS_PER_MONTH = 3
+
 
 class HrLeaveMienConfig(models.Model):
     _name = "hr.leave.mien.config"

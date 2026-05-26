@@ -207,8 +207,12 @@ class HolidaysRequest(models.Model):
         if required is None:
             return {"exempt": True, "violation": False}
         start = self._parse_date_val(merged_vals.get("request_date_from"))
+        if not start:
+            start = self._parse_date_val(merged_vals.get("date_from"))
         if not start and leave:
-            start = leave.request_date_from
+            start = leave.request_date_from or (
+                leave.date_from.date() if leave.date_from else False
+            )
         if not start:
             return {"exempt": True, "violation": False}
         today = fields.Date.context_today(self)
@@ -279,9 +283,22 @@ class HolidaysRequest(models.Model):
         merged = dict(vals or {})
         if leave:
             leave = leave[:1]
-            for key in ("employee_id", "request_date_from", "request_date_to"):
-                if key not in merged:
+            for key in (
+                "employee_id",
+                "request_date_from",
+                "request_date_to",
+                "date_from",
+                "date_to",
+                "holiday_status_id",
+            ):
+                if key not in merged or merged[key] in (False, None):
                     merged[key] = leave[key]
+        if not merged.get("employee_id"):
+            default_emp = self.env.context.get("default_employee_id")
+            if default_emp:
+                merged["employee_id"] = default_emp
+            elif self.env.user.employee_id:
+                merged["employee_id"] = self.env.user.employee_id.id
         return merged
 
     def _notify_approval_bot_leave_form_open_button_markup(self):
@@ -554,6 +571,96 @@ class HolidaysRequest(models.Model):
                 "Bạn đang gửi đơn nghỉ khẩn cấp (thời gian báo trước ngắn hơn quy định). "
                 "Bạn có chắc chắn muốn tiếp tục không?"
             ),
+        }
+
+    @api.model
+    def _needs_emergency_leave_confirmation(self, res_id=False, vals=None):
+        """Cần cảnh báo nghỉ khẩn cấp trên UI (kể cả Giám đốc nếu báo trước ngắn)."""
+        vals = vals or {}
+        leave = self.env["hr.leave"]
+        if res_id:
+            leave = self.browse(res_id).exists()
+        merged = self._merge_vals_for_emergency_check(
+            vals, leave=leave if res_id and leave else None
+        )
+        info = self._emergency_leave_violation_info(
+            merged, leave=leave if res_id and leave else None
+        )
+        if info.get("violation"):
+            return True
+        if not info.get("exempt"):
+            return False
+        employee_id = self._m2o_id(merged.get("employee_id"))
+        if not employee_id and leave:
+            employee_id = leave.employee_id.id
+        employee = (
+            self.env["hr.employee"].sudo().browse(employee_id)
+            if employee_id
+            else self.env["hr.employee"]
+        )
+        if not employee or self._required_lead_days_for_job_title(employee.job_title) is not None:
+            return False
+        start = self._parse_date_val(merged.get("request_date_from"))
+        if not start:
+            start = self._parse_date_val(merged.get("date_from"))
+        if not start and leave:
+            start = leave.request_date_from or (
+                leave.date_from.date() if leave.date_from else False
+            )
+        if not start:
+            return False
+        today = fields.Date.context_today(self)
+        return (start - today).days < _DEFAULT_LEAD_DAYS
+
+    @api.model
+    def check_leave_form_save_confirmations(self, res_id=False, vals=None):
+        """Một hộp thoại trước khi lưu: nghỉ khẩn cấp, hết phép, hoặc cả hai."""
+        emergency_preview = self.check_emergency_leave_lead_time(res_id=res_id, vals=vals)
+        con_lai_preview = self.check_con_lai_zero_confirmation(res_id=res_id, vals=vals)
+        need_emergency = self._needs_emergency_leave_confirmation(
+            res_id=res_id, vals=vals
+        )
+        need_con_lai = con_lai_preview.get("needs_confirmation")
+        if need_emergency and need_con_lai:
+            return {
+                "needs_confirmation": True,
+                "set_emergency_confirmed": True,
+                "set_con_lai_zero_confirmed": True,
+                "title": _("Xác nhận nghỉ khẩn cấp"),
+                "message": _(
+                    "Bạn đang xin nghỉ khẩn cấp, đồng thời số phép của bạn hiện đang là 0. "
+                    "Bạn có muốn tiếp tục không?"
+                ),
+            }
+        if need_emergency:
+            if emergency_preview.get("needs_confirmation"):
+                return {
+                    **emergency_preview,
+                    "set_emergency_confirmed": True,
+                    "set_con_lai_zero_confirmed": False,
+                }
+            return {
+                "needs_confirmation": True,
+                "set_emergency_confirmed": True,
+                "set_con_lai_zero_confirmed": False,
+                "title": _("Xác nhận nghỉ khẩn cấp"),
+                "message": _(
+                    "Bạn đang gửi đơn nghỉ khẩn cấp (thời gian báo trước ngắn hơn quy định). "
+                    "Bạn có chắc chắn muốn tiếp tục không?"
+                ),
+            }
+        if need_con_lai:
+            return {
+                **con_lai_preview,
+                "set_emergency_confirmed": False,
+                "set_con_lai_zero_confirmed": True,
+            }
+        return {
+            "needs_confirmation": False,
+            "title": "",
+            "message": "",
+            "set_emergency_confirmed": False,
+            "set_con_lai_zero_confirmed": False,
         }
 
     def write(self, vals):
