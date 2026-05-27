@@ -1,4 +1,4 @@
-﻿from odoo import api, fields, models
+from odoo import api, fields, models
 from odoo.tools.translate import _
 
 # Chỉ trừ phép khi đơn đã duyệt xong (Approved), không trừ khi còn chờ duyệt.
