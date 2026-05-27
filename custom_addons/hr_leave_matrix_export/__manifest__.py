@@ -1,7 +1,7 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 {
     "name": "Time Off Matrix Excel Export",
-    "version": "19.0.1.3.5",
+    "version": "19.0.1.3.6",
     "category": "Human Resources/Time Off",
     "summary": "Export time off matrix and store leave form (Excel)",
     "depends": [

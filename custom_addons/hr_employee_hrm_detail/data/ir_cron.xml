@@ -5,8 +5,8 @@
         <field name="model_id" ref="hr.model_hr_employee"/>
         <field name="state">code</field>
         <field name="code">model.cron_snapshot_con_lai_prev_year()</field>
-        <field name="interval_number">1</field>
-        <field name="interval_type">years</field>
+        <field name="interval_number">12</field>
+        <field name="interval_type">months</field>
         <field name="nextcall">2027-01-01 00:30:00</field>
         <field name="active">True</field>
         <field name="user_id" ref="base.user_root"/>

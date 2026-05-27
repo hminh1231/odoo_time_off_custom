@@ -105,7 +105,7 @@ class HrLeaveStoreExportMixin(models.AbstractModel):
 
     @staticmethod
     def _leave_span_in_month(leave, month_start, month_end):
-        """Khoảng nghỉ của đơn (cắt theo tháng xuất), một đơn = một dòng."""
+        """Khoảng nghỉ của đơn (cắt theo tháng xuất), tách mỗi ngày = một dòng."""
         if not leave.request_date_from or not leave.request_date_to:
             return None
         span_start = max(leave.request_date_from, month_start)
@@ -113,6 +113,13 @@ class HrLeaveStoreExportMixin(models.AbstractModel):
         if span_start > span_end:
             return None
         return span_start, span_end
+
+    @staticmethod
+    def _iter_days(ngay_bd, ngay_kt):
+        day = ngay_bd
+        while day <= ngay_kt:
+            yield day
+            day += timedelta(days=1)
 
     def _employee_ma_cb_nv(self, employee):
         if not employee:
@@ -147,6 +154,7 @@ class HrLeaveStoreExportMixin(models.AbstractModel):
         if not ma_bp:
             ma_bp = IMPORT_CAPNHATCONG_DEFAULT_MA_BP
         ma_khieu = self._leave_type_symbol(leave)
+        ghi_chu = (leave.notes or leave.private_name or leave.name or "").strip()
         return {
             "ma_bp": ma_bp,
             "ma_khieu": ma_khieu,
@@ -154,26 +162,8 @@ class HrLeaveStoreExportMixin(models.AbstractModel):
             "ngay_bd": ngay_bd,
             "ngay_kt": ngay_kt,
             "tong_gio": self._tong_gio_capnhatcong(ma_khieu, ngay_bd, ngay_kt),
+            "ghi_chu": ghi_chu,
         }
-
-    @staticmethod
-    def _merge_consecutive_capnhatcong_rows(rows):
-        """Gộp dòng liên tiếp cùng Ma_CbNv + Ma_Khieu (P2: 3–4, O: 5–6)."""
-        if not rows:
-            return rows
-        merged = [dict(rows[0])]
-        for row in rows[1:]:
-            prev = merged[-1]
-            same_person = row["ma_cb"] == prev["ma_cb"] and row["ma_khieu"] == prev["ma_khieu"]
-            next_day = prev["ngay_kt"] + timedelta(days=1)
-            if same_person and row["ngay_bd"] == next_day:
-                prev["ngay_kt"] = row["ngay_kt"]
-                prev["tong_gio"] = HrLeaveStoreExportMixin._tong_gio_capnhatcong(
-                    prev["ma_khieu"], prev["ngay_bd"], prev["ngay_kt"]
-                )
-            else:
-                merged.append(dict(row))
-        return merged
 
     def _import_capnhatcong_row_values(self, stt, payload):
         return [
@@ -182,7 +172,7 @@ class HrLeaveStoreExportMixin(models.AbstractModel):
             payload["ma_bp"],
             IMPORT_CAPNHATCONG_DEFAULT_IS_UUTIEN,
             IMPORT_CAPNHATCONG_DEFAULT_UPDATE_TYPE,
-            IMPORT_CAPNHATCONG_DEFAULT_GHI_CHU,
+            payload.get("ghi_chu") or IMPORT_CAPNHATCONG_DEFAULT_GHI_CHU,
             self._ma_khieu_export_display(payload["ma_khieu"]),
             payload["ma_cb"],
             payload["ngay_bd"],
@@ -509,12 +499,8 @@ class HrLeaveStoreExportMixin(models.AbstractModel):
             span = self._leave_span_in_month(leave, month_start, month_end)
             if not span:
                 continue
-            payloads.append(self._import_capnhatcong_row_payload(leave, span[0], span[1]))
-        payloads = self._merge_consecutive_capnhatcong_rows(payloads)
-        for payload in payloads:
-            payload["tong_gio"] = self._tong_gio_capnhatcong(
-                payload["ma_khieu"], payload["ngay_bd"], payload["ngay_kt"]
-            )
+            for day in self._iter_days(span[0], span[1]):
+                payloads.append(self._import_capnhatcong_row_payload(leave, day, day))
 
         row = 1
         for stt, payload in enumerate(payloads, start=1):
