@@ -1,0 +1,52 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+# 	* hr_leave_type_mien
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 19.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-05-27 00:00+0000\n"
+"PO-Revision-Date: 2026-05-27 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: vi_VN\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#. module: hr_leave_type_mien
+#: model:ir.model.fields,field_description:hr_leave_type_mien.field_hr_leave_type__mien_display
+msgid "Region"
+msgstr "Miền"
+
+#. module: hr_leave_type_mien
+#: model:ir.model.fields,field_description:hr_leave_type_mien.field_hr_leave_mien_config__mien
+msgid "Region"
+msgstr "Miền"
+
+#. module: hr_leave_type_mien
+#: model:ir.model.fields.selection,name:hr_leave_type_mien.selection__hr_leave_mien_config__mien__bắc
+msgid "North"
+msgstr "Bắc"
+
+#. module: hr_leave_type_mien
+#: model:ir.model.fields.selection,name:hr_leave_type_mien.selection__hr_leave_mien_config__mien__nam
+msgid "South"
+msgstr "Nam"
+
+#. module: hr_leave_type_mien
+#: model:ir.model.fields.selection,name:hr_leave_type_mien.selection__hr_leave_mien_config__mien__đtt
+msgid "Central"
+msgstr "ĐTT"
+
+#. module: hr_leave_type_mien
+#: model:ir.model.fields.selection,name:hr_leave_type_mien.selection__hr_leave_mien_config__mien__vp
+msgid "Office"
+msgstr "VP"
+
+#. module: hr_leave_type_mien
+#: model_terms:ir.ui.view,arch_db:hr_leave_type_mien.view_holiday_status_normal_tree_mien
+msgid "Region"
+msgstr "Miền"

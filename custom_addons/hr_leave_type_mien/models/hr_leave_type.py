@@ -29,11 +29,11 @@ class HrLeaveType(models.Model):
     mien_line_ids = fields.One2many(
         "hr.leave.mien.line",
         "leave_type_id",
-        string="Phân chia Miền",
+        string="Region assignment",
     )
     mien_display = fields.Char(
         compute="_compute_mien_display",
-        string="Miền",
+        string="Region",
     )
 
     @api.model
@@ -89,7 +89,8 @@ class HrLeaveType(models.Model):
 
     @api.depends("mien_line_ids", "mien_line_ids.config_id.mien")
     def _compute_mien_display(self):
-        labels = dict(MIEN_SELECTION)
+        mien_field = self.env["hr.leave.mien.config"]._fields["mien"]
+        labels = dict(mien_field._description_selection(self.env))
         for leave_type in self:
             codes = leave_type.mien_line_ids.config_id.mapped("mien")
             leave_type.mien_display = ", ".join(labels.get(code, code) for code in codes) if codes else ""

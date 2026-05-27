@@ -5,10 +5,10 @@ from odoo.exceptions import ValidationError
 from odoo.tools.translate import _
 
 MIEN_SELECTION = [
-    ("Bắc", "Bắc"),
-    ("Nam", "Nam"),
-    ("ĐTT", "ĐTT"),
-    ("VP", "VP"),
+    ("Bắc", "North"),
+    ("Nam", "South"),
+    ("ĐTT", "Central"),
+    ("VP", "Office"),
 ]
 
 # Miền bắt buộc loại P1 cho đơn nghỉ đầu tiên trong tháng (theo lịch).
@@ -23,14 +23,14 @@ MAX_PAID_LEAVE_DAYS_PER_MONTH = 3
 
 class HrLeaveMienConfig(models.Model):
     _name = "hr.leave.mien.config"
-    _description = "Phân chia loại ngày nghỉ theo Miền"
+    _description = "Time off types by region"
     _order = "sequence, mien, id"
     _rec_name = "mien"
 
     sequence = fields.Integer(default=10)
     mien = fields.Selection(
         MIEN_SELECTION,
-        string="Miền",
+        string="Region",
         required=True,
         index=True,
     )
