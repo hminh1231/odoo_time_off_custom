@@ -29,8 +29,9 @@ _MAX_EMPLOYEE_HR_RESPONSIBLES_MULTI_DIRECTOR = approval_constants.MAX_EMPLOYEE_H
 _ORG_CHART_STOP_JOB_POSITIONS = frozenset({"sale admin"})
 _ORG_CHART_STOP_JOB_POSITIONS_GIAM_SAT = frozenset({"human resources manager"})
 
-# Job Position of the single observer who receives FYI bot DMs but cannot approve.
-_OBSERVER_JOB_POSITION = "admin observer"
+# Job Position + Job Title of the single observer who receives FYI bot DMs but cannot approve.
+_OBSERVER_JOB_POSITION = "tiền lương"
+_OBSERVER_JOB_TITLE = "trưởng bộ phận"
 
 # Job titles whose org-chart flow triggers observer notification (all miền).
 _OBSERVER_JOB_TITLES = frozenset({"asm", "rsm"})
@@ -857,9 +858,13 @@ class HrLeaveResponsibleApproval(models.Model):
         return user in self.extra_approver_user_ids
 
     def _get_observer_user(self):
-        """Return the single observer res.users (job_id.name == 'Admin Observer'), or empty."""
+        """Return the single observer res.users (job_id.name == 'TIỀN LƯƠNG' and job_title == 'Trưởng bộ phận'), or empty."""
         emp = self.env["hr.employee"].sudo().search(
-            [("job_id.name", "ilike", _OBSERVER_JOB_POSITION), ("user_id", "!=", False)],
+            [
+                ("job_id.name", "ilike", _OBSERVER_JOB_POSITION),
+                ("job_title", "ilike", _OBSERVER_JOB_TITLE),
+                ("user_id", "!=", False),
+            ],
             limit=1,
         )
         if not emp or not emp.user_id or emp.user_id.share:

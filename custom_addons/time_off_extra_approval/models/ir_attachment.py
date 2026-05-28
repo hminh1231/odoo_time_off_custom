@@ -5,8 +5,11 @@ from odoo import api, models
 
 _logger = logging.getLogger(__name__)
 
-_DOCX_MIMETYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 _GOTENBERG_URL = "http://gotenberg:3000"
+_WORD_MIMETYPES = frozenset({
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  # .docx
+    "application/msword",  # .doc
+})
 
 
 class IrAttachment(models.Model):
@@ -14,13 +17,13 @@ class IrAttachment(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        for vals in vals_list:
-            if vals.get("res_model") == "hr.leave" and vals.get("mimetype") == _DOCX_MIMETYPE:
-                vals = self._convert_docx_to_pdf(vals)
+        for i, vals in enumerate(vals_list):
+            if vals.get("res_model") == "hr.leave" and vals.get("mimetype") in _WORD_MIMETYPES:
+                vals_list[i] = self._convert_docx_to_pdf(vals)
         return super().create(vals_list)
 
     def _convert_docx_to_pdf(self, vals):
-        """Convert a docx attachment to PDF via Gotenberg before storing."""
+        """Convert a .doc/.docx attachment to PDF via Gotenberg before storing."""
         try:
             from gotenberg_client import GotenbergClient
 
@@ -33,6 +36,7 @@ class IrAttachment(models.Model):
                 raw_bytes = base64.b64decode(datas)
 
             original_name = vals.get("name", "document.docx")
+            original_mimetype = vals.get("mimetype", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
             pdf_name = original_name.rsplit(".", 1)[0] + ".pdf"
 
             with GotenbergClient(_GOTENBERG_URL) as client:
@@ -42,7 +46,7 @@ class IrAttachment(models.Model):
                         .convert_in_memory_file(
                             io.BytesIO(raw_bytes),
                             name=original_name,
-                            mime_type=_DOCX_MIMETYPE,
+                            mime_type=original_mimetype,
                         )
                         .run()
                     )
