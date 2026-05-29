@@ -236,7 +236,9 @@ class HrLeave(models.Model):
         )
         if days_before >= MAX_PAID_LEAVE_DAYS_PER_MONTH:
             return "o"
-        plan = self._monthly_mien_split_plan(days_before, start_date, end_date)
+        plan = self._monthly_mien_split_plan(
+            employee, start_date, end_date, exclude
+        )
         if plan:
             return plan[0][0]
         return None
@@ -538,10 +540,9 @@ class HrLeave(models.Model):
             if not start or not end:
                 continue
             exclude = [leave.id] if leave.id else []
-            days_before = leave._count_leave_days_in_calendar_month(
-                leave.employee_id, start.year, start.month, exclude
+            plan = leave._monthly_mien_split_plan(
+                leave.employee_id, start, end, exclude
             )
-            plan = leave._monthly_mien_split_plan(days_before, start, end)
             if len(plan) > 1:
                 continue
             rule = leave._monthly_leave_rule_kind(
@@ -659,3 +660,35 @@ class HrLeave(models.Model):
             )
             super(HrLeave, leave).write(row_vals)
         return True
+
+    def _split_group_notify_submission_for_records(self):
+        self._monthly_mien_ensure_split_before_notify()
+        orphans = self.filtered(
+            lambda l: l.split_group_id
+            and hasattr(l, "_split_group_is_multi_segment")
+            and not l._split_group_is_multi_segment()
+        )
+        if orphans:
+            orphans.sudo().write({"split_group_id": False})
+        return super()._split_group_notify_submission_for_records()
+
+    def _notify_responsible_current_turn_via_approval_bot(self, approver_user):
+        self.ensure_one()
+        self._monthly_mien_ensure_split_before_notify()
+        if (
+            self.split_group_id
+            and hasattr(self, "_split_group_is_multi_segment")
+            and self._split_group_is_multi_segment()
+        ):
+            if hasattr(self, "_is_split_group_primary_leave") and not self._is_split_group_primary_leave():
+                return
+            group = self._get_split_group_leaves_all()
+            return self._notify_responsible_current_turn_via_approval_bot_group(
+                approver_user, group
+            )
+        plan_details = self._get_monthly_plan_approval_bot_details()
+        if plan_details:
+            return self._notify_approval_bot_monthly_plan_message(
+                approver_user, plan_details
+            )
+        return super()._notify_responsible_current_turn_via_approval_bot(approver_user)

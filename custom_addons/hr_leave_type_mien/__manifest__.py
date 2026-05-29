@@ -1,14 +1,18 @@
 # -*- coding: utf-8 -*-
 {
     "name": "Phân chia ngày nghỉ",
-    "version": "19.0.1.0.28",
+    "version": "19.0.1.0.31",
     "category": "Human Resources",
     "summary": "Gán và sắp xếp loại ngày nghỉ theo từng Miền",
     "description": """
         Cấu hình loại ngày nghỉ (Time Off Types) áp dụng cho từng Miền
         (Bắc, Nam, ĐTT, VP) và thứ tự hiển thị khi nhân viên đăng ký nghỉ.
     """,
-    "depends": ["hr_holidays", "hr_employee_hrm_detail"],
+    "depends": [
+        "hr_holidays",
+        "hr_employee_hrm_detail",
+        "time_off_responsible_approval",
+    ],
     "data": [
         "data/cleanup_views.xml",
         "data/cleanup_old_model.xml",

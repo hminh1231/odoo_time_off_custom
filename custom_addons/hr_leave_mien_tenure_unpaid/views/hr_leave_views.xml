@@ -2,5 +2,4 @@
 <odoo>
     <!-- Views removed: locking uses holiday_status_id_month_leave_type_locked from hr_leave_type_mien -->
     <delete model="ir.ui.view" id="hr_leave_view_form_tenure_unpaid"/>
-    <delete model="ir.ui.view" id="hr_leave_view_form_dashboard_mien_o"/>
 </odoo>

@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 """Tách đơn nghỉ theo quy tắc tháng: P1 (ngày 1) → P2 (ngày 2–3) → O (từ ngày 4)."""
 
+import calendar
 import logging
 import uuid
-from datetime import timedelta
+from datetime import date, timedelta
 
-from odoo import api, fields, models
+from markupsafe import Markup, escape
+
+from odoo import _, api, fields, models
 
 _SKIP_RESPONSIBLE_SUBMIT_NOTIFY_CTX = "skip_responsible_submit_notify"
 
@@ -51,14 +54,11 @@ class HrLeaveMonthlySplit(models.Model):
         if total_days <= 1:
             return False
         exclude = [self.id] if self.id else []
-        days_before = self._count_leave_days_in_calendar_month(
-            self.employee_id,
-            self.request_date_from.year,
-            self.request_date_from.month,
-            exclude,
-        )
         plan = self._monthly_mien_split_plan(
-            days_before, self.request_date_from, self.request_date_to
+            self.employee_id,
+            self.request_date_from,
+            self.request_date_to,
+            exclude,
         )
         if len(plan) <= 1:
             return False
@@ -79,13 +79,23 @@ class HrLeaveMonthlySplit(models.Model):
             _logger.exception("monthly_leave_split_preview failed")
             self.monthly_leave_split_preview = False
 
-    def _monthly_mien_split_plan(self, days_before, date_from, date_to):
+    @api.model
+    def _month_end_date(self, day):
+        """Ngày cuối cùng của tháng chứa ``day``."""
+        day = self._coerce_to_date(day)
+        last = calendar.monthrange(day.year, day.month)[1]
+        return date(day.year, day.month, last)
+
+    @api.model
+    def _monthly_mien_split_plan_for_month(self, days_before, date_from, date_to):
         """
-        Trả về list (kind, date_from, date_to) với kind in ('p1', 'p2', 'o').
-        days_before: số ngày nghỉ đã có trong tháng (không tính đơn hiện tại).
+        P1/P2/O trong một tháng lịch (date_from và date_to cùng tháng).
+        days_before: số ngày nghỉ đã có trong tháng đó (không tính đơn hiện tại).
         """
         from .hr_leave_mien_config import MAX_PAID_LEAVE_DAYS_PER_MONTH
 
+        date_from = self._coerce_to_date(date_from)
+        date_to = self._coerce_to_date(date_to)
         segments = []
         cursor = date_from
         remaining = (date_to - date_from).days + 1
@@ -109,6 +119,202 @@ class HrLeaveMonthlySplit(models.Model):
 
         return segments
 
+    @api.model
+    def _monthly_mien_split_plan(
+        self, employee, date_from, date_to, exclude_leave_ids=None
+    ):
+        """
+        Trả về list (kind, date_from, date_to) — áp dụng P1/P2/O riêng từng tháng
+        khi đơn nghỉ trải qua nhiều tháng.
+        """
+        date_from = self._coerce_to_date(date_from)
+        date_to = self._coerce_to_date(date_to)
+        if not employee or not date_from or not date_to:
+            return []
+        if date_to < date_from:
+            date_from, date_to = date_to, date_from
+
+        segments = []
+        cursor = date_from
+        while cursor <= date_to:
+            month_end = min(date_to, self._month_end_date(cursor))
+            days_before = self._count_leave_days_in_calendar_month(
+                employee,
+                cursor.year,
+                cursor.month,
+                exclude_leave_ids,
+            )
+            segments.extend(
+                self._monthly_mien_split_plan_for_month(
+                    days_before, cursor, month_end
+                )
+            )
+            cursor = month_end + timedelta(days=1)
+        return segments
+
+    def _monthly_mien_ensure_split_before_notify(self):
+        """Tách đơn (nếu cần) trước khi OdooBot gửi tin — tránh tin đơn lẻ thiếu chi tiết P1/P2/O."""
+        for leave in self:
+            if self.env.context.get(_SKIP_MONTHLY_MIEN_SPLIT_CTX):
+                continue
+            if (
+                not leave.employee_id
+                or not leave.request_date_from
+                or not leave.request_date_to
+            ):
+                continue
+            if not self._monthly_p1p2_mien_applies(leave.employee_id):
+                continue
+            if "split_group_id" in leave._fields and leave.split_group_id:
+                if hasattr(leave, "_get_split_group_leaves_all"):
+                    if len(leave._get_split_group_leaves_all()) > 1:
+                        continue
+            if not leave._monthly_mien_should_split(leave):
+                continue
+            before_from = leave.request_date_from
+            before_to = leave.request_date_to
+            leave._monthly_mien_do_split(leave)
+            leave.invalidate_recordset(
+                ["request_date_from", "request_date_to", "split_group_id"]
+            )
+            if hasattr(leave, "_split_group_is_multi_segment"):
+                if leave._split_group_is_multi_segment():
+                    continue
+            _logger.warning(
+                "monthly_mien_split: split expected for leave %s (%s → %s) "
+                "but still single record (check P1/P2/O leave types or Miền)",
+                leave.id,
+                before_from,
+                before_to,
+            )
+
+    def _get_monthly_plan_approval_bot_details(self):
+        """Chi tiết P1/P2/O theo kế hoạch tháng (dùng khi chưa tách được DB)."""
+        self.ensure_one()
+        if (
+            not self.employee_id
+            or not self.request_date_from
+            or not self.request_date_to
+        ):
+            return None
+        if not self._monthly_p1p2_mien_applies(self.employee_id):
+            return None
+        exclude = [self.id] if self.id else []
+        plan = self._monthly_mien_split_plan(
+            self.employee_id,
+            self.request_date_from,
+            self.request_date_to,
+            exclude,
+        )
+        if len(plan) <= 1:
+            return None
+        employee = self.employee_id
+        requester_name = employee.name or employee.display_name or self.display_name
+        id_hrm = (getattr(employee, "id_hrm", None) or "").strip() or "—"
+        department = (employee.department_id.name or "").strip() or "—"
+        reason = (self.notes or self.private_name or self.name or "").strip() or "—"
+        segment_lines = []
+        total_days = 0
+        for kind, seg_from, seg_to in plan:
+            lt = self._monthly_mien_leave_type_for_kind(kind)
+            label = (lt.name if lt else kind.upper()).strip() or "—"
+            period = self._format_approval_bot_period(seg_from, seg_to)
+            days = (seg_to - seg_from).days + 1
+            total_days += days
+            segment_lines.append(
+                _("• %(type)s: %(period)s (%(days)s ngày)")
+                % {
+                    "type": label,
+                    "period": period,
+                    "days": days,
+                }
+            )
+        overall_period = self._format_approval_bot_period(
+            self.request_date_from, self.request_date_to
+        )
+        return {
+            "requester": requester_name,
+            "id_hrm": id_hrm,
+            "department": department,
+            "period": overall_period,
+            "total_days": "%g" % total_days,
+            "reason": reason,
+            "segment_lines": "\n".join(segment_lines),
+            "segment_count": len(plan),
+            "primary": self,
+        }
+
+    def _notify_approval_bot_monthly_plan_message(self, approver_user, details):
+        """Gửi tin OdooBot dạng gom phần theo kế hoạch P1/P2/O."""
+        self.ensure_one()
+        primary = details["primary"]
+        if not approver_user or approver_user.share or not approver_user.partner_id:
+            return
+        segment_lines = details["segment_lines"].split("\n") if details["segment_lines"] else []
+        segments_html = Markup("<br/>").join(
+            Markup(escape(line)) for line in segment_lines if line
+        )
+        intro = Markup(
+            _(
+                "<b>ĐƠN XIN NGHỈ PHÉP</b> ({count} phần)<br/>"
+                "Nhân viên: <b>{requester}</b><br/>"
+                "Mã nhân viên: <b>{id_hrm}</b><br/>"
+                "Bộ phận: <b>{department}</b><br/>"
+                "Thời gian nghỉ: <b>{period}</b><br/>"
+                "Tổng số ngày nghỉ: <b>{total_days}</b><br/>"
+                "Chi tiết:<br/>{segments}<br/>"
+                "Lý do: <b>{reason}</b><br/>"
+                "Vui lòng bấm <b>Phê duyệt tất cả</b> hoặc <b>Từ chối tất cả</b><br/><br/>"
+            )
+        ).format(
+            count=details["segment_count"],
+            requester=escape(str(details["requester"])),
+            id_hrm=escape(str(details["id_hrm"])),
+            department=escape(str(details["department"])),
+            period=escape(str(details["period"])),
+            total_days=escape(str(details["total_days"])),
+            segments=segments_html,
+            reason=escape(str(details["reason"])),
+        )
+        if (
+            primary.split_group_id
+            and hasattr(primary, "_split_group_is_multi_segment")
+            and primary._split_group_is_multi_segment()
+            and hasattr(primary, "_notify_approval_bot_split_group_action_buttons_markup")
+        ):
+            button_html = primary._notify_approval_bot_split_group_action_buttons_markup(
+                primary
+            )
+            marker = Markup(
+                '<span data-oe-split-group="%s" style="display:none"></span>'
+            ) % escape(primary.split_group_id or "")
+        else:
+            button_html = primary._notify_approval_bot_leave_form_open_button_markup()
+            marker = Markup("")
+        body = marker + intro + button_html
+        try:
+            bot_user = self.env.ref(
+                "business_discuss_bots.user_bot_approval", raise_if_not_found=False
+            )
+            if not bot_user:
+                bot_user = self.env.ref("base.user_root")
+            chat = (
+                self.env["discuss.channel"]
+                .with_user(bot_user)
+                .sudo()
+                ._get_or_create_chat([approver_user.partner_id.id], pin=True)
+            )
+            chat.with_user(bot_user).sudo().message_post(
+                body=body,
+                message_type="comment",
+                subtype_xmlid="mail.mt_comment",
+            )
+        except Exception:
+            _logger.exception(
+                "monthly_mien_split: failed plan-style bot notify leave_id=%s",
+                primary.id,
+            )
+
     def _monthly_mien_should_split(self, leave):
         if self.env.context.get(_SKIP_MONTHLY_MIEN_SPLIT_CTX):
             return False
@@ -117,14 +323,11 @@ class HrLeaveMonthlySplit(models.Model):
         if not self._monthly_p1p2_mien_applies(leave.employee_id):
             return False
         exclude = [leave.id] if leave.id else []
-        days_before = self._count_leave_days_in_calendar_month(
-            leave.employee_id,
-            leave.request_date_from.year,
-            leave.request_date_from.month,
-            exclude,
-        )
         plan = self._monthly_mien_split_plan(
-            days_before, leave.request_date_from, leave.request_date_to
+            leave.employee_id,
+            leave.request_date_from,
+            leave.request_date_to,
+            exclude,
         )
         return len(plan) > 1
 
@@ -154,14 +357,11 @@ class HrLeaveMonthlySplit(models.Model):
 
     def _monthly_mien_do_split(self, leave):
         exclude = [leave.id] if leave.id else []
-        days_before = self._count_leave_days_in_calendar_month(
-            leave.employee_id,
-            leave.request_date_from.year,
-            leave.request_date_from.month,
-            exclude,
-        )
         plan = self._monthly_mien_split_plan(
-            days_before, leave.request_date_from, leave.request_date_to
+            leave.employee_id,
+            leave.request_date_from,
+            leave.request_date_to,
+            exclude,
         )
         if len(plan) <= 1:
             return
@@ -215,13 +415,25 @@ class HrLeaveMonthlySplit(models.Model):
             Leave = self.with_context(**create_ctx)
             for companion_vals in companions:
                 Leave.create([companion_vals])
+        elif len(plan) > 1:
+            _logger.warning(
+                "monthly_mien_split: no companion records for leave %s "
+                "(missing leave types for segments %s)",
+                leave.id,
+                [p[0] for p in plan[1:]],
+            )
+            if "split_group_id" in leave._fields:
+                leave.with_context(leave_skip_state_check=True).write(
+                    {"split_group_id": False}
+                )
 
         if hasattr(leave, "_notify_split_group_after_companion_create"):
             leave._notify_split_group_after_companion_create()
 
         _logger.info(
-            "monthly_mien_split: leave %s → %s segments (days_before=%s)",
+            "monthly_mien_split: leave %s → %s segments (%s → %s)",
             leave.id,
             len(plan),
-            days_before,
+            leave.request_date_from,
+            leave.request_date_to,
         )

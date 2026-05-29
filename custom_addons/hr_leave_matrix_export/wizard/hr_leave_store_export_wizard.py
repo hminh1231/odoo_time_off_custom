@@ -149,12 +149,13 @@ class HrLeaveStoreExportMixin(models.AbstractModel):
             return TONG_GIO_O
         return ""
 
-    def _import_capnhatcong_row_payload(self, leave, ngay_bd, ngay_kt):
+    def _import_capnhatcong_row_payload(self, leave, ngay_bd, ngay_kt, ma_khieu=None):
         employee = leave.employee_id
         ma_bp = (getattr(employee, "ma_bo_phan", None) or "").strip() if employee else ""
         if not ma_bp:
             ma_bp = IMPORT_CAPNHATCONG_DEFAULT_MA_BP
-        ma_khieu = self._leave_type_symbol(leave)
+        if ma_khieu is None:
+            ma_khieu = self._leave_type_symbol(leave)
         ghi_chu = (leave.notes or leave.private_name or leave.name or "").strip()
         return {
             "ma_bp": ma_bp,
@@ -320,6 +321,94 @@ class HrLeaveStoreExportMixin(models.AbstractModel):
             code = code[1:-1].strip()
         return code
 
+    @staticmethod
+    def _ma_khieu_from_kind(kind):
+        return {"p1": "P1", "p2": "P2", "o": "O"}.get((kind or "").lower(), "")
+
+    def _iter_export_root_leaves(self, leaves):
+        """Mỗi nhóm split_group_id chỉ xuất một lần (tránh trùng dòng)."""
+        seen_groups = set()
+        roots = self.env["hr.leave"]
+        for leave in leaves.sorted(key=lambda lv: (lv.request_date_from or date.min, lv.id)):
+            gid = getattr(leave, "split_group_id", None)
+            if gid:
+                if gid in seen_groups:
+                    continue
+                seen_groups.add(gid)
+            roots |= leave
+        return roots
+
+    def _iter_leave_export_segments(self, leave, month_start=None, month_end=None):
+        """Các đoạn P1/P2/O — khớp thông báo phân tích (DB tách hoặc kế hoạch tháng)."""
+        self.ensure_one()
+
+        def _clip(seg_from, seg_to):
+            if not month_start or not month_end:
+                return seg_from, seg_to
+            start = max(seg_from, month_start)
+            end = min(seg_to, month_end)
+            if start > end:
+                return None
+            return start, end
+
+        def _yield_segment(seg_leave, seg_from, seg_to, ma_khieu):
+            clipped = _clip(seg_from, seg_to)
+            if not clipped:
+                return
+            start, end = clipped
+            yield {
+                "leave": seg_leave,
+                "ngay_bd": start,
+                "ngay_kt": end,
+                "ma_khieu": ma_khieu or self._leave_type_symbol(seg_leave),
+            }
+
+        if (
+            getattr(leave, "split_group_id", None)
+            and hasattr(leave, "_split_group_is_multi_segment")
+            and leave._split_group_is_multi_segment()
+        ):
+            group = leave._get_split_group_leaves_all().sorted("request_date_from")
+            for seg_leave in group:
+                if not seg_leave.request_date_from or not seg_leave.request_date_to:
+                    continue
+                yield from _yield_segment(
+                    seg_leave,
+                    seg_leave.request_date_from,
+                    seg_leave.request_date_to,
+                    self._leave_type_symbol(seg_leave),
+                )
+            return
+
+        if hasattr(leave, "_monthly_mien_split_plan") and hasattr(leave, "_monthly_p1p2_mien_applies"):
+            if (
+                leave.employee_id
+                and leave.request_date_from
+                and leave.request_date_to
+                and leave._monthly_p1p2_mien_applies(leave.employee_id)
+            ):
+                exclude = [leave.id] if leave.id else []
+                plan = leave._monthly_mien_split_plan(
+                    leave.employee_id,
+                    leave.request_date_from,
+                    leave.request_date_to,
+                    exclude,
+                )
+                if len(plan) > 1:
+                    for kind, seg_from, seg_to in plan:
+                        yield from _yield_segment(
+                            leave, seg_from, seg_to, self._ma_khieu_from_kind(kind)
+                        )
+                    return
+
+        if leave.request_date_from and leave.request_date_to:
+            yield from _yield_segment(
+                leave,
+                leave.request_date_from,
+                leave.request_date_to,
+                self._leave_type_symbol(leave),
+            )
+
     @classmethod
     def _ma_khieu_export_display(cls, ma_khieu):
         """Cột Ma_Khieu: không hiển thị O (payload vẫn giữ O để merge / Tong_Gio)."""
@@ -399,8 +488,12 @@ class HrLeaveStoreExportMixin(models.AbstractModel):
         )
         return leaves.filtered(lambda leave: self._leave_in_mien(leave, mien_codes))
 
-    def _row_for_leave(self, leave):
+    def _row_for_leave_segment(self, segment):
+        leave = segment["leave"]
         emp = leave.employee_id
+        seg_from = segment["ngay_bd"]
+        seg_to = segment["ngay_kt"]
+        segment_days = (seg_to - seg_from).days + 1 if seg_from and seg_to else ""
         asm_name, asm_date = self._approval_for_job_title(leave, ("asm",))
         ad_name, ad_date = self._approval_for_job_title(leave, ("admin tổng", "admin"))
         return [
@@ -410,9 +503,9 @@ class HrLeaveStoreExportMixin(models.AbstractModel):
             (getattr(emp, "ma_bo_phan", None) or "").strip().upper() if emp else "",
             self._job_title_label(emp),
             self._format_date(leave.create_date),
-            self._format_date(leave.request_date_from),
-            self._format_date(leave.request_date_to),
-            leave.number_of_days or "",
+            self._format_date(seg_from),
+            self._format_date(seg_to),
+            segment_days,
             self._leave_reason(leave),
             self._handover_recipient_names(leave),
             asm_name,
@@ -420,7 +513,7 @@ class HrLeaveStoreExportMixin(models.AbstractModel):
             ad_name,
             ad_date,
             self._status_text(leave),
-            self._leave_type_symbol(leave),
+            segment["ma_khieu"],
         ]
 
     def _search_store_leaves(self, year, month, base_domain):
@@ -444,6 +537,9 @@ class HrLeaveStoreExportMixin(models.AbstractModel):
             raise UserError(_("You need export permissions to download this file."))
 
         year, month = int(self.year), int(self.month)
+        last_day = calendar.monthrange(year, month)[1]
+        month_start = date(year, month, 1)
+        month_end = date(year, month, last_day)
         leaves = self._search_store_leaves(year, month, self._parse_domain())
 
         buffer = BytesIO()
@@ -470,11 +566,12 @@ class HrLeaveStoreExportMixin(models.AbstractModel):
         sheet.set_row(1, 22)
 
         row = 2
-        for leave in leaves:
-            values = self._row_for_leave(leave)
-            for col, value in enumerate(values):
-                sheet.write(row, col, value, cell_fmt)
-            row += 1
+        for leave in self._iter_export_root_leaves(leaves):
+            for segment in self._iter_leave_export_segments(leave, month_start, month_end):
+                values = self._row_for_leave_segment(segment)
+                for col, value in enumerate(values):
+                    sheet.write(row, col, value, cell_fmt)
+                row += 1
 
         if row == 2:
             sheet.write_row(2, 0, [""] * len(STORE_HEADERS), cell_fmt)
@@ -564,12 +661,17 @@ class HrLeaveStoreExportMixin(models.AbstractModel):
             sheet.write(0, col, title, header_fmt)
 
         payloads = []
-        for leave in leaves:
-            span = self._leave_span_in_month(leave, month_start, month_end)
-            if not span:
-                continue
-            for day in self._iter_days(span[0], span[1]):
-                payloads.append(self._import_capnhatcong_row_payload(leave, day, day))
+        for leave in self._iter_export_root_leaves(leaves):
+            for segment in self._iter_leave_export_segments(leave, month_start, month_end):
+                for day in self._iter_days(segment["ngay_bd"], segment["ngay_kt"]):
+                    payloads.append(
+                        self._import_capnhatcong_row_payload(
+                            segment["leave"],
+                            day,
+                            day,
+                            ma_khieu=segment["ma_khieu"],
+                        )
+                    )
 
         row = 1
         for stt, payload in enumerate(payloads, start=1):
