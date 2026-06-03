@@ -77,9 +77,158 @@ $o-lark-red: #f54a45;
 }
 
 // Fallback khi class body chưa kịp gắn (PWA / cache)
+@mixin o-mail-lark-navbar-on-top {
+    .o-mail-Discuss.flex-column {
+        display: flex !important;
+        flex-direction: column !important;
+
+        > .o-mail-MessagingMenu-navbar {
+            order: -1;
+            flex-shrink: 0;
+            width: 100%;
+            border-top: none !important;
+            border-bottom: 1px solid $o-lark-border !important;
+            box-shadow: none !important;
+            padding-top: 0.35rem !important;
+            padding-bottom: 0.35rem !important;
+        }
+
+        > .o-mail-MessagingMenu.o-small {
+            order: 0;
+            flex: 1 1 auto;
+            min-height: 0;
+        }
+
+        > .o-mail-LarkAppsBar {
+            order: 1;
+            flex-shrink: 0;
+        }
+    }
+}
+
+@mixin o-mail-lark-apps-bar {
+    .o-mail-LarkAppsBar {
+        background: $o-lark-bg !important;
+        border-top: 1px solid $o-lark-border !important;
+        box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.04);
+        padding: 0.35rem 0.5rem calc(0.35rem + env(safe-area-inset-bottom, 0px)) !important;
+        gap: 0.15rem !important;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .o-mail-LarkAppsBar-tab {
+        color: $o-lark-text-muted;
+        min-width: 0;
+        max-width: none;
+        flex: 1 1 0;
+
+        .o-mail-LarkAppsBar-label {
+            font-size: 0.65rem;
+            margin-top: 0.1rem;
+            line-height: 1.1;
+        }
+
+        &.active .o-mail-LarkAppsBar-label {
+            color: $o-lark-blue;
+            font-weight: 600;
+        }
+
+        &.active .o-mail-LarkAppsBar-icon {
+            outline: 2px solid $o-lark-blue-light;
+            outline-offset: 1px;
+        }
+    }
+
+    .o-mail-LarkAppsBar-icon {
+        width: 1.75rem;
+        height: 1.75rem;
+        font-size: 1rem;
+    }
+
+    .o-mail-LarkAppsBar-moreIcon {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2px;
+        width: 1.75rem;
+        height: 1.75rem;
+        padding: 4px;
+        background: $o-lark-blue;
+        box-sizing: border-box;
+
+        span {
+            display: block;
+            background: rgba(255, 255, 255, 0.92);
+            border-radius: 1px;
+        }
+    }
+
+    .o-mail-LarkAllApps {
+        position: fixed;
+        inset: 0;
+        z-index: 1060;
+        pointer-events: none;
+
+        &-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.35);
+            pointer-events: auto;
+        }
+
+        &-panel {
+            position: absolute;
+            inset: 0;
+            background: $o-lark-bg;
+            pointer-events: auto;
+            padding-bottom: env(safe-area-inset-bottom, 0px);
+        }
+
+        &-header {
+            background: $o-lark-bg;
+            border-color: $o-lark-border !important;
+        }
+
+        &-title {
+            color: $o-lark-text;
+        }
+
+        &-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0.75rem 0.5rem;
+            align-content: start;
+        }
+
+        &-app {
+            color: $o-lark-text;
+            min-width: 0;
+
+            &.o-active .o-mail-LarkAllApps-appLabel {
+                color: $o-lark-blue;
+                font-weight: 600;
+            }
+        }
+
+        &-appIcon {
+            width: 3rem;
+            height: 3rem;
+            font-size: 1.35rem;
+        }
+
+        &-appLabel {
+            color: $o-lark-text-muted;
+            line-height: 1.15;
+            max-width: 100%;
+        }
+    }
+}
+
 @media (max-width: 767.98px) {
     body:has(.o-mail-Discuss) {
         @include o-mail-lark-main-navbar;
+        @include o-mail-lark-navbar-on-top;
+        @include o-mail-lark-apps-bar;
     }
 }
 
@@ -100,6 +249,9 @@ body.o-mail-lark-ui {
         align-items: stretch !important;
     }
 
+    @include o-mail-lark-navbar-on-top;
+    @include o-mail-lark-apps-bar;
+
     .o-mail-MessagingMenu.o-small {
         width: 100%;
         max-height: none;
@@ -115,11 +267,6 @@ body.o-mail-lark-ui {
         }
     }
 
-    // Không cần nút 3 gạch trùng trong Discuss (đã có trên navbar phải)
-    .o-mail-LarkFilters-menu {
-        display: none !important;
-    }
-
     .o-mail-LarkHeader {
         border-bottom: none;
     }
@@ -131,32 +278,6 @@ body.o-mail-lark-ui {
         &:active {
             opacity: 1;
         }
-    }
-
-    // Pill filters (Trò chuyện / Chưa đọc / …)
-    .o-mail-LarkFilters-pills {
-        background: $o-lark-surface;
-    }
-
-    .o-mail-LarkFilters-pill {
-        font-size: 0.8rem;
-        color: $o-lark-text-muted;
-        background: transparent;
-        border-radius: 999px;
-        padding: 0.35rem 0.65rem;
-        line-height: 1.2;
-
-        &.o-active {
-            background: $o-lark-bg;
-            color: $o-lark-blue;
-            font-weight: 600;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
-        }
-    }
-
-    .o-mail-LarkFilters-pillCount {
-        font-size: 0.75em;
-        opacity: 0.9;
     }
 
     // Search bar

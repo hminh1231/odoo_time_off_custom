@@ -1,6 +1,106 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates xml:space="preserve">
-  <!-- Chỉ patch MessagingMenu — tránh xung đột template BurgerMenu với module mail -->
+  <t t-inherit="mail.Discuss" t-inherit-mode="extension">
+    <xpath expr="//MessagingMenu" position="after">
+      <nav
+        t-if="ui.isSmall"
+        class="o-mail-LarkAppsBar d-flex flex-shrink-0 bg-view border-top w-100 p-2 gap-2"
+        aria-label="App shortcuts"
+      >
+        <button
+          t-foreach="larkShortcutApps"
+          t-as="app"
+          t-key="app.id"
+          type="button"
+          class="o-mail-LarkAppsBar-tab btn d-flex flex-column align-items-center flex-grow-1 flex-shrink-0 p-1 bg-transparent border-0 position-relative"
+          t-att-class="{ active: larkCurrentAppId === app.id }"
+          t-att-title="app.name"
+          t-att-aria-label="app.name"
+          t-on-click="() => this.onLarkAppClick(app)"
+        >
+          <img
+            t-if="app.webIconData"
+            class="o-mail-LarkAppsBar-icon rounded-1 object-fit-contain"
+            t-att-src="app.webIconData"
+            t-att-alt="app.name"
+          />
+          <span
+            t-else=""
+            class="o-mail-LarkAppsBar-icon d-flex align-items-center justify-content-center rounded-1"
+            t-att-style="larkAppIconStyle(app)"
+          >
+            <i t-if="app.webIcon?.iconClass" t-att-class="app.webIcon.iconClass"/>
+          </span>
+          <span class="o-mail-LarkAppsBar-label o-xsmaller text-truncate w-100 text-center" t-esc="app.name"/>
+        </button>
+        <button
+          type="button"
+          class="o-mail-LarkAppsBar-tab o-mail-LarkAppsBar-more btn d-flex flex-column align-items-center flex-grow-1 flex-shrink-0 p-1 bg-transparent border-0"
+          t-att-title="larkSeeMoreLabel"
+          t-att-aria-label="larkSeeMoreLabel"
+          t-on-click="onLarkMoreAppsClick"
+        >
+          <span class="o-mail-LarkAppsBar-moreIcon rounded-1" aria-hidden="true">
+            <span/>
+            <span/>
+            <span/>
+            <span/>
+          </span>
+          <span class="o-mail-LarkAppsBar-label o-xsmaller text-truncate w-100 text-center" t-esc="larkSeeMoreLabel"/>
+        </button>
+      </nav>
+      <div
+        t-if="ui.isSmall and larkAppsMenu.open"
+        class="o-mail-LarkAllApps"
+        role="dialog"
+        aria-modal="true"
+        t-att-aria-label="larkAllAppsTitle"
+      >
+        <div class="o-mail-LarkAllApps-backdrop" t-on-click="onLarkAllAppsClose"/>
+        <div class="o-mail-LarkAllApps-panel d-flex flex-column">
+          <header class="o-mail-LarkAllApps-header d-flex align-items-center flex-shrink-0 px-3 py-2 border-bottom">
+            <h2 class="o-mail-LarkAllApps-title flex-grow-1 mb-0 fs-6 fw-bold" t-esc="larkAllAppsTitle"/>
+            <button
+              type="button"
+              class="btn btn-link text-reset p-2"
+              aria-label="Close"
+              t-on-click="onLarkAllAppsClose"
+            >
+              <i class="oi oi-close fs-4"/>
+            </button>
+          </header>
+          <div class="o-mail-LarkAllApps-grid flex-grow-1 overflow-auto p-3">
+            <button
+              t-foreach="larkAllApps"
+              t-as="app"
+              t-key="app.id"
+              type="button"
+              class="o-mail-LarkAllApps-app btn border-0 bg-transparent p-2 d-flex flex-column align-items-center"
+              t-att-class="{ 'o-active': larkCurrentAppId === app.id }"
+              t-att-title="app.name"
+              t-on-click="() => this.onLarkAllAppClick(app)"
+            >
+              <img
+                t-if="app.webIconData"
+                class="o-mail-LarkAllApps-appIcon rounded-2 object-fit-contain"
+                t-att-src="app.webIconData"
+                t-att-alt="app.name"
+              />
+              <span
+                t-else=""
+                class="o-mail-LarkAllApps-appIcon d-flex align-items-center justify-content-center rounded-2"
+                t-att-style="larkAppIconStyle(app)"
+              >
+                <i t-if="app.webIcon?.iconClass" t-att-class="app.webIcon.iconClass"/>
+              </span>
+              <span class="o-mail-LarkAllApps-appLabel o-xsmaller text-center text-truncate w-100 mt-1" t-esc="app.name"/>
+            </button>
+          </div>
+        </div>
+      </div>
+    </xpath>
+  </t>
+
   <t t-inherit="mail.MessagingMenu.content" t-inherit-mode="extension">
     <xpath expr="//*[@name='before-content']" position="before">
       <header
@@ -26,37 +126,6 @@
           >
             <i class="fa fa-plus-circle"/>
           </button>
-        </div>
-        <div
-          t-if="!['inbox', 'starred'].includes(store.discuss.activeTab)"
-          class="o-mail-LarkFilters d-flex align-items-center gap-2 mt-1 mb-1"
-        >
-          <button
-            type="button"
-            class="o-mail-LarkFilters-menu btn btn-link text-reset p-1 lh-1 border-0"
-            aria-label="Menu"
-            t-on-click="onLarkAppMenuClick"
-          >
-            <i class="fa fa-bars"/>
-          </button>
-          <div class="o-mail-LarkFilters-pills d-flex flex-grow-1 gap-1 p-1 rounded-pill">
-            <button
-              t-foreach="larkFilterTabs"
-              t-as="pill"
-              t-key="pill.id"
-              type="button"
-              class="o-mail-LarkFilters-pill btn border-0 flex-grow-1 text-nowrap"
-              t-att-class="{ 'o-active': larkActiveFilterId === pill.id }"
-              t-on-click="() => this.onLarkFilterClick(pill.id)"
-            >
-              <t t-esc="pill.label"/>
-              <span
-                t-if="pill.counter"
-                class="o-mail-LarkFilters-pillCount ms-1"
-                t-esc="pill.counter"
-              />
-            </button>
-          </div>
         </div>
       </header>
     </xpath>

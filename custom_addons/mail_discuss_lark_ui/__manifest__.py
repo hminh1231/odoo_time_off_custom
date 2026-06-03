@@ -1,6 +1,6 @@
 {
     "name": "Discuss — giao diện Lark (mobile / PWA)",
-    "version": "19.0.1.0.10",
+    "version": "19.0.1.0.18",
     "category": "Productivity/Discuss",
     "summary": "Giao diện Discuss trên điện thoại và PWA theo phong cách Lark (trắng, xanh, avatar tròn).",
     "depends": ["mail"],
