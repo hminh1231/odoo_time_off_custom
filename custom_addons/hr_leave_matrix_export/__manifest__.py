@@ -1,7 +1,7 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 {
     "name": "Time Off Matrix Excel Export",
-    "version": "19.0.1.3.9",
+    "version": "19.0.1.4.0",
     "external_dependencies": {
         "python": ["xlwt"],
     },

@@ -3,6 +3,8 @@
 import { patch } from "@web/core/utils/patch";
 import { ExportAll } from "@web/views/list/export_all/export_all";
 import { DropdownItem } from "@web/core/dropdown/dropdown_item";
+import { useService } from "@web/core/utils/hooks";
+import { onWillStart } from "@odoo/owl";
 import { xml } from "@odoo/owl";
 import { _t } from "@web/core/l10n/translation";
 
@@ -15,19 +17,19 @@ patch(ExportAll, {
             <i class="fa fa-fw fa-upload me-1"/>Export All
         </DropdownItem>
         <DropdownItem
-            t-if="env.model and env.model.root and env.model.root.resModel === 'hr.leave'"
+            t-if="showHrLeaveMatrixExport and matrixExportAccess.show_vp"
             class="'o_hr_leave_matrix_export_menu'"
             onSelected.bind="onMatrixExport">
             <i class="fa fa-fw fa-table me-1"/>Kết xuất nghỉ phép VP
         </DropdownItem>
         <DropdownItem
-            t-if="env.model and env.model.root and env.model.root.resModel === 'hr.leave'"
+            t-if="showHrLeaveMatrixExport and matrixExportAccess.show_ch"
             class="'o_hr_leave_store_export_menu'"
             onSelected.bind="onStoreExport">
             <i class="fa fa-fw fa-file-excel-o me-1"/>Kết xuất nghỉ phép CH
         </DropdownItem>
         <DropdownItem
-            t-if="env.model and env.model.root and env.model.root.resModel === 'hr.leave'"
+            t-if="showHrLeaveMatrixExport and matrixExportAccess.show_ch"
             class="'o_hr_leave_import_capnhatcong_menu'"
             onSelected.bind="onImportCapnhatcongExport">
             <i class="fa fa-fw fa-file-excel-o me-1"/>import_capnhatcong CUA HANG
@@ -36,6 +38,23 @@ patch(ExportAll, {
 });
 
 patch(ExportAll.prototype, {
+    setup() {
+        super.setup(...arguments);
+        this.orm = useService("orm");
+        this.matrixExportAccess = { show_vp: false, show_ch: false };
+        this.showHrLeaveMatrixExport = false;
+        onWillStart(async () => {
+            if (this.env.model?.root?.resModel === "hr.leave") {
+                this.showHrLeaveMatrixExport = true;
+                this.matrixExportAccess = await this.orm.call(
+                    "hr.leave",
+                    "get_matrix_export_menu_access",
+                    []
+                );
+            }
+        });
+    },
+
     async onMatrixExport() {
         await this._openLeaveExportWizard("hr.leave.matrix.export.wizard", _t("Kết xuất nghỉ phép VP"), {
             form_view_ref: "hr_leave_matrix_export.view_hr_leave_matrix_export_wizard_form",

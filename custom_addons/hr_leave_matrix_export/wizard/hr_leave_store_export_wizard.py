@@ -187,6 +187,8 @@ class HrLeaveStoreExportMixin(models.AbstractModel):
         """Miền nhân viên (trực tiếp hoặc từ mã bộ phận)."""
         if not employee:
             return None
+        if hasattr(employee, "_get_leave_mien"):
+            return employee._get_leave_mien()
         mien = getattr(employee, "mien", None)
         if mien:
             return mien
@@ -194,6 +196,29 @@ class HrLeaveStoreExportMixin(models.AbstractModel):
         if dept and getattr(dept, "mien", None):
             return dept.mien
         return None
+
+    def _get_current_user_leave_mien(self):
+        return self._employee_mien(self.env.user.employee_id)
+
+    @api.model
+    def _get_matrix_export_menu_access(self):
+        """Menu kết xuất theo miền user (cần quyền export)."""
+        if not self.env.user.has_group("base.group_allow_export"):
+            return {"show_vp": False, "show_ch": False}
+        mien = self._get_current_user_leave_mien()
+        return {
+            "show_vp": mien in self.MIEN_VP_CODES,
+            "show_ch": mien in self.MIEN_CH_CODES,
+        }
+
+    def _check_matrix_export_mien(self, allowed_miens):
+        if not self.env.user.has_group("base.group_allow_export"):
+            raise UserError(_("You need export permissions to download this file."))
+        mien = self._get_current_user_leave_mien()
+        if mien not in allowed_miens:
+            raise UserError(
+                _("Bạn không có quyền kết xuất file này. Miền của bạn không khớp với loại kết xuất được chọn.")
+            )
 
     def _leave_in_mien(self, leave, allowed_miens):
         return self._employee_mien(leave.employee_id) in allowed_miens
@@ -533,8 +558,7 @@ class HrLeaveStoreExportMixin(models.AbstractModel):
 
     def action_export_store_excel(self):
         self.ensure_one()
-        if not self.env.user.has_group("base.group_allow_export"):
-            raise UserError(_("You need export permissions to download this file."))
+        self._check_matrix_export_mien(self.MIEN_CH_CODES)
 
         year, month = int(self.year), int(self.month)
         last_day = calendar.monthrange(year, month)[1]
@@ -678,8 +702,7 @@ class HrLeaveStoreExportMixin(models.AbstractModel):
     def action_export_import_capnhatcong_ch_excel(self):
         """File import cập nhật công cửa hàng (miền Bắc / Nam / ĐTT) — định dạng .xls."""
         self.ensure_one()
-        if not self.env.user.has_group("base.group_allow_export"):
-            raise UserError(_("You need export permissions to download this file."))
+        self._check_matrix_export_mien(self.MIEN_CH_CODES)
 
         year, month = int(self.year), int(self.month)
         last_day = calendar.monthrange(year, month)[1]

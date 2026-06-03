@@ -116,8 +116,7 @@ class HrLeaveMatrixExportWizard(models.TransientModel):
     def action_export_matrix_excel(self):
         """FORM KẾT XUẤT NGHỈ PHÉP — miền VP (một đơn = một dòng)."""
         self.ensure_one()
-        if not self.env.user.has_group("base.group_allow_export"):
-            raise UserError(_("You need export permissions to download this file."))
+        self._check_matrix_export_mien(self.MIEN_VP_CODES)
 
         year, month = int(self.year), int(self.month)
         leaves = self._search_leaves_in_mien(
