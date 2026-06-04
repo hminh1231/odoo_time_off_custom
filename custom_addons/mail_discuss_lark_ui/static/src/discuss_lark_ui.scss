@@ -8,6 +8,8 @@ $o-lark-text: #1f2329;
 $o-lark-text-muted: #8f959e;
 $o-lark-border: #e5e6eb;
 $o-lark-red: #f54a45;
+$o-lark-apps-bar-height: 4.5rem;
+$o-lark-apps-bar-icon-size: 1.85rem;
 
 // Navbar: avatar trái, menu Apps phải — giữ màu tím Odoo mặc định
 @mixin o-mail-lark-main-navbar {
@@ -152,7 +154,7 @@ $o-lark-red: #f54a45;
 @mixin o-mail-lark-apps-bar {
     body.o-mail-lark-mobile-shell {
         .o_action_manager {
-            padding-bottom: calc(3.25rem + env(safe-area-inset-bottom, 0px)) !important;
+            padding-bottom: calc(#{$o-lark-apps-bar-height} + env(safe-area-inset-bottom, 0px)) !important;
         }
     }
 
@@ -161,11 +163,64 @@ $o-lark-red: #f54a45;
         border-top: 1px solid $o-lark-border !important;
         box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.04);
         min-height: 0 !important;
-        max-height: 3.25rem;
-        padding: 0.2rem 0.35rem calc(0.2rem + env(safe-area-inset-bottom, 0px)) !important;
-        gap: 0.1rem !important;
+        max-height: $o-lark-apps-bar-height;
+        padding: 0.35rem 0.45rem calc(0.35rem + env(safe-area-inset-bottom, 0px)) !important;
+        gap: 0.2rem !important;
         overflow: hidden;
         align-items: stretch;
+    }
+
+    .o-mail-LarkAppsBar-slot {
+        min-width: 0;
+        max-width: none;
+
+        &.o-drop-target .o-mail-LarkAppsBar-tab,
+        &.o-drop-target .o-mail-LarkAppsBar-slotEmpty {
+            outline: 2px dashed $o-lark-blue;
+            outline-offset: 2px;
+            border-radius: 6px;
+        }
+    }
+
+    .o-mail-LarkAppsBar-slotEmpty {
+        min-height: 3.5rem;
+        border: 1px dashed rgba($o-lark-blue, 0.35);
+        border-radius: 6px;
+        margin: 0.1rem 0.05rem;
+        background: rgba($o-lark-blue-light, 0.15);
+    }
+
+    .o-mail-LarkAllApps-hint {
+        line-height: 1.3;
+    }
+
+    .o-mail-LarkAllApps-app.o-in-bar {
+        opacity: 0.55;
+    }
+
+    .o-mail-LarkDraggable {
+        touch-action: none;
+        user-select: none;
+    }
+
+    body.o-mail-lark-dragging {
+        user-select: none;
+        touch-action: none;
+
+        .o-mail-LarkAllApps-app.o-mail-LarkDraggable:not(.o_dragged),
+        .o-mail-LarkAppsBar-tab.o-mail-LarkDraggable {
+            opacity: 0.65;
+        }
+    }
+
+    .o-mail-LarkDragGhost {
+        position: fixed;
+        z-index: 1080;
+        pointer-events: none;
+        margin: 0;
+        opacity: 0.92;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+        transform: scale(1.05);
     }
 
     .o-mail-LarkAppsBar-tab {
@@ -174,15 +229,15 @@ $o-lark-red: #f54a45;
         max-width: none;
         flex: 1 1 0;
         flex-grow: 1 !important;
-        padding: 0.1rem 0.15rem !important;
+        padding: 0.15rem 0.2rem !important;
         min-height: 0 !important;
         max-height: 100%;
 
         .o-mail-LarkAppsBar-label {
-            font-size: 0.6rem;
-            margin-top: 0.05rem;
-            line-height: 1.05;
-            max-height: 1.4em;
+            font-size: 0.72rem;
+            margin-top: 0.12rem;
+            line-height: 1.15;
+            max-height: 1.6em;
         }
 
         &.active .o-mail-LarkAppsBar-label {
@@ -198,13 +253,13 @@ $o-lark-red: #f54a45;
 
     .o-mail-LarkAppsBar-icon {
         display: block;
-        width: 1.35rem !important;
-        height: 1.35rem !important;
-        min-width: 1.35rem !important;
-        min-height: 1.35rem !important;
-        max-width: 1.35rem !important;
-        max-height: 1.35rem !important;
-        font-size: 0.85rem;
+        width: $o-lark-apps-bar-icon-size !important;
+        height: $o-lark-apps-bar-icon-size !important;
+        min-width: $o-lark-apps-bar-icon-size !important;
+        min-height: $o-lark-apps-bar-icon-size !important;
+        max-width: $o-lark-apps-bar-icon-size !important;
+        max-height: $o-lark-apps-bar-icon-size !important;
+        font-size: 1.05rem;
         flex-shrink: 0;
 
         img {
@@ -218,11 +273,11 @@ $o-lark-red: #f54a45;
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 1px;
-        width: 1.35rem !important;
-        height: 1.35rem !important;
-        min-width: 1.35rem !important;
-        min-height: 1.35rem !important;
-        padding: 3px;
+        width: $o-lark-apps-bar-icon-size !important;
+        height: $o-lark-apps-bar-icon-size !important;
+        min-width: $o-lark-apps-bar-icon-size !important;
+        min-height: $o-lark-apps-bar-icon-size !important;
+        padding: 4px;
         background: $o-lark-blue;
         box-sizing: border-box;
         flex-shrink: 0;

@@ -18,16 +18,21 @@
                 <i class="oi oi-close fs-4"/>
               </button>
             </header>
-            <div class="o-mail-LarkAllApps-grid p-3">
+            <p class="o-mail-LarkAllApps-hint flex-shrink-0 px-3 py-1 mb-0 o-xsmaller text-muted" t-esc="larkCustomizeHint"/>
+            <div class="o-mail-LarkAllApps-grid p-3" data-lark-allapps-grid="1">
               <button
                 t-foreach="larkAllApps"
                 t-as="app"
                 t-key="app.id"
                 type="button"
-                class="o-mail-LarkAllApps-app btn border-0 bg-transparent p-2 d-flex flex-column align-items-center"
-                t-att-class="{ 'o-active': larkCurrentAppId === app.id }"
+                class="o-mail-LarkAllApps-app o-mail-LarkDraggable btn border-0 bg-transparent p-2 d-flex flex-column align-items-center"
+                t-att-class="{ 'o-active': larkCurrentAppId === app.id, 'o-in-bar': larkIsAppInBar(app.xmlid) }"
                 t-att-title="app.name"
-                t-on-click="() => this.onLarkAllAppClick(app)"
+                t-att-data-lark-xmlid="app.xmlid"
+                data-lark-drag-source="grid"
+                t-on-pointerdown="onLarkAppDragPointerDown"
+                t-on-pointerup="onLarkAppDragPointerUp"
+                t-on-click="(ev) => this.onLarkAllAppClick(app, ev)"
               >
                 <img
                   t-if="app.webIconData"
@@ -51,32 +56,52 @@
           class="o-mail-LarkAppsBar o-mail-LarkAppsBar-global d-flex bg-view border-top w-100 py-1 px-2 gap-1"
           aria-label="App shortcuts"
         >
-          <button
-            t-foreach="larkShortcutApps"
-            t-as="app"
-            t-key="app.id"
-            type="button"
-            class="o-mail-LarkAppsBar-tab btn d-flex flex-column align-items-center flex-grow-1 flex-shrink-0 p-1 bg-transparent border-0 position-relative"
-            t-att-class="{ active: larkCurrentAppId === app.id }"
-            t-att-title="app.name"
-            t-att-aria-label="app.name"
-            t-on-click="() => this.onLarkAppClick(app)"
+          <div
+            t-foreach="larkBarSlots"
+            t-as="slot"
+            t-key="slot.index"
+            class="o-mail-LarkAppsBar-slot d-flex flex-grow-1 flex-shrink-0 min-w-0"
+            t-att-data-lark-bar-slot="slot.index"
+            t-att-class="{
+              'o-drop-target': larkDragState.active and larkDragState.hoverSlot === slot.index,
+              'o-drop-empty': !slot.app,
+            }"
           >
-            <img
-              t-if="app.webIconData"
-              class="o-mail-LarkAppsBar-icon rounded-1 object-fit-contain"
-              t-att-src="app.webIconData"
-              t-att-alt="app.name"
-            />
-            <span
-              t-else=""
-              class="o-mail-LarkAppsBar-icon d-flex align-items-center justify-content-center rounded-1"
-              t-att-style="larkAppIconStyle(app)"
+            <button
+              t-if="slot.app"
+              type="button"
+              class="o-mail-LarkAppsBar-tab o-mail-LarkDraggable btn d-flex flex-column align-items-center flex-grow-1 w-100 p-1 bg-transparent border-0 position-relative"
+              t-att-class="{ active: larkCurrentAppId === slot.app.id }"
+              t-att-title="slot.app.name"
+              t-att-aria-label="slot.app.name"
+              t-att-data-lark-xmlid="slot.xmlid"
+              t-att-data-lark-bar-slot="slot.index"
+              data-lark-drag-source="bar"
+              t-on-pointerdown="onLarkAppDragPointerDown"
+              t-on-pointerup="onLarkAppDragPointerUp"
+              t-on-click="(ev) => this.onLarkAppClick(slot.app, ev)"
             >
-              <i t-if="app.webIcon?.iconClass" t-att-class="app.webIcon.iconClass"/>
-            </span>
-            <span class="o-mail-LarkAppsBar-label o-xsmaller text-truncate w-100 text-center" t-esc="app.name"/>
-          </button>
+              <img
+                t-if="slot.app.webIconData"
+                class="o-mail-LarkAppsBar-icon rounded-1 object-fit-contain"
+                t-att-src="slot.app.webIconData"
+                t-att-alt="slot.app.name"
+              />
+              <span
+                t-else=""
+                class="o-mail-LarkAppsBar-icon d-flex align-items-center justify-content-center rounded-1"
+                t-att-style="larkAppIconStyle(slot.app)"
+              >
+                <i t-if="slot.app.webIcon?.iconClass" t-att-class="slot.app.webIcon.iconClass"/>
+              </span>
+              <span class="o-mail-LarkAppsBar-label o-xsmaller text-truncate w-100 text-center" t-esc="slot.app.name"/>
+            </button>
+            <div
+              t-else=""
+              class="o-mail-LarkAppsBar-slotEmpty flex-grow-1 w-100"
+              t-att-title="larkCustomizeHint"
+            />
+          </div>
           <button
             type="button"
             class="o-mail-LarkAppsBar-tab o-mail-LarkAppsBar-more btn d-flex flex-column align-items-center flex-grow-1 flex-shrink-0 p-1 bg-transparent border-0"
