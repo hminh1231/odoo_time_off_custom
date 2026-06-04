@@ -78,6 +78,18 @@ patch(FormController.prototype, {
                 },
             }
         );
+        if (preview.blocked) {
+            await new Promise((resolve) => {
+                this.dialogService.add(ConfirmationDialog, {
+                    title: preview.title || _t("Cannot save"),
+                    body: preview.message,
+                    confirmLabel: _t("OK"),
+                    confirm: () => resolve(),
+                    cancel: () => resolve(),
+                });
+            });
+            return false;
+        }
         if (!preview.needs_confirmation) {
             return true;
         }

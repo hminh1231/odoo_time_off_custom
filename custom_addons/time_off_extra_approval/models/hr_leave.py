@@ -97,46 +97,50 @@ class HolidaysRequest(models.Model):
         """Block creating/moving leave requests more than 3 calendar days in the past."""
         if self.env.context.get(_SKIP_PAST_LEAVE_LIMIT_CTX):
             return
+        start = self._past_leave_limit_violation_start(vals=vals, leave=leave)
+        if start:
+            raise ValidationError(self._past_leave_limit_error_message(start))
+
+    def _past_leave_limit_error_message(self, start):
+        min_start = fields.Date.context_today(self) - timedelta(days=_MAX_BACKDATE_DAYS)
+        return _(
+            "Cannot create or move a time off request more than %(days)s days in the past. "
+            "The earliest allowed start date is %(min_date)s (selected: %(start_date)s).",
+            days=_MAX_BACKDATE_DAYS,
+            min_date=format_date(self.env, min_start),
+            start_date=format_date(self.env, start),
+        )
+
+    def _past_leave_limit_violation_start(self, vals=None, leave=None):
         vals = vals or {}
         start = self._parse_date_val(vals.get("request_date_from"))
         if not start:
             start = self._parse_date_val(vals.get("date_from"))
         if not start and leave:
             leave = leave[:1]
-            start = leave.request_date_from or (
-                leave.date_from.date() if leave.date_from else False
-            )
+            start = leave.request_date_from or self._parse_date_val(leave.date_from)
         if not start:
-            return
-
+            return False
         min_start = fields.Date.context_today(self) - timedelta(days=_MAX_BACKDATE_DAYS)
-        if start >= min_start:
-            return
+        return start if start < min_start else False
 
-        raise ValidationError(
-            _(
-                "Cannot create or move a time off request more than %(days)s days in the past. "
-                "The earliest allowed start date is %(min_date)s (selected: %(start_date)s).",
-                days=_MAX_BACKDATE_DAYS,
-                min_date=format_date(self.env, min_start),
-                start_date=format_date(self.env, start),
-            )
-        )
+    @api.constrains("request_date_from", "date_from")
+    def _check_past_leave_limit_constraint(self):
+        if self.env.context.get(_SKIP_PAST_LEAVE_LIMIT_CTX):
+            return
+        for leave in self:
+            start = self._past_leave_limit_violation_start(leave=leave)
+            if start:
+                raise ValidationError(self._past_leave_limit_error_message(start))
 
     @api.onchange("request_date_from", "date_from")
     def _onchange_past_leave_limit(self):
-        start = self.request_date_from or self._parse_date_val(self.date_from)
-        if not start:
-            return
-        min_start = fields.Date.context_today(self) - timedelta(days=_MAX_BACKDATE_DAYS)
-        if start < min_start:
+        start = self._past_leave_limit_violation_start(leave=self)
+        if start:
             return {
                 "warning": {
                     "title": _("Backdated time off is too old"),
-                    "message": _(
-                        "Time off requests can only start from %(min_date)s or later.",
-                        min_date=format_date(self.env, min_start),
-                    ),
+                    "message": self._past_leave_limit_error_message(start),
                 }
             }
 
@@ -645,6 +649,22 @@ class HolidaysRequest(models.Model):
     @api.model
     def check_leave_form_save_confirmations(self, res_id=False, vals=None):
         """Một hộp thoại trước khi lưu: nghỉ khẩn cấp, hết phép, hoặc cả hai."""
+        vals = vals or {}
+        leave = self.env["hr.leave"]
+        if res_id:
+            leave = self.browse(res_id).exists()
+        past_start = self._past_leave_limit_violation_start(
+            vals=vals, leave=leave if res_id and leave else None
+        )
+        if past_start:
+            return {
+                "blocked": True,
+                "needs_confirmation": False,
+                "set_emergency_confirmed": False,
+                "set_con_lai_zero_confirmed": False,
+                "title": _("Backdated time off is too old"),
+                "message": self._past_leave_limit_error_message(past_start),
+            }
         emergency_preview = self.check_emergency_leave_lead_time(res_id=res_id, vals=vals)
         con_lai_preview = self.check_con_lai_zero_confirmation(res_id=res_id, vals=vals)
         need_emergency = self._needs_emergency_leave_confirmation(
@@ -694,7 +714,8 @@ class HolidaysRequest(models.Model):
         }
 
     def write(self, vals):
-        if {"request_date_from", "date_from"} & set(vals):
+        check_past_limit = {"request_date_from", "date_from"} & set(vals)
+        if check_past_limit:
             for leave in self:
                 self._check_past_leave_limit_on_vals(vals, leave=leave)
         if vals and self._vals_trigger_emergency_leave_check(vals):
@@ -706,7 +727,10 @@ class HolidaysRequest(models.Model):
                     )
                 )
             self._apply_emergency_leave_on_vals(vals, leave=self)
-        return super().write(vals)
+        res = super().write(vals)
+        if check_past_limit:
+            self._check_past_leave_limit_constraint()
+        return res
 
     def action_confirm(self):
         try:
@@ -727,4 +751,6 @@ class HolidaysRequest(models.Model):
         for vals in vals_list:
             self._check_past_leave_limit_on_vals(vals)
             self._apply_emergency_leave_on_vals(vals)
-        return super().create(vals_list)
+        records = super().create(vals_list)
+        records._check_past_leave_limit_constraint()
+        return records
