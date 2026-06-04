@@ -10,12 +10,14 @@ from markupsafe import Markup, escape
 from odoo import api, fields, models
 from odoo.exceptions import UserError, ValidationError
 from odoo.tools import sql
+from odoo.tools.misc import format_date
 from odoo.tools.translate import _
 
 _logger = logging.getLogger(__name__)
 
 _EMERGENCY_LEAVE_CTX = "emergency_leave_confirmed"
 _SKIP_EMERGENCY_LEAVE_CHECK_CTX = "skip_emergency_leave_check"
+_SKIP_PAST_LEAVE_LIMIT_CTX = "skip_past_leave_limit_check"
 _SKIP_SUBMIT_BOT_NOTIFY_CTX = "skip_handover_submit_bot_notify"
 _SKIP_OUTCOME_BOT_NOTIFY_CTX = "skip_outcome_bot_notify"
 _SKIP_RESPONSIBLE_SUBMIT_NOTIFY_CTX = "skip_responsible_submit_notify"
@@ -23,6 +25,7 @@ _SKIP_RESPONSIBLE_SUBMIT_NOTIFY_CTX = "skip_responsible_submit_notify"
 _SHORT_LEAD_JOB_KEYS = frozenset({"trưởng nhóm", "nhóm trưởng", "cửa hàng trưởng"})
 _SHORT_LEAD_DAYS = 3
 _DEFAULT_LEAD_DAYS = 7
+_MAX_BACKDATE_DAYS = 3
 # Must match time_off_responsible_approval.constants.DIRECTOR_JOB_TITLE_KEY
 _DIRECTOR_JOB_TITLE_KEY = "giám đốc"
 
@@ -89,6 +92,53 @@ class HolidaysRequest(models.Model):
                 ctx=_EMERGENCY_LEAVE_CTX,
             )
         )
+
+    def _check_past_leave_limit_on_vals(self, vals, leave=None):
+        """Block creating/moving leave requests more than 3 calendar days in the past."""
+        if self.env.context.get(_SKIP_PAST_LEAVE_LIMIT_CTX):
+            return
+        vals = vals or {}
+        start = self._parse_date_val(vals.get("request_date_from"))
+        if not start:
+            start = self._parse_date_val(vals.get("date_from"))
+        if not start and leave:
+            leave = leave[:1]
+            start = leave.request_date_from or (
+                leave.date_from.date() if leave.date_from else False
+            )
+        if not start:
+            return
+
+        min_start = fields.Date.context_today(self) - timedelta(days=_MAX_BACKDATE_DAYS)
+        if start >= min_start:
+            return
+
+        raise ValidationError(
+            _(
+                "Cannot create or move a time off request more than %(days)s days in the past. "
+                "The earliest allowed start date is %(min_date)s (selected: %(start_date)s).",
+                days=_MAX_BACKDATE_DAYS,
+                min_date=format_date(self.env, min_start),
+                start_date=format_date(self.env, start),
+            )
+        )
+
+    @api.onchange("request_date_from", "date_from")
+    def _onchange_past_leave_limit(self):
+        start = self.request_date_from or self._parse_date_val(self.date_from)
+        if not start:
+            return
+        min_start = fields.Date.context_today(self) - timedelta(days=_MAX_BACKDATE_DAYS)
+        if start < min_start:
+            return {
+                "warning": {
+                    "title": _("Backdated time off is too old"),
+                    "message": _(
+                        "Time off requests can only start from %(min_date)s or later.",
+                        min_date=format_date(self.env, min_start),
+                    ),
+                }
+            }
 
     @api.model
     def _check_approval_update(self, state, raise_if_not_possible=True):
@@ -644,6 +694,9 @@ class HolidaysRequest(models.Model):
         }
 
     def write(self, vals):
+        if {"request_date_from", "date_from"} & set(vals):
+            for leave in self:
+                self._check_past_leave_limit_on_vals(vals, leave=leave)
         if vals and self._vals_trigger_emergency_leave_check(vals):
             if len(self) > 1:
                 raise UserError(
@@ -672,5 +725,6 @@ class HolidaysRequest(models.Model):
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
+            self._check_past_leave_limit_on_vals(vals)
             self._apply_emergency_leave_on_vals(vals)
         return super().create(vals_list)
