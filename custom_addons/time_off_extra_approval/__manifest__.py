@@ -1,6 +1,6 @@
 {
     "name": "Time Off Extra Approvers (Demo)",
-    "version": "19.0.7.2.9",
+    "version": "19.0.7.2.12",
     "category": "Human Resources",
     "summary": "Allow extra officers/offices to approve time off by leave type",
     "depends": [
@@ -31,6 +31,7 @@
             "time_off_extra_approval/static/src/xml/timeoff_form_dialog_buttons_patch.xml",
             "time_off_extra_approval/static/src/xml/time_off_dashboard_hrm_patch.xml",
             "time_off_extra_approval/static/src/js/time_off_dashboard_hrm_patch.js",
+            "time_off_extra_approval/static/src/scss/time_off_dashboard_mobile.scss",
         ],
     },
     "installable": True,

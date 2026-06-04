@@ -1,0 +1,37 @@
+@media (max-width: 767px) {
+    .o_timeoff_dashboard {
+        flex-direction: row;
+        padding: 0.5rem 0;
+
+        // Hide per-leave-type cards; keep HRM summary card (last child).
+        > .o_timeoff_card:not(:last-child) {
+            display: none !important;
+        }
+
+        > .o_timeoff_card:last-child {
+            border-right: none;
+            flex: 1;
+            padding: 0.25rem 0 !important;
+
+            .row.border-bottom {
+                display: none !important;
+            }
+
+            .o_timeoff_name {
+                font-size: 11px;
+                font-weight: 600;
+                line-height: 1.2;
+                margin-bottom: 0.25rem;
+            }
+
+            .o_timeoff_duration {
+                font-size: 22px;
+                line-height: 1;
+            }
+
+            .o_timeoff_details {
+                display: none;
+            }
+        }
+    }
+}

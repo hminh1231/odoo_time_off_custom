@@ -1,6 +1,7 @@
 /** @odoo-module **/
 
 import { TimeOffDashboard } from "@hr_holidays/dashboard/time_off_dashboard";
+import { TimeOffDashboardCalendarRenderer } from "@hr_holidays/views/calendar/calendar_renderer";
 import { patch } from "@web/core/utils/patch";
 
 patch(TimeOffDashboard.prototype, {
@@ -26,5 +27,11 @@ patch(TimeOffDashboard.prototype, {
         this.hasAccrualAllocation = data.has_accrual_allocation;
         this.state.daSuDung = data.da_su_dung ?? 0;
         this.state.conLai = data.con_lai ?? 0;
+    },
+});
+
+patch(TimeOffDashboardCalendarRenderer.prototype, {
+    get showDashboard() {
+        return true;
     },
 });
