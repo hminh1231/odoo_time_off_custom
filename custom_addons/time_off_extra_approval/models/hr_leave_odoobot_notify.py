@@ -1,0 +1,145 @@
+# -*- coding: utf-8 -*-
+
+import logging
+
+from markupsafe import Markup
+
+from odoo import fields, models
+
+_logger = logging.getLogger(__name__)
+
+
+class HrLeaveOdoobotNotifyMixin(models.Model):
+    _inherit = "hr.leave"
+
+    approval_last_odoobot_remind_at = fields.Datetime(
+        string="Last OdooBot approval reminder",
+        copy=False,
+    )
+    approval_last_odoobot_remind_slot = fields.Char(
+        string="Last OdooBot approval reminder slot",
+        copy=False,
+        help="Technical: last fired scheduled reminder slot key (date|time).",
+    )
+    handover_last_odoobot_remind_at = fields.Datetime(
+        string="Last OdooBot handover reminder",
+        copy=False,
+    )
+    handover_last_odoobot_remind_slot = fields.Char(
+        string="Last OdooBot handover reminder slot",
+        copy=False,
+    )
+
+    def _leave_request_mien(self):
+        self.ensure_one()
+        employee = self.employee_id
+        if not employee:
+            return False
+        return employee.mien or (
+            employee.ma_bo_phan_id.mien if employee.ma_bo_phan_id else False
+        )
+
+    def _odoobot_notify_rule_for_employee(self, employee, bot_type):
+        self.ensure_one()
+        if not employee:
+            return self.env["hr.leave.odoobot.notify.rule"].browse()
+        return self.env["hr.leave.odoobot.notify.rule"]._find_rule(
+            company=self.company_id,
+            mien=self._leave_request_mien(),
+            job_title=employee.job_title,
+            bot_type=bot_type,
+        )
+
+    def _odoobot_notify_rule_for_user(self, user, bot_type):
+        self.ensure_one()
+        employee = user.employee_id if user else False
+        return self._odoobot_notify_rule_for_employee(employee, bot_type)
+
+    def _odoobot_scheduled_remind_due(self, rule, last_slot_field):
+        self.ensure_one()
+        if not rule or not rule.remind_time_ids:
+            return False
+        slot_key = rule._matching_remind_slot_key()
+        if not slot_key:
+            return False
+        if getattr(self, last_slot_field) == slot_key:
+            return False
+        return slot_key
+
+    def _odoobot_mark_scheduled_remind_sent(self, bot_type, slot_key):
+        self.ensure_one()
+        now = fields.Datetime.now()
+        if bot_type == "approval":
+            self.sudo().write(
+                {
+                    "approval_last_odoobot_remind_at": now,
+                    "approval_last_odoobot_remind_slot": slot_key,
+                }
+            )
+        elif bot_type == "handover":
+            self.sudo().write(
+                {
+                    "handover_last_odoobot_remind_at": now,
+                    "handover_last_odoobot_remind_slot": slot_key,
+                }
+            )
+
+    def _odoobot_reset_approval_remind_tracking(self):
+        self.sudo().write(
+            {
+                "approval_last_odoobot_remind_at": False,
+                "approval_last_odoobot_remind_slot": False,
+            }
+        )
+
+    def _odoobot_reset_handover_remind_tracking(self):
+        self.sudo().write(
+            {
+                "handover_last_odoobot_remind_at": False,
+                "handover_last_odoobot_remind_slot": False,
+            }
+        )
+
+    def _odoobot_skip_hours_for_user(self, user, bot_type):
+        self.ensure_one()
+        rule = self._odoobot_notify_rule_for_user(user, bot_type)
+        if not rule or rule.is_final_level:
+            return 0.0
+        return rule.skip_level_hours or 0.0
+
+    def _odoobot_blocks_auto_skip_for_user(self, user, bot_type):
+        self.ensure_one()
+        rule = self._odoobot_notify_rule_for_user(user, bot_type)
+        if not rule:
+            return True
+        return bool(rule.is_final_level)
+
+    def _post_odoobot_bot_discuss_message(self, bot_user_xmlid, recipient_user, body):
+        """Post a Discuss DM from a configured OdooBot user."""
+        self.ensure_one()
+        if not recipient_user or recipient_user.share or not recipient_user.partner_id:
+            return False
+        bot_user = self.env.ref(bot_user_xmlid, raise_if_not_found=False)
+        if not bot_user:
+            bot_user = self.env.ref("base.user_root")
+        try:
+            chat = (
+                self.env["discuss.channel"]
+                .with_user(bot_user)
+                .sudo()
+                ._get_or_create_chat([recipient_user.partner_id.id], pin=True)
+            )
+            chat.with_user(bot_user).sudo().message_post(
+                body=body,
+                message_type="comment",
+                subtype_xmlid="mail.mt_comment",
+            )
+            return True
+        except Exception:
+            _logger.exception(
+                "time_off_extra_approval: OdooBot DM failed leave_id=%s recipient_user_id=%s bot=%s",
+                self.id,
+                recipient_user.id,
+                bot_user_xmlid,
+            )
+            return False

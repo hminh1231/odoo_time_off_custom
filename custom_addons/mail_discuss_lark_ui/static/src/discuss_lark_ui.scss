@@ -99,22 +99,73 @@ $o-lark-red: #f54a45;
             min-height: 0;
         }
 
-        > .o-mail-LarkAppsBar {
-            order: 1;
-            flex-shrink: 0;
+    }
+}
+
+// Thanh cố định mọi app (main_components overlay)
+@media (max-width: 767.98px) {
+    .o-main-components-container:has(.o-mail-LarkAppsBar-globalShell) {
+        position: fixed !important;
+        inset: 0;
+        width: 100% !important;
+        height: 100% !important;
+        pointer-events: none;
+        z-index: 1045;
+    }
+
+    .o-mail-LarkAppsBar-globalShell {
+        pointer-events: none;
+        position: fixed;
+        inset: 0;
+        z-index: 1;
+        width: 100%;
+        max-width: 100vw;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+
+        &:has(.o-mail-LarkAllApps) {
+            justify-content: flex-start;
         }
+    }
+
+    .o-mail-LarkAppsBar-global {
+        pointer-events: auto;
+        position: relative;
+        z-index: 12;
+        flex-shrink: 0;
+        background: $o-lark-bg !important;
+        box-shadow: 0 -1px 0 $o-lark-border;
+    }
+
+    .o-mail-LarkAllApps {
+        pointer-events: auto;
+        flex: 1 1 auto;
+        min-height: 0;
+        width: 100%;
+        position: relative;
+        z-index: 11;
+        overflow: hidden;
     }
 }
 
 @mixin o-mail-lark-apps-bar {
+    body.o-mail-lark-mobile-shell {
+        .o_action_manager {
+            padding-bottom: calc(3.25rem + env(safe-area-inset-bottom, 0px)) !important;
+        }
+    }
+
     .o-mail-LarkAppsBar {
         background: $o-lark-bg !important;
         border-top: 1px solid $o-lark-border !important;
         box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.04);
-        padding: 0.35rem 0.5rem calc(0.35rem + env(safe-area-inset-bottom, 0px)) !important;
-        gap: 0.15rem !important;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
+        min-height: 0 !important;
+        max-height: 3.25rem;
+        padding: 0.2rem 0.35rem calc(0.2rem + env(safe-area-inset-bottom, 0px)) !important;
+        gap: 0.1rem !important;
+        overflow: hidden;
+        align-items: stretch;
     }
 
     .o-mail-LarkAppsBar-tab {
@@ -122,11 +173,16 @@ $o-lark-red: #f54a45;
         min-width: 0;
         max-width: none;
         flex: 1 1 0;
+        flex-grow: 1 !important;
+        padding: 0.1rem 0.15rem !important;
+        min-height: 0 !important;
+        max-height: 100%;
 
         .o-mail-LarkAppsBar-label {
-            font-size: 0.65rem;
-            margin-top: 0.1rem;
-            line-height: 1.1;
+            font-size: 0.6rem;
+            margin-top: 0.05rem;
+            line-height: 1.05;
+            max-height: 1.4em;
         }
 
         &.active .o-mail-LarkAppsBar-label {
@@ -141,20 +197,35 @@ $o-lark-red: #f54a45;
     }
 
     .o-mail-LarkAppsBar-icon {
-        width: 1.75rem;
-        height: 1.75rem;
-        font-size: 1rem;
+        display: block;
+        width: 1.35rem !important;
+        height: 1.35rem !important;
+        min-width: 1.35rem !important;
+        min-height: 1.35rem !important;
+        max-width: 1.35rem !important;
+        max-height: 1.35rem !important;
+        font-size: 0.85rem;
+        flex-shrink: 0;
+
+        img {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: contain;
+        }
     }
 
     .o-mail-LarkAppsBar-moreIcon {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 2px;
-        width: 1.75rem;
-        height: 1.75rem;
-        padding: 4px;
+        gap: 1px;
+        width: 1.35rem !important;
+        height: 1.35rem !important;
+        min-width: 1.35rem !important;
+        min-height: 1.35rem !important;
+        padding: 3px;
         background: $o-lark-blue;
         box-sizing: border-box;
+        flex-shrink: 0;
 
         span {
             display: block;
@@ -163,10 +234,15 @@ $o-lark-red: #f54a45;
         }
     }
 
+    body.o-mail-lark-allapps-open {
+        .o_action_manager,
+        .o-mail-Discuss {
+            overflow: hidden !important;
+        }
+    }
+
+    // Panel flex ngay trên nav — không gap, không che thanh bar
     .o-mail-LarkAllApps {
-        position: fixed;
-        inset: 0;
-        z-index: 1060;
         pointer-events: none;
 
         &-backdrop {
@@ -181,7 +257,10 @@ $o-lark-red: #f54a45;
             inset: 0;
             background: $o-lark-bg;
             pointer-events: auto;
-            padding-bottom: env(safe-area-inset-bottom, 0px);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
         }
 
         &-header {
@@ -198,6 +277,10 @@ $o-lark-red: #f54a45;
             grid-template-columns: repeat(4, minmax(0, 1fr));
             gap: 0.75rem 0.5rem;
             align-content: start;
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow: auto;
+            -webkit-overflow-scrolling: touch;
         }
 
         &-app {
@@ -225,14 +308,22 @@ $o-lark-red: #f54a45;
 }
 
 @media (max-width: 767.98px) {
-    body:has(.o-mail-Discuss) {
+    body:has(.o-mail-Discuss),
+    body.o-mail-lark-mobile-shell {
         @include o-mail-lark-main-navbar;
+    }
+
+    body:has(.o-mail-Discuss) {
         @include o-mail-lark-navbar-on-top;
+    }
+
+    body.o-mail-lark-mobile-shell {
         @include o-mail-lark-apps-bar;
     }
 }
 
-body.o-mail-lark-ui {
+body.o-mail-lark-ui,
+body.o-mail-lark-discuss {
     --mail-MessagingMenu-bg: #{$o-lark-bg};
     --mail-MessagingMenu-listBorderColor: transparent;
     --o-discuss-badge-bg: #{$o-lark-red};

@@ -1,33 +1,75 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
 
-    <record id="view_hr_leave_odoobot_notify_config_form" model="ir.ui.view">
-        <field name="name">hr.leave.odoobot.notify.config.form</field>
-        <field name="model">hr.leave.odoobot.notify.config</field>
+    <record id="view_hr_leave_odoobot_notify_rule_kanban" model="ir.ui.view">
+        <field name="name">hr.leave.odoobot.notify.rule.kanban</field>
+        <field name="model">hr.leave.odoobot.notify.rule</field>
+        <field name="arch" type="xml">
+            <kanban highlight_color="color" class="o_kanban_small_column" sample="1">
+                <field name="color"/>
+                <field name="mien"/>
+                <field name="job_title"/>
+                <field name="bot_type"/>
+                <field name="is_final_level"/>
+                <field name="display_name"/>
+                <templates>
+                    <t t-name="menu">
+                        <field name="color" widget="kanban_color_picker"/>
+                    </t>
+                    <t t-name="card">
+                        <field name="display_name" class="fw-bold fs-4"/>
+                        <field name="bot_type"/>
+                        <field name="is_final_level"/>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+
+    <record id="view_hr_leave_odoobot_notify_rule_form" model="ir.ui.view">
+        <field name="name">hr.leave.odoobot.notify.rule.form</field>
+        <field name="model">hr.leave.odoobot.notify.rule</field>
         <field name="arch" type="xml">
             <form string="Thông báo odoobot">
                 <sheet>
+                    <widget name="web_ribbon" title="Archived" bg_color="text-bg-danger" invisible="active"/>
+                    <widget name="web_ribbon" title="Mức cuối" bg_color="text-bg-success" invisible="not is_final_level"/>
+                    <div class="oe_title">
+                        <label for="mien" string="Miền"/>
+                        <h1>
+                            <field name="mien" class="o_text_overflow" placeholder="Chọn Miền"/>
+                        </h1>
+                    </div>
                     <group>
-                        <field name="company_id" groups="base.group_multi_company"/>
-                        <field name="remind_interval_hours" widget="float_time"/>
-                        <field name="skip_level_hours" widget="float_time"/>
-                        <field name="max_skip_job_title"/>
+                        <group string="Thông tin chung">
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="job_title" string="Chức danh"/>
+                            <field name="bot_type" string="Loại OdooBot"/>
+                            <field name="active" widget="boolean_toggle"/>
+                            <field name="color" invisible="1"/>
+                        </group>
+                        <group string="Tự động bỏ qua cấp">
+                            <field name="is_final_level" string="Đây có phải là mức duyệt cuối cùng không?"/>
+                            <field name="skip_level_hours"
+                                   string="Thời gian để skip qua bước duyệt hiện tại"
+                                   widget="float_time"
+                                   invisible="is_final_level"
+                                   required="not is_final_level"/>
+                        </group>
+                    </group>
+                    <group string="Thời gian thông báo nhắc (như báo thức)" class="o_odoobot_remind_times_group">
+                        <field name="remind_time_ids" nolabel="1">
+                            <list editable="bottom" string="Giờ nhắc" create="1" delete="1">
+                                <field name="remind_time" widget="float_time" string="Giờ" width="120px"/>
+                            </list>
+                        </field>
                     </group>
                     <div class="text-muted">
                         <p>
-                            <strong>Thời gian nhắc lại:</strong>
-                            gửi lại tin OdooBot Duyệt đơn cho người đang duyệt nếu chưa xử lý (0 = tắt).
+                            <strong>Mức duyệt cuối cùng:</strong> không tự bỏ qua cấp; chỉ gửi nhắc vào các giờ đã đặt.
                         </p>
-                        <p>
-                            <strong>Thời gian bỏ qua cấp:</strong>
-                            tự chuyển sang cấp duyệt tiếp theo (chỉ áp dụng khi chức danh hiện tại
-                            <em>thấp hơn</em> chức danh dừng skip bên dưới).
-                        </p>
-                        <p>
-                            <strong>Chức danh dừng skip:</strong>
-                            khi đơn tới người có chức danh này (hoặc cao hơn), hệ thống
-                            <strong>không</strong> tự bỏ qua cấp nữa — chỉ nhắc lại theo
-                            <em>Thời gian nhắc lại</em> cho đến khi duyệt hoặc từ chối.
+                        <p invisible="is_final_level">
+                            <strong>Thời gian skip:</strong> sau số giờ trên, hệ thống tự chuyển sang người duyệt tiếp theo.
                         </p>
                     </div>
                 </sheet>
@@ -35,18 +77,63 @@
         </field>
     </record>
 
-    <record id="action_hr_leave_odoobot_notify_config" model="ir.actions.server">
+    <record id="view_hr_leave_odoobot_notify_rule_list" model="ir.ui.view">
+        <field name="name">hr.leave.odoobot.notify.rule.list</field>
+        <field name="model">hr.leave.odoobot.notify.rule</field>
+        <field name="arch" type="xml">
+            <list string="Thông báo odoobot">
+                <field name="mien"/>
+                <field name="job_title" string="Chức danh"/>
+                <field name="bot_type" string="Loại OdooBot"/>
+                <field name="is_final_level"/>
+                <field name="skip_level_display"/>
+                <field name="remind_times_display"/>
+                <field name="active" column_invisible="True"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_hr_leave_odoobot_notify_rule_search" model="ir.ui.view">
+        <field name="name">hr.leave.odoobot.notify.rule.search</field>
+        <field name="model">hr.leave.odoobot.notify.rule</field>
+        <field name="arch" type="xml">
+            <search string="Thông báo odoobot">
+                <field name="mien"/>
+                <field name="job_title"/>
+                <field name="bot_type"/>
+                <field name="display_name"/>
+                <separator/>
+                <filter string="Duyệt đơn" name="bot_approval" domain="[('bot_type', '=', 'approval')]"/>
+                <filter string="Bàn giao việc" name="bot_handover" domain="[('bot_type', '=', 'handover')]"/>
+                <filter string="Mức cuối" name="final_level" domain="[('is_final_level', '=', True)]"/>
+                <separator/>
+                <filter string="Đang dùng" name="active_only" domain="[('active', '=', True)]"/>
+                <filter string="Đã tắt" name="inactive" domain="[('active', '=', False)]"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_hr_leave_odoobot_notify_rule" model="ir.actions.act_window">
         <field name="name">Thông báo odoobot</field>
-        <field name="model_id" ref="model_hr_leave_odoobot_notify_config"/>
-        <field name="state">code</field>
-        <field name="code">action = model.action_open_company_config()</field>
+        <field name="res_model">hr.leave.odoobot.notify.rule</field>
+        <field name="view_mode">kanban,list,form</field>
+        <field name="search_view_id" ref="view_hr_leave_odoobot_notify_rule_search"/>
+        <field name="context">{'default_active': True, 'active_test': False}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Tạo quy tắc thông báo OdooBot
+            </p>
+            <p>
+                Bấm <strong>Mới</strong> để thêm cấu hình theo Miền, chức danh và loại bot.
+            </p>
+        </field>
     </record>
 
     <menuitem
         id="menu_hr_leave_odoobot_notify_configuration"
         name="Thông báo odoobot"
         parent="hr_holidays.menu_hr_holidays_configuration"
-        action="action_hr_leave_odoobot_notify_config"
+        action="action_hr_leave_odoobot_notify_rule"
         groups="hr_holidays.group_hr_holidays_manager"
         sequence="6"/>
 

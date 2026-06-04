@@ -120,43 +120,24 @@ class HrLeaveResponsibleApproval(models.Model):
         string="Current approval",
         compute="_compute_approval_current_step_label",
     )
-    def _odoobot_notify_config(self):
-        self.ensure_one()
-        return self.env["hr.leave.odoobot.notify.config"].sudo()._get_for_company(
-            self.company_id
-        )
-
     def _responsible_skip_level_hours(self):
         self.ensure_one()
-        return self._odoobot_notify_config().skip_level_hours
-
-    def _responsible_approval_job_title_rank(self, title_key):
-        self.ensure_one()
-        if not title_key:
-            return -1
-        return _job_title_rank_map().get(_normalize_job_title_key(title_key), -1)
-
-    def _responsible_max_skip_job_title(self):
-        self.ensure_one()
-        title = self._odoobot_notify_config().max_skip_job_title
-        return title or "trưởng bộ phận"
+        wave = self._responsible_pending_current_wave()
+        if not wave or not wave[0].user_id:
+            return 0.0
+        return self._odoobot_skip_hours_for_user(wave[0].user_id, "approval")
 
     def _responsible_current_wave_blocks_auto_skip(self):
-        """True when current approver reached max skip job title — only remind, no auto-skip."""
+        """True when rule marks current approver as final level (no auto-skip)."""
         self.ensure_one()
-        max_rank = self._responsible_approval_job_title_rank(self._responsible_max_skip_job_title())
-        if max_rank < 0:
-            return True
         wave = self._responsible_pending_current_wave()
         if not wave:
             return True
         for line in wave:
             user = line.user_id
-            employee = user.employee_id if user else False
-            rank = self._responsible_approval_job_title_rank(
-                employee.job_title if employee else False
-            )
-            if rank >= max_rank:
+            if not user:
+                continue
+            if self._odoobot_blocks_auto_skip_for_user(user, "approval"):
                 return True
         return False
 
@@ -169,6 +150,8 @@ class HrLeaveResponsibleApproval(models.Model):
         if self._responsible_current_wave_blocks_auto_skip():
             return
         hours = self._responsible_skip_level_hours()
+        if not hours or hours <= 0:
+            return
         threshold = fields.Datetime.now() - timedelta(hours=hours)
         wave = self._responsible_pending_current_wave()
         if not wave:
@@ -198,7 +181,7 @@ class HrLeaveResponsibleApproval(models.Model):
         if next_wave:
             now = fields.Datetime.now()
             next_wave.write({"pending_since": now})
-            self.sudo().write({"approval_last_odoobot_remind_at": False})
+            self._odoobot_reset_approval_remind_tracking()
             self.activity_update()
             self._notify_responsible_current_turn()
         else:
@@ -1101,7 +1084,7 @@ class HrLeaveResponsibleApproval(models.Model):
                 user.id if user else None,
             )
             return
-        self.sudo().write({"approval_last_odoobot_remind_at": False})
+        self._odoobot_reset_approval_remind_tracking()
         body_text = _(
             "It is now your turn to approve time off request %(leave)s for %(employee)s."
         ) % {
@@ -1471,9 +1454,33 @@ class HrLeaveResponsibleApproval(models.Model):
                     leave.id,
                 )
 
+    def _notify_approval_scheduled_remind_via_bot(self, approver_user):
+        """Scheduled alarm: short reminder + button to open the leave approval form."""
+        self.ensure_one()
+        if not approver_user or approver_user.share or not approver_user.partner_id:
+            return
+        primary = self
+        if hasattr(self, "_get_split_group_primary_leave"):
+            primary = self._get_split_group_primary_leave() or self
+        intro = Markup(
+            _(
+                "Bạn có 1 đơn cần duyệt, vui lòng bấm vào nút bên dưới "
+                "để duyệt hoặc từ chối.<br/><br/>"
+            )
+        )
+        button_html = primary._notify_discuss_leave_open_button_markup(
+            _("Duyệt đơn"),
+            discuss_link_type="approval",
+        )
+        body = intro + button_html
+        self._post_odoobot_bot_discuss_message(
+            "business_discuss_bots.user_bot_approval",
+            approver_user,
+            body,
+        )
+
     def cron_remind_responsible_approval_odoobot(self):
-        """Re-send OdooBot Duyệt đơn to current approver when repeat interval elapsed."""
-        now = fields.Datetime.now()
+        """Send OdooBot Duyệt đơn at configured alarm times for the current approver."""
         leaves = self.sudo().search(
             [
                 ("state", "in", ("confirm", "validate1")),
@@ -1484,28 +1491,20 @@ class HrLeaveResponsibleApproval(models.Model):
             try:
                 if leave.holiday_status_id.employee_responsible_approval_mode != "sequential":
                     continue
-                config = leave._odoobot_notify_config()
-                interval = config.remind_interval_hours
-                if not interval or interval <= 0:
-                    continue
                 wave = leave._responsible_pending_current_wave()
                 if not wave:
                     continue
-                pending_since = min(
-                    (ln.pending_since for ln in wave if ln.pending_since),
-                    default=False,
+                approver = wave[0].user_id
+                if not approver:
+                    continue
+                rule = leave._odoobot_notify_rule_for_user(approver, "approval")
+                slot_key = leave._odoobot_scheduled_remind_due(
+                    rule, "approval_last_odoobot_remind_slot"
                 )
-                if not pending_since:
+                if not slot_key:
                     continue
-                if pending_since > now - timedelta(hours=interval):
-                    continue
-                last_remind = leave.approval_last_odoobot_remind_at
-                if last_remind and last_remind > now - timedelta(hours=interval):
-                    continue
-                for approver in wave.mapped("user_id"):
-                    if approver:
-                        leave._notify_responsible_current_turn_via_approval_bot(approver)
-                leave.sudo().write({"approval_last_odoobot_remind_at": now})
+                leave._notify_approval_scheduled_remind_via_bot(approver)
+                leave._odoobot_mark_scheduled_remind_sent("approval", slot_key)
             except Exception:
                 _logger.exception(
                     "time_off_responsible_approval: OdooBot remind failed for leave id=%s",

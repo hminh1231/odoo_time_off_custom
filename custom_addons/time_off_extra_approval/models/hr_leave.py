@@ -45,12 +45,6 @@ class HolidaysRequest(models.Model):
         copy=False,
         readonly=True,
     )
-    approval_last_odoobot_remind_at = fields.Datetime(
-        string="Last OdooBot approval reminder",
-        copy=False,
-        help="Technical: last time a repeat OdooBot approval reminder was sent for the current step.",
-    )
-
     is_emergency_leave = fields.Boolean(
         string="Emergency leave (short notice)",
         default=False,

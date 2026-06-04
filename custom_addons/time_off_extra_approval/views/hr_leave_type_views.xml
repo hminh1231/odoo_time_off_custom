@@ -27,7 +27,7 @@
                     <field name="employee_responsible_source"/>
                     <p class="text-muted" colspan="2"
                        invisible="employee_responsible_approval_mode != 'sequential'">
-                        Thời gian bỏ qua cấp và nhắc lại OdooBot: cấu hình tại
+                        Cấu hình OdooBot (Miền, chức danh, giờ nhắc, skip): 
                         <strong>Ngày nghỉ → Cấu hình → Thông báo odoobot</strong>.
                     </p>
                     <p class="text-muted" colspan="2"

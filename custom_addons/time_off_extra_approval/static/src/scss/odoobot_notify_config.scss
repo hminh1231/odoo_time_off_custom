@@ -1,0 +1,23 @@
+// Compact one2many for OdooBot reminder times (avoid full-width "Giờ" column).
+
+.o_odoobot_remind_times_group {
+    .o_field_widget.o_field_one2many {
+        max-width: 16rem;
+        width: 16rem;
+    }
+
+    .o_list_renderer,
+    .o_list_table {
+        width: auto !important;
+        max-width: 16rem;
+    }
+
+    .o_list_table th,
+    .o_list_table td {
+        white-space: nowrap;
+    }
+
+    .o_field_float_time {
+        max-width: 6rem;
+    }
+}
