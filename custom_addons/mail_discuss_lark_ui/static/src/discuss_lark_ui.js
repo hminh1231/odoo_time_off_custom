@@ -280,6 +280,10 @@ function useLarkAppsBar(component) {
         component.shellState.fullscreen = mode === "fullscreen";
     });
 
+    useBus(component.env.bus, "MENUS:APP-CHANGED", () => {
+        component.larkAppsMenu.open = false;
+    });
+
     const syncMobile = () => {
         component.larkMediaState.mobile = isMobileUi(component.ui);
     };
@@ -535,6 +539,7 @@ function larkAppsBarMethods(ComponentClass) {
                 ev?.stopPropagation?.();
                 return;
             }
+            this.larkAppsMenu.open = false;
             await this.menuService.selectMenu(app);
         },
 
@@ -544,8 +549,8 @@ function larkAppsBarMethods(ComponentClass) {
                 ev?.stopPropagation?.();
                 return;
             }
-            await this.menuService.selectMenu(app);
             this.larkAppsMenu.open = false;
+            await this.menuService.selectMenu(app);
         },
     });
 }
