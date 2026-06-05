@@ -381,32 +381,33 @@ class HrLeaveStoreChain(models.Model):
                     user.id,
                 )
 
-    def action_responsible_approve(self):
+    def _responsible_approval_before_approve(self):
+        hook = getattr(super(), "_responsible_approval_before_approve", None)
+        res = hook() if hook else None
         if not self._is_store_chain_flow():
-            return super().action_responsible_approve()
-
+            return res
         self._store_chain_ensure_missing_approval_lines()
-
-        # Capture which line is being approved (sequence 1 = ASM / Mã bộ phận step).
-        approved_line = self.responsible_approval_line_ids.filtered(
-            lambda l: l.user_id == self.env.user and l.state == "pending"
-        )[:1]
-        approved_seq = approved_line.sequence if approved_line else None
         _logger.info(
             "time_off_extra_approval: store chain before approve leave_id=%s approver=%s approved_seq=%s lines=%s",
             self.id,
             self.env.user.login,
-            approved_seq,
+            self.responsible_approval_line_ids.filtered(
+                lambda line: line.user_id == self.env.user and line.state == "pending"
+            )[:1].sequence,
             [
                 (line.sequence, line.user_id.login, line.state)
                 for line in self.responsible_approval_line_ids.sorted(lambda l: (l.sequence, l.id))
             ],
         )
+        return res
 
-        res = super().action_responsible_approve()
-
+    def _responsible_approval_after_approve(self, approved_line=None):
+        hook = getattr(super(), "_responsible_approval_after_approve", None)
+        res = hook(approved_line=approved_line) if hook else None
+        if not self._is_store_chain_flow():
+            return res
         # After the Mã bộ phận (sequence-1) step is done, notify all remaining approvers.
-        if approved_seq == 1:
+        if approved_line and approved_line.sequence == 1:
             self._store_chain_notify_all_remaining_approvers()
 
         _logger.info(
@@ -418,7 +419,6 @@ class HrLeaveStoreChain(models.Model):
             ],
             self._responsible_pending_current_wave().mapped("user_id.login"),
         )
-
         return res
 
     def action_responsible_refuse(self, reason=False):

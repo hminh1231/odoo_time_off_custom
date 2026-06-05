@@ -1333,6 +1333,18 @@ class HrLeaveResponsibleApproval(models.Model):
         self.ensure_one()
         return self.action_open_refuse_wizard(refuse_action="responsible")
 
+    def _responsible_approval_before_approve(self):
+        hook = getattr(super(), "_responsible_approval_before_approve", None)
+        if hook:
+            return hook()
+        return None
+
+    def _responsible_approval_after_approve(self, approved_line=None):
+        hook = getattr(super(), "_responsible_approval_after_approve", None)
+        if hook:
+            return hook(approved_line=approved_line)
+        return None
+
     def action_responsible_approve(self):
         self.ensure_one()
         if self.validation_type != "employee_hr_responsibles":
@@ -1359,6 +1371,7 @@ class HrLeaveResponsibleApproval(models.Model):
 
         if not self.responsible_approval_line_ids:
             self._init_responsible_approval_lines()
+        self._responsible_approval_before_approve()
 
         user_line = self.responsible_approval_line_ids.filtered(
             lambda l: l.user_id == self.env.user
@@ -1384,6 +1397,7 @@ class HrLeaveResponsibleApproval(models.Model):
                         if missing_since:
                             missing_since.write({"pending_since": fields.Datetime.now()})
                     self._notify_responsible_current_turn()
+            self._responsible_approval_after_approve(approved_line=user_line)
 
         if mode == "any":
             return self._action_validate(check_state=False)
