@@ -47,12 +47,32 @@ class HrLeaveOdoobotNotifyMixin(models.Model):
         self.ensure_one()
         if not employee:
             return self._odoobot_notify_rule_env().browse()
-        return self._odoobot_notify_rule_env()._find_rule(
-            company=self.company_id,
-            mien=self._leave_request_mien(),
-            job_title=employee.job_title,
-            bot_type=bot_type,
-        )
+        Rule = self._odoobot_notify_rule_env()
+        requester_mien = self._leave_request_mien()
+        for mien in self._odoobot_rule_mien_candidates(employee, requester_mien):
+            rule = Rule._find_rule(
+                company=self.company_id,
+                mien=mien,
+                job_title=employee.job_title,
+                bot_type=bot_type,
+            )
+            if rule:
+                return rule
+        return Rule.browse()
+
+    def _odoobot_rule_mien_candidates(self, employee, requester_mien):
+        """Prefer requester Miền; fall back to approver Miền when no rule is configured."""
+        seen = set()
+        candidates = []
+        for mien in (
+            requester_mien,
+            employee.mien if employee else False,
+            employee.ma_bo_phan_id.mien if employee and employee.ma_bo_phan_id else False,
+        ):
+            if mien and mien not in seen:
+                seen.add(mien)
+                candidates.append(mien)
+        return candidates
 
     def _odoobot_notify_rule_for_user(self, user, bot_type):
         self.ensure_one()

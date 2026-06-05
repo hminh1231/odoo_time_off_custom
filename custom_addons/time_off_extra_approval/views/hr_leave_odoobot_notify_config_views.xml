@@ -66,10 +66,17 @@
                     </group>
                     <div class="text-muted">
                         <p>
+                            <strong>Áp dụng cho luồng duyệt tuần tự:</strong>
+                            <strong>Miền</strong> lấy theo người xin nghỉ (ưu tiên), sau đó Miền của người đang duyệt nếu chưa có quy tắc.
+                            <strong>Chức danh</strong> là chức danh của <em>người đang duyệt bước hiện tại</em>
+                            (ví dụ ASM, RSM, admin, admin tổng) — không phải chức danh người xin nghỉ.
+                        </p>
+                        <p>
                             <strong>Mức duyệt cuối cùng:</strong> không tự bỏ qua cấp; chỉ gửi nhắc vào các giờ đã đặt.
+                            Thường bật cho <em>admin tổng</em> hoặc bước duyệt cuối trong chuỗi cửa hàng.
                         </p>
                         <p invisible="is_final_level">
-                            <strong>Thời gian skip:</strong> sau số giờ trên, hệ thống tự chuyển sang người duyệt tiếp theo.
+                            <strong>Thời gian skip:</strong> sau số giờ trên, hệ thống tự chuyển sang người duyệt tiếp theo trong chuỗi.
                         </p>
                     </div>
                 </sheet>
@@ -124,7 +131,9 @@
                 Tạo quy tắc thông báo OdooBot
             </p>
             <p>
-                Bấm <strong>Mới</strong> để thêm cấu hình theo Miền, chức danh và loại bot.
+                Bấm <strong>Mới</strong> để thêm cấu hình theo Miền, chức danh người duyệt và loại bot.
+                Với chuỗi cửa hàng (Nhóm trưởng/CHT), tạo quy tắc <strong>OdooBot Duyệt đơn</strong> cho từng cấp:
+                ASM, RSM, admin, admin tổng. Cấp nào không có người trong hệ thống sẽ tự bỏ qua.
             </p>
         </field>
     </record>

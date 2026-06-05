@@ -18,6 +18,7 @@ _logger = logging.getLogger(__name__)
 _MULTI_STEP_RESET_CTX = approval_constants.MULTI_STEP_RESET_CTX
 _SKIP_OUTCOME_BOT_NOTIFY_CTX = approval_constants.SKIP_OUTCOME_BOT_NOTIFY_CTX
 _SKIP_RESPONSIBLE_SUBMIT_NOTIFY_CTX = approval_constants.SKIP_RESPONSIBLE_SUBMIT_NOTIFY_CTX
+_SKIP_RESPONSIBLE_AUTO_SKIP_CTX = "skip_responsible_auto_skip_pending"
 _HR_RESPONSIBLE_APPROVAL_JOB_TITLE_ORDER = tuple(
     key for key, _label in JOB_TITLE_SELECTION if key != "nhân viên"
 )
@@ -143,6 +144,7 @@ class HrLeaveResponsibleApproval(models.Model):
 
     def _apply_responsible_timeout_escalation(self):
         self.ensure_one()
+        self._sync_responsible_approval_lines()
         if self.holiday_status_id.employee_responsible_approval_mode != "sequential":
             return
         if not self.responsible_approval_line_ids:
@@ -322,20 +324,26 @@ class HrLeaveResponsibleApproval(models.Model):
             leave.approval_current_step_label = False
             if leave.state not in ("confirm", "validate1"):
                 continue
-            vt = leave.validation_type
-            if vt == "employee_hr_responsibles":
+            if leave._is_responsible_approval_validation():
                 pending = leave.responsible_approval_line_ids.filtered(
                     lambda line: line.state == "pending"
                 ).sorted(lambda ln: (ln.sequence, ln.id))
                 if not pending:
                     continue
                 mode = leave.holiday_status_id.employee_responsible_approval_mode or "any"
-                total = len(leave.responsible_approval_line_ids)
+                expected_users = leave._get_responsible_approval_users()
+                total = max(len(leave.responsible_approval_line_ids), len(expected_users))
                 if mode == "sequential":
                     wave = leave._responsible_pending_current_wave()
                     if not wave:
                         continue
                     step_num = wave[0].sequence
+                    if expected_users and wave[0].user_id:
+                        try:
+                            step_num = expected_users.ids.index(wave[0].user_id.id) + 1
+                        except ValueError:
+                            pass
+                    total = len(expected_users) or total
                     names = ", ".join(n for n in wave.mapped("user_id.name") if n)
                     leave.approval_current_step_label = _("Bước %(step)d / %(total)d · %(name)s") % {
                         "step": step_num,
@@ -346,7 +354,7 @@ class HrLeaveResponsibleApproval(models.Model):
                     leave.approval_current_step_label = ", ".join(
                         n for n in pending.mapped("user_id.name") if n
                     ) or False
-            elif vt == "multi_step_6":
+            elif leave.validation_type == "multi_step_6":
                 step = leave._get_current_multi_step()
                 if not step:
                     continue
@@ -609,6 +617,66 @@ class HrLeaveResponsibleApproval(models.Model):
             return hook()
         return None
 
+    def _is_responsible_approval_validation(self):
+        self.ensure_one()
+        return self.validation_type in approval_constants.RESPONSIBLE_APPROVAL_VALIDATION_TYPES
+
+    def _sync_responsible_approval_lines(self):
+        """Extension hook: keep approval log rows aligned with the computed approver chain."""
+        hook = getattr(super(), "_sync_responsible_approval_lines", None)
+        if hook:
+            hook()
+        self._responsible_auto_skip_unavailable_pending_steps()
+
+    def _responsible_user_can_approve_step(self, user):
+        return bool(user and not user.share and user.active)
+
+    def _responsible_auto_skip_unavailable_pending_steps(self):
+        """Skip pending steps whose approver is missing or inactive; advance to the next slot."""
+        if self.env.context.get(_SKIP_RESPONSIBLE_AUTO_SKIP_CTX):
+            return
+        for leave in self.with_context(**{_SKIP_RESPONSIBLE_AUTO_SKIP_CTX: True}):
+            if not leave._is_responsible_approval_validation():
+                continue
+            if (leave.holiday_status_id.employee_responsible_approval_mode or "any") != "sequential":
+                continue
+            if not leave.responsible_approval_line_ids:
+                continue
+            max_iters = len(leave.responsible_approval_line_ids) + 1
+            skipped_any = False
+            for _ in range(max_iters):
+                wave = leave._responsible_pending_current_wave_raw()
+                if not wave:
+                    break
+                user = wave[0].user_id
+                if leave._responsible_user_can_approve_step(user):
+                    break
+                wave[0].write(
+                    {
+                        "state": "skipped",
+                        "action_date": fields.Datetime.now(),
+                    }
+                )
+                leave.message_post(
+                    body=_(
+                        "Approval step skipped: no available approver at this level; escalated to the next level."
+                    ),
+                    subtype_xmlid="mail.mt_note",
+                )
+                skipped_any = True
+            if not skipped_any:
+                continue
+            next_wave = leave._responsible_pending_current_wave_raw()
+            if next_wave:
+                missing_since = next_wave.filtered(lambda ln: not ln.pending_since)
+                if missing_since:
+                    missing_since.write({"pending_since": fields.Datetime.now()})
+                leave._odoobot_reset_approval_remind_tracking()
+                leave.activity_update()
+                leave._notify_responsible_current_turn()
+            elif not leave.responsible_approval_line_ids.filtered(lambda ln: ln.state == "pending"):
+                leave._action_validate(check_state=False)
+
     def _ensure_responsible_approval_lines(self):
         """Create approval log rows when a request is already To Approve but lines were never created.
 
@@ -617,17 +685,19 @@ class HrLeaveResponsibleApproval(models.Model):
         Step label until someone saved again.
         """
         to_init = self.filtered(
-            lambda l: l.validation_type == "employee_hr_responsibles"
+            lambda l: l._is_responsible_approval_validation()
             and l.state == "confirm"
             and l.employee_id
             and not l.responsible_approval_line_ids
         )
         if not to_init:
+            self._sync_responsible_approval_lines()
             return
         to_init._init_responsible_approval_lines()
         to_init.modified(
             ["responsible_approval_line_ids", "employee_id", "holiday_status_id"]
         )
+        self._sync_responsible_approval_lines()
 
     def _format_approval_bot_date(self, value):
         """Format a date as DD/MM/YYYY for approval-bot notifications."""
@@ -852,7 +922,7 @@ class HrLeaveResponsibleApproval(models.Model):
     def _init_responsible_approval_lines(self):
         line_model = self.env["hr.leave.responsible.approval"].sudo()
         for leave in self:
-            if leave.validation_type != "employee_hr_responsibles" or not leave.employee_id:
+            if not leave._is_responsible_approval_validation() or not leave.employee_id:
                 continue
             if leave.responsible_approval_line_ids:
                 continue
@@ -1254,8 +1324,8 @@ class HrLeaveResponsibleApproval(models.Model):
                 continue
             missing.write({"pending_since": threshold - timedelta(seconds=1)})
 
-    def _responsible_pending_current_wave(self):
-        """Smallest-sequence pending line(s): one record, except parallel director wave → all directors at once."""
+    def _responsible_pending_current_wave_raw(self):
+        """Smallest-sequence pending line(s) without auto-skipping unavailable approvers."""
         self.ensure_one()
         pending = self.responsible_approval_line_ids.filtered(lambda l: l.state == "pending").sorted(
             lambda l: (l.sequence, l.id)
@@ -1266,6 +1336,13 @@ class HrLeaveResponsibleApproval(models.Model):
             return pending[:1]
         wave_seq = pending[0].sequence
         return pending.filtered(lambda l: l.sequence == wave_seq)
+
+    def _responsible_pending_current_wave(self):
+        """Current sequential wave; unavailable approver slots are auto-skipped first."""
+        self.ensure_one()
+        if not self.env.context.get(_SKIP_RESPONSIBLE_AUTO_SKIP_CTX):
+            self._responsible_auto_skip_unavailable_pending_steps()
+        return self._responsible_pending_current_wave_raw()
 
     def _sort_responsible_users_by_job_title(self, users):
         """Sequential chain order: trưởng nhóm → trưởng BP → kiểm soát → trưởng phòng HCNS → giám đốc (see hr_job_title_vn)."""
@@ -1473,9 +1550,10 @@ class HrLeaveResponsibleApproval(models.Model):
         leaves = self.sudo().search(
             [
                 ("state", "in", ("confirm", "validate1")),
-                ("validation_type", "=", "employee_hr_responsibles"),
+                ("validation_type", "in", approval_constants.RESPONSIBLE_APPROVAL_VALIDATION_TYPES),
             ]
         )
+        leaves._ensure_responsible_approval_lines()
         for leave in leaves:
             try:
                 leave._apply_responsible_timeout_escalation()
@@ -1515,9 +1593,10 @@ class HrLeaveResponsibleApproval(models.Model):
         leaves = self.sudo().search(
             [
                 ("state", "in", ("confirm", "validate1")),
-                ("validation_type", "=", "employee_hr_responsibles"),
+                ("validation_type", "in", approval_constants.RESPONSIBLE_APPROVAL_VALIDATION_TYPES),
             ]
         )
+        leaves._ensure_responsible_approval_lines()
         for leave in leaves:
             try:
                 if leave.holiday_status_id.employee_responsible_approval_mode != "sequential":

@@ -4,11 +4,14 @@ Sequential approval based on the employee's job title and Mã bộ phận.
 All approval mechanics (responsible_approval_line_ids, action_responsible_approve,
 notifications, timeout escalation) are shared with employee_hr_responsibles.
 
-Approval flows:
-  Cửa hàng trưởng → ASM → RSM         (pool by Mã bộ phận)
-                  → org-chart above RSM (sequential) → Admin
-  Cửa hàng trưởng → ASM               (when RSM is missing)
-                  → org-chart above ASM (sequential) → Admin
+Approval flows (Nhóm trưởng / Cửa hàng trưởng):
+  The chain follows the org chart (hr.employee.parent_id), one approver per level.
+  ASM is the anchor/first step (preferring the Work Handover ASM); the walk then
+  continues upward from the ASM's reporting line.
+  The chain STOPS at the first job title flagged as "Mức duyệt cuối" (is_final_level)
+  in the OdooBot Duyệt đơn config (hr.leave.odoobot.notify.rule), matched by the
+  requester's Miền. If no final-level title is met, the chain stops at the topmost
+  approver found on the org chart (no hard-coded "admin tổng" anymore).
 
 ASM, RSM, and Giám sát use the leave type's configured org-chart approvers
 (employee_hr_responsibles, sequential) — they do not enter this store chain.
@@ -179,53 +182,69 @@ class HrLeaveStoreChain(models.Model):
             return self.env["res.users"]
         return user
 
-    def _store_chain_org_chain_from_employee(self, start_emp, stop_badge=None):
-        """Walk parent_id org chain upward from start_emp (exclusive — start_emp itself is not added).
-
-        Stops and includes the employee whose barcode == stop_badge when given.
-        Returns res.users in order (closest manager first).
-        """
-        user_ids = []
-        seen = set()
-        cur = start_emp.sudo().parent_id if start_emp else None
+    def _store_chain_find_user_on_requester_org_chain(self, job_title_key):
+        """Find approver only on the requester's upward org chart (parent_id chain)."""
+        self.ensure_one()
+        cur = self.employee_id.sudo().parent_id
         while cur:
-            if cur.user_id and not cur.user_id.share:
-                uid = cur.user_id.id
-                if uid not in seen:
-                    user_ids.append(uid)
-                    seen.add(uid)
-                if stop_badge and (cur.barcode or "") == stop_badge:
-                    break
+            if (cur.job_title or "").strip().lower() == job_title_key:
+                user = self._store_chain_user_from_employee(cur)
+                if user:
+                    return user
             cur = cur.parent_id
-        return self.env["res.users"].browse(user_ids)
+        return self.env["res.users"]
 
-    def _store_chain_after_rsm_approver_users(self, rsm_emp, fallback_emp=None):
-        """Org-chart chain above RSM, or above fallback employee when RSM is absent."""
-        user_ids = []
-        seen = set()
+    def _store_chain_title_is_final(self, job_title_key, mien):
+        """True when the OdooBot Duyệt đơn config flags this title as the final level for ``mien``."""
+        self.ensure_one()
+        if not job_title_key or not mien:
+            return False
+        rule = self._odoobot_notify_rule_env()._find_rule(
+            company=self.company_id,
+            mien=mien,
+            job_title=job_title_key,
+            bot_type="approval",
+        )
+        return bool(rule and rule.is_final_level)
 
-        def _add(user):
-            if user and user.id and user.id not in seen:
-                user_ids.append(user.id)
-                seen.add(user.id)
+    def _store_chain_anchor_user_and_employee(self, ma_bo_phan):
+        """Resolve the ASM anchor user (and its employee) that starts the chain.
 
-        start_emp = rsm_emp or fallback_emp
-        for user in self._store_chain_org_chain_from_employee(start_emp):
-            _add(user)
-        _add(self._store_chain_find_user_by_badge(_BADGE_ADMIN))
-        return self.env["res.users"].browse(user_ids)
+        Prefer the Work Handover ASM, then an ASM already on the approval lines,
+        then the Mã bộ phận pool, then any ASM on the requester's org chart.
+        Returns (user, employee); both may be empty recordsets.
+        """
+        self.ensure_one()
+        asm_emp = self._store_chain_asm_anchor_employee(ma_bo_phan)
+        user = self._store_chain_user_from_employee(asm_emp)
+        if user:
+            return user, asm_emp
+        user = self._store_chain_find_user_by_title_and_dept("asm", ma_bo_phan)
+        if user:
+            return user, user.sudo().employee_id
+        user = self._store_chain_find_user_on_requester_org_chain("asm")
+        if user:
+            return user, user.sudo().employee_id
+        return self.env["res.users"], self.env["hr.employee"]
 
     def _get_store_chain_approver_users(self):
         """Build the ordered approver list for the store chain flow.
 
+        Walks the org chart (parent_id) one approver per level, starting from the ASM
+        anchor (Work Handover ASM preferred). Stops at the first title flagged as the
+        final level ("Mức duyệt cuối") in the OdooBot Duyệt đơn config for the
+        requester's Miền; otherwise stops at the topmost approver on the org chart.
         Returns res.users in sequential approval order (first = approves first).
-        Duplicate users are silently dropped (shouldn't happen in practice).
         """
         self.ensure_one()
         Users = self.env["res.users"]
         title = self._store_chain_employee_job_title()
+        if title not in _STORE_CHAIN_JOB_TITLES:
+            return Users
+
         emp = self.employee_id
         ma_bo_phan = emp.sudo().ma_bo_phan if emp else False
+        requester_mien = self._leave_request_mien()
 
         user_ids = []
         seen = set()
@@ -234,54 +253,93 @@ class HrLeaveStoreChain(models.Model):
             if user and user.id and user.id not in seen:
                 user_ids.append(user.id)
                 seen.add(user.id)
+                return True
+            return False
 
-        if title in ("nhóm trưởng", "cửa hàng trưởng"):
-            # Nhóm trưởng / CHT → ASM → RSM (pool by ma_bo_phan) → org-chain above RSM → Admin
-            asm_emp = self._store_chain_asm_anchor_employee(ma_bo_phan)
-            _add(self._store_chain_user_from_employee(asm_emp))
-            rsm_emp = self._store_chain_find_employee_by_title_and_dept("rsm", ma_bo_phan)
-            _add(self._store_chain_user_from_employee(rsm_emp))
-            for user in self._store_chain_after_rsm_approver_users(rsm_emp, fallback_emp=asm_emp):
-                _add(user)
+        # ASM anchor opens the chain; the org-chart walk continues from its reporting line.
+        anchor_user, anchor_emp = self._store_chain_anchor_user_and_employee(ma_bo_phan)
+        walk_start_emp = anchor_emp or (emp.sudo() if emp else self.env["hr.employee"])
+
+        stop = False
+        if anchor_user and _add(anchor_user):
+            if self._store_chain_title_is_final("asm", requester_mien):
+                stop = True
+
+        if not stop:
+            cur = walk_start_emp.sudo().parent_id if walk_start_emp else self.env["hr.employee"]
+            visited = set()
+            while cur and cur.id not in visited:
+                visited.add(cur.id)
+                cur_title = (cur.job_title or "").strip().lower()
+                user = self._store_chain_user_from_employee(cur)
+                if user and _add(user):
+                    if self._store_chain_title_is_final(cur_title, requester_mien):
+                        break
+                cur = cur.sudo().parent_id
+
+        # Last-resort safety so a request is never left with no approver at all.
+        if not user_ids:
+            _add(self._store_chain_find_user_by_badge(_BADGE_ADMIN))
 
         _logger.info(
-            "time_off_extra_approval: store chain approvers leave_id=%s title=%s ma_bo_phan=%s users=%s",
+            "time_off_extra_approval: store chain approvers leave_id=%s title=%s ma_bo_phan=%s mien=%s users=%s",
             self.id,
             title,
             ma_bo_phan,
+            requester_mien,
             Users.browse(user_ids).mapped("login"),
         )
         return Users.browse(user_ids)
 
-    def _store_chain_ensure_missing_approval_lines(self):
-        """Append missing approval lines for already-created store-chain leaves."""
+    def _store_chain_reconcile_approval_lines(self):
+        """Align approval log with the computed store-chain approvers (create missing, compact 1..n)."""
         self.ensure_one()
-        if not self.id or not self._is_store_chain_flow() or not self.responsible_approval_line_ids:
+        if not self.id or not self._is_store_chain_flow():
             return
-        existing_user_ids = set(self.responsible_approval_line_ids.mapped("user_id").ids)
+        users = self._get_store_chain_approver_users()
+        if not users:
+            return
         line_model = self.env["hr.leave.responsible.approval"].sudo()
-        now = False
-        if not self._responsible_pending_current_wave():
-            now = fields.Datetime.now()
-        for user, sequence in self._build_responsible_approval_sequences():
-            if user.id in existing_user_ids:
+        existing_by_user = {ln.user_id.id: ln for ln in self.responsible_approval_line_ids}
+        expected_user_ids = set(users.ids)
+        for ln in self.responsible_approval_line_ids.filtered(
+            lambda line: line.state == "pending" and line.user_id.id not in expected_user_ids
+        ):
+            ln.write(
+                {
+                    "state": "skipped",
+                    "action_date": fields.Datetime.now(),
+                }
+            )
+        has_active_wave = bool(
+            self.with_context(skip_responsible_auto_skip_pending=True)._responsible_pending_current_wave_raw()
+        )
+        now = fields.Datetime.now()
+        for seq, user in enumerate(users, start=1):
+            line = existing_by_user.get(user.id)
+            if line:
+                if line.sequence != seq:
+                    line.write({"sequence": seq})
                 continue
             vals = {
                 "leave_id": self.id,
                 "user_id": user.id,
-                "sequence": sequence,
+                "sequence": seq,
             }
-            if now:
+            if not has_active_wave and seq == 1:
                 vals["pending_since"] = now
-                now = False
+                has_active_wave = True
             line_model.create(vals)
-            existing_user_ids.add(user.id)
             _logger.info(
-                "time_off_extra_approval: store chain appended missing approval line leave_id=%s user=%s sequence=%s",
+                "time_off_extra_approval: store chain reconciled approval line leave_id=%s user=%s sequence=%s",
                 self.id,
                 user.login,
-                sequence,
+                seq,
             )
+
+    def _store_chain_ensure_missing_approval_lines(self):
+        """Backward-compatible alias for reconcile."""
+        self._store_chain_reconcile_approval_lines()
 
     # ------------------------------------------------------------------
     # Refusal notification
@@ -351,11 +409,13 @@ class HrLeaveStoreChain(models.Model):
     # Override: plug into the shared responsible-flow machinery
     # ------------------------------------------------------------------
 
-    def _get_responsible_approval_users(self):
-        self.ensure_one()
-        if self._is_store_chain_flow():
-            return self._get_store_chain_approver_users()
-        return super()._get_responsible_approval_users()
+    def _sync_responsible_approval_lines(self):
+        """Keep store-chain approval log rows aligned with the computed approver chain."""
+        hook = getattr(super(), "_sync_responsible_approval_lines", None)
+        if hook:
+            hook()
+        for leave in self.filtered(lambda leave: leave._is_store_chain_flow()):
+            leave._store_chain_reconcile_approval_lines()
 
     def _get_responsible_approval_users_override(self):
         hook = getattr(super(), "_get_responsible_approval_users_override", None)
