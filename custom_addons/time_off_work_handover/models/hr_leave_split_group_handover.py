@@ -111,21 +111,27 @@ class HrLeaveSplitGroupHandover(models.Model):
         return self._format_handover_bot_date(date_from)
 
     def _handover_bot_message_already_sent(self, chat, marker_value, marker_attr="data-oe-handover-split-group"):
-        if not marker_value or not chat:
+        if not marker_value:
             return False
         marker = '%s="%s"' % (marker_attr, marker_value)
         cutoff = fields.Datetime.now() - timedelta(minutes=30)
-        return bool(
-            self.env["mail.message"].sudo().search_count(
-                [
-                    ("model", "=", "discuss.channel"),
-                    ("res_id", "=", chat.id),
-                    ("body", "ilike", marker),
-                    ("create_date", ">=", cutoff),
-                ],
-                limit=1,
-            )
+        bot_user = self.env.ref(
+            "business_discuss_bots.user_bot_handover", raise_if_not_found=False
         )
+        bot_partner_id = bot_user.partner_id.id if bot_user and bot_user.partner_id else False
+        domain = [
+            ("model", "=", "discuss.channel"),
+            ("body", "ilike", marker),
+            ("create_date", ">=", cutoff),
+        ]
+        if bot_partner_id:
+            # Same split_group marker may exist in another bot↔user chat channel.
+            domain.append(("author_id", "=", bot_partner_id))
+        elif chat:
+            domain.append(("res_id", "=", chat.id))
+        else:
+            return False
+        return bool(self.env["mail.message"].sudo().search_count(domain, limit=1))
 
     def _notify_handover_recipients_submit_via_bot(self):
         to_send = self.env["hr.leave"]
@@ -298,15 +304,3 @@ class HrLeaveSplitGroupHandover(models.Model):
 
     def _notify_split_group_after_companion_create(self):
         super()._notify_split_group_after_companion_create()
-        seen_groups = set()
-        for leave in self:
-            if not leave._split_group_is_multi_segment():
-                continue
-            gid = leave.split_group_id
-            if gid in seen_groups:
-                continue
-            seen_groups.add(gid)
-            primary = leave._get_split_group_primary_leave()
-            if primary.validation_type == "employee_hr_responsibles":
-                continue
-            primary._notify_split_group_handover_submit_once()

@@ -2062,6 +2062,52 @@ class HrLeaveHandover(models.Model):
         self._handover_write_after(vals, handover_lines_changed, submit_notify_target)
         return res
 
+    def _collect_handover_submit_notify_primaries(self):
+        """Resolve primary confirm leaves that still need a handover bot ping (post-split)."""
+        if hasattr(self, "_monthly_mien_ensure_split_before_notify"):
+            self._monthly_mien_ensure_split_before_notify()
+        group_ids = [gid for gid in self.mapped("split_group_id") if gid]
+        if group_ids:
+            candidates = self.env["hr.leave"].search([("split_group_id", "in", group_ids)])
+        else:
+            candidates = self.env["hr.leave"].browse(self.ids)
+        primaries = self.env["hr.leave"]
+        seen = set()
+        for leave in candidates.filtered(lambda l: l.state == "confirm"):
+            if not leave.handover_employee_ids or leave._handover_ready_for_approval():
+                continue
+            if leave.split_group_id:
+                if not leave._split_group_is_multi_segment():
+                    continue
+                if not leave._is_split_group_primary_leave():
+                    continue
+                key = leave.split_group_id
+            else:
+                key = ("leave", leave.id)
+            if key in seen:
+                continue
+            seen.add(key)
+            notify_leave = (
+                leave._get_handover_bot_notify_leave()
+                if hasattr(leave, "_get_handover_bot_notify_leave")
+                else leave
+            )
+            primaries |= notify_leave
+        return primaries
+
+    def _dispatch_handover_submit_bot_after_confirm(self):
+        """Send OdooBot Bàn giao việc once after confirm + monthly/P1P2 split."""
+        if self.env.context.get("leave_fast_create"):
+            return
+        primaries = self._collect_handover_submit_notify_primaries()
+        for primary in primaries:
+            ctx_key = primary._handover_split_submission_context_key(
+                primary.split_group_id
+            )
+            if self.env.context.get(ctx_key):
+                continue
+            primary._notify_handover_recipients_submit_via_bot()
+
     def action_confirm(self):
         missing_handover = self.filtered(
             lambda leave: not leave.skip_work_handover and not leave._handover_recipient_employees()
@@ -2073,6 +2119,7 @@ class HrLeaveHandover(models.Model):
         res = super().action_confirm()
         self._bootstrap_handover_workflow()
         self._mark_handover_requested_at()
+        self.with_context(**{_SKIP_SUBMIT_BOT_NOTIFY_CTX: False})._dispatch_handover_submit_bot_after_confirm()
         return res
 
     @api.model_create_multi
@@ -2084,12 +2131,7 @@ class HrLeaveHandover(models.Model):
         records._bootstrap_handover_workflow()
         records._mark_handover_requested_at()
         if not self.env.context.get("leave_fast_create"):
-            for leave in records.filtered(lambda l: l.state == "confirm"):
-                if self.env.context.get("skip_responsible_submit_notify"):
-                    continue
-                if leave.split_group_id:
-                    continue
-                if getattr(leave, "_split_group_is_multi_segment", None) and leave._split_group_is_multi_segment():
-                    continue
-                leave._notify_handover_recipients_submit_via_bot()
+            records.filtered(lambda l: l.state == "confirm").with_context(
+                **{_SKIP_SUBMIT_BOT_NOTIFY_CTX: False}
+            )._dispatch_handover_submit_bot_after_confirm()
         return records

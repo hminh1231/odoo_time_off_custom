@@ -14,10 +14,12 @@ from odoo.addons.time_off_responsible_approval import constants as approval_cons
 _logger = logging.getLogger(__name__)
 
 _SKIP_SPLIT_GROUP_APPROVE_CASCADE_CTX = "skip_split_group_approve_cascade"
+_SKIP_SPLIT_GROUP_REFUSE_CASCADE_CTX = "skip_split_group_refuse_cascade"
 _SKIP_SPLIT_GROUP_NOTIFY_DEDUP_CTX = approval_constants.SKIP_SPLIT_GROUP_NOTIFY_DEDUP_CTX
 _SKIP_SPLIT_GROUP_AFTER_CREATE_NOTIFY_CTX = "skip_split_group_after_create_notify"
 _SPLIT_GROUP_NOTIFIED_CR_KEY = "hr_leave.split_group_approval_notified"
 _RESPONSIBLE_SUBMIT_NOTIFIED_CR_KEY = "hr_leave.responsible_submit_notified"
+_SPLIT_GROUP_OUTCOME_NOTIFIED_CR_KEY = "hr_leave.split_group_outcome_notified"
 
 
 class HrLeaveSplitGroup(models.Model):
@@ -89,6 +91,59 @@ class HrLeaveSplitGroup(models.Model):
                 "to": self._format_approval_bot_date(date_to),
             }
         return date_from_text or "—"
+
+    @api.model
+    def _split_group_outcome_notified_cache(self):
+        cache = self.env.cr.cache
+        if _SPLIT_GROUP_OUTCOME_NOTIFIED_CR_KEY not in cache:
+            cache[_SPLIT_GROUP_OUTCOME_NOTIFIED_CR_KEY] = set()
+        return cache[_SPLIT_GROUP_OUTCOME_NOTIFIED_CR_KEY]
+
+    def _outcome_bot_period_text(self, group_leaves=None):
+        """Single date or 'dd/mm/yyyy đến ngày dd/mm/yyyy' for split groups."""
+        leaves = group_leaves or self
+        if len(leaves) == 1:
+            leave = leaves[:1]
+            date_from = leave.request_date_from or (
+                leave.date_from and leave.date_from.date()
+            )
+            date_to = leave.request_date_to or (
+                leave.date_to and leave.date_to.date()
+            )
+            return leave._format_approval_bot_period(date_from, date_to)
+
+        dates_from = []
+        dates_to = []
+        for leave in leaves:
+            date_from = leave.request_date_from or (
+                leave.date_from and leave.date_from.date()
+            )
+            date_to = leave.request_date_to or (
+                leave.date_to and leave.date_to.date()
+            ) or date_from
+            if date_from:
+                dates_from.append(date_from)
+            if date_to:
+                dates_to.append(date_to)
+        if not dates_from:
+            return "—"
+        primary = leaves.sorted("id")[:1]
+        return primary._format_approval_bot_period(min(dates_from), max(dates_to))
+
+    def _expand_split_group_refuse_targets(self):
+        """When refusing one split segment, include all pending segments in the group."""
+        expanded = self.env["hr.leave"]
+        seen_groups = set()
+        for leave in self:
+            if leave.split_group_id and leave._split_group_is_multi_segment():
+                gid = leave.split_group_id
+                if gid in seen_groups:
+                    continue
+                seen_groups.add(gid)
+                expanded |= leave._get_split_group_leaves()
+            else:
+                expanded |= leave
+        return expanded
 
     def _get_approval_bot_split_group_notification_details(self, group_leaves):
         """Merged header + per-segment lines for one OdooBot message."""
@@ -332,7 +387,7 @@ class HrLeaveSplitGroup(models.Model):
                     continue
                 submit_cache.add(notify_key)
                 if leave.handover_employee_ids and not leave._handover_ready_for_approval():
-                    leave._notify_handover_recipients_submit_via_bot()
+                    continue
                 else:
                     leave._notify_responsible_approvers_submission()
                     leave.with_context(
@@ -357,10 +412,6 @@ class HrLeaveSplitGroup(models.Model):
         group._responsible_backfill_pending_since_if_missing()
 
         if primary.handover_employee_ids and not primary._handover_ready_for_approval():
-            if hasattr(primary, "_notify_split_group_handover_submit_once"):
-                primary._notify_split_group_handover_submit_once()
-            else:
-                primary._notify_handover_recipients_submit_via_bot()
             return
 
         if self._split_group_approval_notify_is_done(gid):
@@ -516,3 +567,30 @@ class HrLeaveSplitGroup(models.Model):
                         exc_info=True,
                     )
         return res
+
+    def action_responsible_refuse(self, reason=False):
+        if not (reason or "").strip():
+            return super().action_responsible_refuse(reason=reason)
+        if self.env.context.get(_SKIP_SPLIT_GROUP_REFUSE_CASCADE_CTX):
+            return super().action_responsible_refuse(reason=reason)
+
+        self.ensure_one()
+        targets = self._expand_split_group_refuse_targets()
+        if len(targets) <= 1:
+            return super().action_responsible_refuse(reason=reason)
+
+        reason_text = (reason or "").strip()
+        ctx = {
+            _SKIP_SPLIT_GROUP_REFUSE_CASCADE_CTX: True,
+            "skip_outcome_bot_notify": True,
+        }
+        for leave in targets.sorted("id"):
+            leave.with_context(**ctx).action_responsible_refuse(reason=reason_text)
+
+        primary = self._get_split_group_primary_leave()
+        primary._notify_requester_approval_outcome_via_bot(
+            "refuse",
+            refusal_reason=reason_text,
+            refuser_name=self.env.user.display_name,
+        )
+        return True

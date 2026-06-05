@@ -517,6 +517,10 @@ class HolidaysRequest(models.Model):
     def action_refuse(self, reason=False):
         if not (reason or "").strip():
             return self.action_open_refuse_wizard()
+        if not self.env.context.get("skip_split_group_refuse_cascade") and hasattr(
+            self, "_expand_split_group_refuse_targets"
+        ):
+            self = self._expand_split_group_refuse_targets()
         self._ensure_handover_ready_for_approval()
         reason_text = (reason or "").strip()
         current_employee = self.env.user.employee_id
@@ -552,12 +556,13 @@ class HolidaysRequest(models.Model):
                     subtype_xmlid="mail.mt_note",
                 )
         self.activity_update()
-        for leave in self:
-            leave._notify_requester_approval_outcome_via_bot(
-                "refuse",
-                refusal_reason=reason_text,
-                refuser_name=self.env.user.display_name,
-            )
+        if not self.env.context.get(_SKIP_OUTCOME_BOT_NOTIFY_CTX):
+            for leave in self:
+                leave._notify_requester_approval_outcome_via_bot(
+                    "refuse",
+                    refusal_reason=reason_text,
+                    refuser_name=self.env.user.display_name,
+                )
         return True
 
     @api.model
@@ -734,7 +739,7 @@ class HolidaysRequest(models.Model):
 
     def action_confirm(self):
         try:
-            res = super(
+            return super(
                 HolidaysRequest,
                 self.with_context(
                     **{
@@ -745,19 +750,6 @@ class HolidaysRequest(models.Model):
             ).action_confirm()
         except AttributeError:
             return True
-        # Split / monthly-mien flows finish inside super(); dispatch bots once here
-        # (SKIP_* above avoids duplicate pings during intermediate writes).
-        to_notify = self.filtered(
-            lambda l: l.state == "confirm"
-            and l.validation_type == "employee_hr_responsibles"
-        )
-        if to_notify and hasattr(to_notify, "_split_group_notify_submission_for_records"):
-            to_notify._ensure_responsible_approval_lines()
-            to_notify._responsible_backfill_pending_since_if_missing()
-            to_notify._split_group_notify_submission_for_records()
-        elif to_notify:
-            to_notify.filtered("handover_employee_ids")._notify_handover_recipients_submit_via_bot()
-        return res
 
     @api.model_create_multi
     def create(self, vals_list):

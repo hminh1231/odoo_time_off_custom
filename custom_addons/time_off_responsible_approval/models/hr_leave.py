@@ -981,14 +981,22 @@ class HrLeaveResponsibleApproval(models.Model):
         requester_user = self.employee_id.user_id
         if not requester_user or requester_user.share or not requester_user.partner_id:
             return
-        leave_date = self.request_date_from or (self.date_from and self.date_from.date())
-        leave_date_text = leave_date.strftime("%d/%m/%Y") if leave_date else ""
+
+        period_leaves = self
+        if self.split_group_id and self._split_group_is_multi_segment():
+            cache_key = (self.split_group_id, outcome_state)
+            if cache_key in self._split_group_outcome_notified_cache():
+                return
+            self._split_group_outcome_notified_cache().add(cache_key)
+            period_leaves = self._get_split_group_leaves_all()
+
+        leave_date_text = self._outcome_bot_period_text(period_leaves)
         if outcome_state == "refuse":
             reason_text = (refusal_reason or self.last_refusal_reason or "").strip()
             by_text = refuser_name or (self.last_refuser_id and self.last_refuser_id.display_name) or _("người duyệt")
             if reason_text:
                 body = _(
-                    "Đơn của bạn xin nghỉ vào ngày %(date)s đã bị từ chối bởi %(refuser)s với lý do là %(reason)s."
+                    "Đơn xin nghỉ của bạn vào ngày %(date)s đã bị từ chối bởi %(refuser)s với lý do là %(reason)s."
                 ) % {
                     "date": leave_date_text,
                     "refuser": by_text,
@@ -996,7 +1004,7 @@ class HrLeaveResponsibleApproval(models.Model):
                 }
             else:
                 body = _(
-                    "Đơn của bạn xin nghỉ vào ngày %(date)s đã bị từ chối bởi %(refuser)s."
+                    "Đơn xin nghỉ của bạn vào ngày %(date)s đã bị từ chối bởi %(refuser)s."
                 ) % {
                     "date": leave_date_text,
                     "refuser": by_text,
@@ -1605,9 +1613,7 @@ class HrLeaveResponsibleApproval(models.Model):
 
     def action_confirm(self):
         res = super().action_confirm()
-        if self.env.context.get(_SKIP_RESPONSIBLE_SUBMIT_NOTIFY_CTX):
-            return res
-        subset = self.filtered(
+        subset = self.with_context(**{_SKIP_RESPONSIBLE_SUBMIT_NOTIFY_CTX: False}).filtered(
             lambda l: l.validation_type == "employee_hr_responsibles" and l.state == "confirm"
         )
         if subset:
