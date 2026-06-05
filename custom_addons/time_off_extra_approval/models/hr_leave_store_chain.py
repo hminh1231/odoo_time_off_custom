@@ -97,6 +97,51 @@ class HrLeaveStoreChain(models.Model):
             limit=1,
         )
 
+    def _store_chain_user_from_employee(self, employee):
+        """Return employee's internal user, or an empty res.users recordset."""
+        if employee and employee.user_id and not employee.user_id.share:
+            return employee.user_id
+        return self.env["res.users"]
+
+    def _store_chain_handover_asm_employee(self):
+        """ASM explicitly selected on Work Handover To, if any."""
+        self.ensure_one()
+        employees = (
+            self.handover_acceptance_ids.mapped("employee_id")
+            | self.handover_employee_ids
+        )
+        return employees.sudo().filtered(
+            lambda emp: (emp.job_title or "").strip().lower() == "asm"
+            and emp.user_id
+            and not emp.user_id.share
+        )[:1]
+
+    def _store_chain_existing_asm_approval_employee(self):
+        """ASM already present in approval lines, useful for old in-flight tickets."""
+        self.ensure_one()
+        lines = self.responsible_approval_line_ids.sorted(
+            lambda line: (line.sequence, line.id)
+        )
+        for line in lines:
+            employee = line.user_id.sudo().employee_id
+            if employee and (employee.job_title or "").strip().lower() == "asm":
+                return employee
+        return self.env["hr.employee"]
+
+    def _store_chain_asm_anchor_employee(self, ma_bo_phan):
+        """Best ASM anchor for the store chain.
+
+        Prefer the selected handover ASM because that is the person actually
+        receiving and approving this ticket. Fall back to existing approval
+        lines for old tickets, then to the Mã bộ phận pool lookup.
+        """
+        self.ensure_one()
+        return (
+            self._store_chain_handover_asm_employee()
+            or self._store_chain_existing_asm_approval_employee()
+            or self._store_chain_find_employee_by_title_and_dept("asm", ma_bo_phan)
+        )
+
     def _store_chain_find_user_by_title_and_dept(self, job_title_key, ma_bo_phan):
         """Return the internal user for the first employee with given job title and Mã bộ phận."""
         if not ma_bo_phan:
@@ -189,13 +234,20 @@ class HrLeaveStoreChain(models.Model):
 
         if title in ("nhóm trưởng", "cửa hàng trưởng"):
             # Nhóm trưởng / CHT → ASM → RSM (pool by ma_bo_phan) → org-chain above RSM → Admin
-            asm_emp = self._store_chain_find_employee_by_title_and_dept("asm", ma_bo_phan)
-            _add(asm_emp.user_id if asm_emp and asm_emp.user_id and not asm_emp.user_id.share else self.env["res.users"])
+            asm_emp = self._store_chain_asm_anchor_employee(ma_bo_phan)
+            _add(self._store_chain_user_from_employee(asm_emp))
             rsm_emp = self._store_chain_find_employee_by_title_and_dept("rsm", ma_bo_phan)
-            _add(rsm_emp.user_id if rsm_emp and rsm_emp.user_id and not rsm_emp.user_id.share else self.env["res.users"])
+            _add(self._store_chain_user_from_employee(rsm_emp))
             for user in self._store_chain_after_rsm_approver_users(rsm_emp, fallback_emp=asm_emp):
                 _add(user)
 
+        _logger.info(
+            "time_off_extra_approval: store chain approvers leave_id=%s title=%s ma_bo_phan=%s users=%s",
+            self.id,
+            title,
+            ma_bo_phan,
+            Users.browse(user_ids).mapped("login"),
+        )
         return Users.browse(user_ids)
 
     def _store_chain_ensure_missing_approval_lines(self):
@@ -221,6 +273,12 @@ class HrLeaveStoreChain(models.Model):
                 now = False
             line_model.create(vals)
             existing_user_ids.add(user.id)
+            _logger.info(
+                "time_off_extra_approval: store chain appended missing approval line leave_id=%s user=%s sequence=%s",
+                self.id,
+                user.login,
+                sequence,
+            )
 
     # ------------------------------------------------------------------
     # Refusal notification
@@ -334,12 +392,32 @@ class HrLeaveStoreChain(models.Model):
             lambda l: l.user_id == self.env.user and l.state == "pending"
         )[:1]
         approved_seq = approved_line.sequence if approved_line else None
+        _logger.info(
+            "time_off_extra_approval: store chain before approve leave_id=%s approver=%s approved_seq=%s lines=%s",
+            self.id,
+            self.env.user.login,
+            approved_seq,
+            [
+                (line.sequence, line.user_id.login, line.state)
+                for line in self.responsible_approval_line_ids.sorted(lambda l: (l.sequence, l.id))
+            ],
+        )
 
         res = super().action_responsible_approve()
 
         # After the Mã bộ phận (sequence-1) step is done, notify all remaining approvers.
         if approved_seq == 1:
             self._store_chain_notify_all_remaining_approvers()
+
+        _logger.info(
+            "time_off_extra_approval: store chain after approve leave_id=%s lines=%s current_wave=%s",
+            self.id,
+            [
+                (line.sequence, line.user_id.login, line.state)
+                for line in self.responsible_approval_line_ids.sorted(lambda l: (l.sequence, l.id))
+            ],
+            self._responsible_pending_current_wave().mapped("user_id.login"),
+        )
 
         return res
 
