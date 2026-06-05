@@ -23,7 +23,7 @@ Balance warning (con_lai):
 
 import logging
 
-from odoo import api, fields, models
+from odoo import SUPERUSER_ID, api, fields, models
 from odoo.tools.translate import _
 
 _logger = logging.getLogger(__name__)
@@ -91,18 +91,6 @@ class HrLeaveStoreChain(models.Model):
             return self.env["res.users"]
         return user
 
-    def _store_chain_find_employee_by_title_and_dept(self, job_title_key, ma_bo_phan):
-        """Return the first hr.employee with given job title and Mã bộ phận (no user required)."""
-        if not ma_bo_phan:
-            return self.env["hr.employee"]
-        return self.env["hr.employee"].sudo().search(
-            [
-                ("job_title", "=", job_title_key),
-                ("ma_bo_phan", "=", ma_bo_phan),
-            ],
-            limit=1,
-        )
-
     def _store_chain_user_from_employee(self, employee):
         """Return employee's internal user, or an empty res.users recordset."""
         if employee and employee.user_id and not employee.user_id.share:
@@ -122,78 +110,6 @@ class HrLeaveStoreChain(models.Model):
             and not emp.user_id.share
         )[:1]
 
-    def _store_chain_existing_asm_approval_employee(self):
-        """ASM already present in approval lines, useful for old in-flight tickets."""
-        self.ensure_one()
-        lines = self.responsible_approval_line_ids.sorted(
-            lambda line: (line.sequence, line.id)
-        )
-        for line in lines:
-            employee = line.user_id.sudo().employee_id
-            if employee and (employee.job_title or "").strip().lower() == "asm":
-                return employee
-        return self.env["hr.employee"]
-
-    def _store_chain_asm_anchor_employee(self, ma_bo_phan):
-        """Best ASM anchor for the store chain.
-
-        Prefer the selected handover ASM because that is the person actually
-        receiving and approving this ticket. Fall back to existing approval
-        lines for old tickets, then to the Mã bộ phận pool lookup.
-        """
-        self.ensure_one()
-        return (
-            self._store_chain_handover_asm_employee()
-            or self._store_chain_existing_asm_approval_employee()
-            or self._store_chain_find_employee_by_title_and_dept("asm", ma_bo_phan)
-        )
-
-    def _store_chain_find_user_by_title_and_dept(self, job_title_key, ma_bo_phan):
-        """Return the internal user for the first employee with given job title and Mã bộ phận."""
-        if not ma_bo_phan:
-            _logger.warning(
-                "time_off_extra_approval: store chain — employee has no Mã bộ phận, cannot find %s approver",
-                job_title_key,
-            )
-            return self.env["res.users"]
-        emp = self.env["hr.employee"].sudo().search(
-            [
-                ("job_title", "=", job_title_key),
-                ("ma_bo_phan", "=", ma_bo_phan),
-                ("user_id", "!=", False),
-            ],
-            limit=1,
-        )
-        if not emp:
-            _logger.warning(
-                "time_off_extra_approval: store chain — no employee for job_title=%s ma_bo_phan=%s",
-                job_title_key,
-                ma_bo_phan,
-            )
-            return self.env["res.users"]
-        user = emp.user_id
-        if user.share:
-            _logger.warning(
-                "time_off_extra_approval: store chain — employee %s (job_title=%s, ma_bo_phan=%s) has only portal/shared user",
-                emp.name,
-                job_title_key,
-                ma_bo_phan,
-            )
-            return self.env["res.users"]
-        return user
-
-    def _store_chain_find_user_on_requester_org_chain(self, job_title_key):
-        """Find approver only on the requester's upward org chart (parent_id chain)."""
-        self.ensure_one()
-        cur = self.employee_id.sudo().parent_id
-        while cur:
-            if (cur.job_title or "").strip().lower() == job_title_key:
-                user = self._store_chain_user_from_employee(cur)
-                if user:
-                    return user
-            cur = cur.parent_id
-        return self.env["res.users"]
-
     def _store_chain_title_is_final(self, job_title_key, mien):
         """True when the OdooBot Duyệt đơn config flags this title as the final level for ``mien``."""
         self.ensure_one()
@@ -207,44 +123,73 @@ class HrLeaveStoreChain(models.Model):
         )
         return bool(rule and rule.is_final_level)
 
-    def _store_chain_anchor_user_and_employee(self, ma_bo_phan):
-        """Resolve the ASM anchor user (and its employee) that starts the chain.
+    def _store_chain_ordered_chain_employees(self):
+        """Ordered employees of the approval chain, following the requester's org chart.
 
-        Prefer the Work Handover ASM, then an ASM already on the approval lines,
-        then the Mã bộ phận pool, then any ASM on the requester's org chart.
-        Returns (user, employee); both may be empty recordsets.
+        The spine is the requester's reporting line (``employee_id.parent_id`` upward):
+        for a store leader this is ASM → admin → admin tổng. A Work Handover ASM, when
+        present, overrides whoever fills the ASM level (that is the person actually
+        receiving and approving the ticket). Always resolved on a sudo record so the
+        result does not depend on the caller's access rights.
         """
         self.ensure_one()
-        asm_emp = self._store_chain_asm_anchor_employee(ma_bo_phan)
-        user = self._store_chain_user_from_employee(asm_emp)
-        if user:
-            return user, asm_emp
-        user = self._store_chain_find_user_by_title_and_dept("asm", ma_bo_phan)
-        if user:
-            return user, user.sudo().employee_id
-        user = self._store_chain_find_user_on_requester_org_chain("asm")
-        if user:
-            return user, user.sudo().employee_id
-        return self.env["res.users"], self.env["hr.employee"]
+        requester = self.employee_id
+        if not requester or not isinstance(requester.id, int):
+            return self.env["hr.employee"]
+
+        # Walk parent_id via raw SQL (same approach as the base org-chart resolver) so the
+        # chain never depends on company context, record rules or ORM cache state — those
+        # made the ORM ``parent_id`` walk return different lengths for different callers.
+        ordered_ids = []
+        seen = set()
+        cur_id = self._org_chart_sql_parent_id(requester.id)
+        while cur_id and cur_id not in seen:
+            seen.add(cur_id)
+            ordered_ids.append(cur_id)
+            cur_id = self._org_chart_sql_parent_id(cur_id)
+
+        Employee = self.env["hr.employee"].sudo()
+        handover_asm = self._store_chain_handover_asm_employee()
+        if handover_asm and handover_asm.id not in seen:
+            replaced = False
+            for idx, emp_id in enumerate(ordered_ids):
+                if (Employee.browse(emp_id).job_title or "").strip().lower() == "asm":
+                    ordered_ids[idx] = handover_asm.id
+                    replaced = True
+                    break
+            if not replaced:
+                ordered_ids.insert(0, handover_asm.id)
+
+        return Employee.browse(ordered_ids)
 
     def _get_store_chain_approver_users(self):
         """Build the ordered approver list for the store chain flow.
 
-        Walks the org chart (parent_id) one approver per level, starting from the ASM
-        anchor (Work Handover ASM preferred). Stops at the first title flagged as the
-        final level ("Mức duyệt cuối") in the OdooBot Duyệt đơn config for the
-        requester's Miền; otherwise stops at the topmost approver on the org chart.
-        Returns res.users in sequential approval order (first = approves first).
+        Follows the requester's org chart (``employee_id.parent_id`` upward), one
+        approver per level (a Work Handover ASM overrides the ASM level). Stops at the
+        first title flagged as the final level ("Mức duyệt cuối") in the OdooBot Duyệt
+        đơn config for the requester's Miền; otherwise stops at the topmost approver on
+        the org chart. Returns res.users in sequential approval order (first approves first).
         """
         self.ensure_one()
         Users = self.env["res.users"]
-        title = self._store_chain_employee_job_title()
+        # Resolve the whole chain in a clean superuser env that can see every company.
+        # This makes the result deterministic for every caller (HR save, a non-HR approver
+        # such as ASM, or cron): otherwise multi-company visibility / record rules would
+        # truncate the manager chain depending on who triggers the computation.
+        # NB: keep the same record (incl. unsaved NewId records during onchange) — do NOT
+        # re-browse self.id, which would drop a virtual record and break ensure_one().
+        all_company_ids = self.env["res.company"].sudo().search([]).ids
+        leave = self.with_user(SUPERUSER_ID).with_context(
+            allowed_company_ids=all_company_ids
+        )
+        title = leave._store_chain_employee_job_title()
         if title not in _STORE_CHAIN_JOB_TITLES:
             return Users
 
-        emp = self.employee_id
-        ma_bo_phan = emp.sudo().ma_bo_phan if emp else False
-        requester_mien = self._leave_request_mien()
+        emp = leave.employee_id
+        ma_bo_phan = emp.ma_bo_phan if emp else False
+        requester_mien = leave._leave_request_mien()
 
         user_ids = []
         seen = set()
@@ -256,30 +201,16 @@ class HrLeaveStoreChain(models.Model):
                 return True
             return False
 
-        # ASM anchor opens the chain; the org-chart walk continues from its reporting line.
-        anchor_user, anchor_emp = self._store_chain_anchor_user_and_employee(ma_bo_phan)
-        walk_start_emp = anchor_emp or (emp.sudo() if emp else self.env["hr.employee"])
-
-        stop = False
-        if anchor_user and _add(anchor_user):
-            if self._store_chain_title_is_final("asm", requester_mien):
-                stop = True
-
-        if not stop:
-            cur = walk_start_emp.sudo().parent_id if walk_start_emp else self.env["hr.employee"]
-            visited = set()
-            while cur and cur.id not in visited:
-                visited.add(cur.id)
-                cur_title = (cur.job_title or "").strip().lower()
-                user = self._store_chain_user_from_employee(cur)
-                if user and _add(user):
-                    if self._store_chain_title_is_final(cur_title, requester_mien):
-                        break
-                cur = cur.sudo().parent_id
+        # Follow the requester's org chart; stop at the configured final level for the Miền.
+        for mgr in leave._store_chain_ordered_chain_employees():
+            user = leave._store_chain_user_from_employee(mgr)
+            if user and _add(user):
+                if leave._store_chain_title_is_final((mgr.job_title or "").strip().lower(), requester_mien):
+                    break
 
         # Last-resort safety so a request is never left with no approver at all.
         if not user_ids:
-            _add(self._store_chain_find_user_by_badge(_BADGE_ADMIN))
+            _add(leave._store_chain_find_user_by_badge(_BADGE_ADMIN))
 
         _logger.info(
             "time_off_extra_approval: store chain approvers leave_id=%s title=%s ma_bo_phan=%s mien=%s users=%s",

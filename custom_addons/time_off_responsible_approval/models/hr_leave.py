@@ -331,8 +331,11 @@ class HrLeaveResponsibleApproval(models.Model):
                 if not pending:
                     continue
                 mode = leave.holiday_status_id.employee_responsible_approval_mode or "any"
-                expected_users = leave._get_responsible_approval_users()
-                total = max(len(leave.responsible_approval_line_ids), len(expected_users))
+                # Compute with sudo so the step count is identical for every viewer
+                # (a non-HR approver such as ASM must not read a truncated chain and
+                # see "Bước 1 / 1" instead of the real "Bước 1 / 3").
+                expected_users = leave.sudo()._get_responsible_approval_users()
+                total = max(len(leave.sudo().responsible_approval_line_ids), len(expected_users))
                 if mode == "sequential":
                     wave = leave._responsible_pending_current_wave()
                     if not wave:
