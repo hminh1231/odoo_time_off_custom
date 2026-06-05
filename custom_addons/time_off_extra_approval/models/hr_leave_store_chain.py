@@ -7,6 +7,8 @@ notifications, timeout escalation) are shared with employee_hr_responsibles.
 Approval flows:
   Cửa hàng trưởng → ASM → RSM         (pool by Mã bộ phận)
                   → org-chart above RSM (sequential) → Admin
+  Cửa hàng trưởng → ASM               (when RSM is missing)
+                  → org-chart above ASM (sequential) → Admin
 
 ASM, RSM, and Giám sát use the leave type's configured org-chart approvers
 (employee_hr_responsibles, sequential) — they do not enter this store chain.
@@ -18,7 +20,7 @@ Balance warning (con_lai):
 
 import logging
 
-from odoo import api, models
+from odoo import api, fields, models
 from odoo.tools.translate import _
 
 _logger = logging.getLogger(__name__)
@@ -149,8 +151,8 @@ class HrLeaveStoreChain(models.Model):
             cur = cur.parent_id
         return self.env["res.users"].browse(user_ids)
 
-    def _store_chain_after_rsm_approver_users(self, rsm_emp):
-        """Org-chart chain starting above RSM, with Admin (Thủy) appended as final approver."""
+    def _store_chain_after_rsm_approver_users(self, rsm_emp, fallback_emp=None):
+        """Org-chart chain above RSM, or above fallback employee when RSM is absent."""
         user_ids = []
         seen = set()
 
@@ -159,7 +161,8 @@ class HrLeaveStoreChain(models.Model):
                 user_ids.append(user.id)
                 seen.add(user.id)
 
-        for user in self._store_chain_org_chain_from_employee(rsm_emp):
+        start_emp = rsm_emp or fallback_emp
+        for user in self._store_chain_org_chain_from_employee(start_emp):
             _add(user)
         _add(self._store_chain_find_user_by_badge(_BADGE_ADMIN))
         return self.env["res.users"].browse(user_ids)
@@ -186,13 +189,38 @@ class HrLeaveStoreChain(models.Model):
 
         if title in ("nhóm trưởng", "cửa hàng trưởng"):
             # Nhóm trưởng / CHT → ASM → RSM (pool by ma_bo_phan) → org-chain above RSM → Admin
-            _add(self._store_chain_find_user_by_title_and_dept("asm", ma_bo_phan))
+            asm_emp = self._store_chain_find_employee_by_title_and_dept("asm", ma_bo_phan)
+            _add(asm_emp.user_id if asm_emp and asm_emp.user_id and not asm_emp.user_id.share else self.env["res.users"])
             rsm_emp = self._store_chain_find_employee_by_title_and_dept("rsm", ma_bo_phan)
             _add(rsm_emp.user_id if rsm_emp and rsm_emp.user_id and not rsm_emp.user_id.share else self.env["res.users"])
-            for user in self._store_chain_after_rsm_approver_users(rsm_emp):
+            for user in self._store_chain_after_rsm_approver_users(rsm_emp, fallback_emp=asm_emp):
                 _add(user)
 
         return Users.browse(user_ids)
+
+    def _store_chain_ensure_missing_approval_lines(self):
+        """Append missing approval lines for already-created store-chain leaves."""
+        self.ensure_one()
+        if not self.id or not self._is_store_chain_flow() or not self.responsible_approval_line_ids:
+            return
+        existing_user_ids = set(self.responsible_approval_line_ids.mapped("user_id").ids)
+        line_model = self.env["hr.leave.responsible.approval"].sudo()
+        now = False
+        if not self._responsible_pending_current_wave():
+            now = fields.Datetime.now()
+        for user, sequence in self._build_responsible_approval_sequences():
+            if user.id in existing_user_ids:
+                continue
+            vals = {
+                "leave_id": self.id,
+                "user_id": user.id,
+                "sequence": sequence,
+            }
+            if now:
+                vals["pending_since"] = now
+                now = False
+            line_model.create(vals)
+            existing_user_ids.add(user.id)
 
     # ------------------------------------------------------------------
     # Refusal notification
@@ -298,6 +326,8 @@ class HrLeaveStoreChain(models.Model):
     def action_responsible_approve(self):
         if not self._is_store_chain_flow():
             return super().action_responsible_approve()
+
+        self._store_chain_ensure_missing_approval_lines()
 
         # Capture which line is being approved (sequence 1 = ASM / Mã bộ phận step).
         approved_line = self.responsible_approval_line_ids.filtered(
