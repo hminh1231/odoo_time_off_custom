@@ -816,14 +816,30 @@ class HrLeaveHandover(models.Model):
         return self.env["hr.employee"]
 
     def _get_handover_blocking_employees(self):
-        """Employees who have not accepted handover yet for current approval stage."""
+        """Employees who have not accepted handover yet for current approval stage.
+
+        Read the acceptance state with ``sudo()`` (via an explicit search rather
+        than the ``handover_acceptance_ids`` o2m) so that the result is identical
+        for every viewer. Approvers further up the chain (e.g. ASM → admin → admin
+        tổng) are usually neither the requester nor a handover recipient, so the
+        record rules on ``hr.leave.handover.acceptance`` would otherwise hide the
+        accepted rows from them — making the leave look "still waiting for handover"
+        and wrongly disabling their Approve button. A direct sudo search also
+        bypasses any o2m field cache that record-rule filtering may have populated
+        as empty for the current (non-privileged) user.
+        """
         self.ensure_one()
-        if self.state not in ("confirm", "validate1") or not self.handover_employee_ids:
+        leave_su = self.sudo()
+        if leave_su.state not in ("confirm", "validate1"):
             return self.env["hr.employee"]
-        active_recipients = self.handover_employee_ids
-        accepted = self.handover_acceptance_ids.filtered(
-            lambda l: l.employee_id in active_recipients and l.state == "accepted"
-        ).mapped("employee_id")
+        active_recipients = leave_su.handover_employee_ids
+        if not active_recipients:
+            return self.env["hr.employee"]
+        accepted = self.env["hr.leave.handover.acceptance"].sudo().search([
+            ("leave_id", "=", leave_su.id),
+            ("employee_id", "in", active_recipients.ids),
+            ("state", "=", "accepted"),
+        ]).mapped("employee_id")
         return active_recipients - accepted
 
     def _get_handover_escalation_cap_user_for_max_title(self):
