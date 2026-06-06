@@ -434,6 +434,35 @@ class HrLeaveStoreExportMixin(models.AbstractModel):
                 self._leave_type_symbol(leave),
             )
 
+    def _iter_leave_export_segments_merged(self, leave, month_start=None, month_end=None):
+        """Gộp các đoạn liền kề cùng ký hiệu (P1/P2/O) thành một dòng.
+
+        Đơn được lưu thành nhiều bản ghi 1 ngày (P1, P2, P2, O); với export ta gộp
+        các ngày liên tiếp cùng ký hiệu lại: P1 → 1 dòng, P2 (vd 9–10/6) → 1 dòng,
+        O → 1 dòng. Số ngày và khoảng ngày của dòng được tính lại theo đoạn gộp.
+        """
+        self.ensure_one()
+        segments = list(
+            self._iter_leave_export_segments(leave, month_start, month_end)
+        )
+        if not segments:
+            return
+        segments.sort(key=lambda seg: (seg["ngay_bd"], seg["ngay_kt"]))
+        merged = []
+        for seg in segments:
+            if merged:
+                prev = merged[-1]
+                same_code = (
+                    self._normalize_leave_type_code(prev["ma_khieu"]).upper()
+                    == self._normalize_leave_type_code(seg["ma_khieu"]).upper()
+                )
+                contiguous = seg["ngay_bd"] == prev["ngay_kt"] + timedelta(days=1)
+                if same_code and contiguous:
+                    prev["ngay_kt"] = seg["ngay_kt"]
+                    continue
+            merged.append(dict(seg))
+        yield from merged
+
     @classmethod
     def _ma_khieu_export_display(cls, ma_khieu):
         """Cột Ma_Khieu: không hiển thị O (payload vẫn giữ O để merge / Tong_Gio)."""
@@ -591,7 +620,7 @@ class HrLeaveStoreExportMixin(models.AbstractModel):
 
         row = 2
         for leave in self._iter_export_root_leaves(leaves):
-            for segment in self._iter_leave_export_segments(leave, month_start, month_end):
+            for segment in self._iter_leave_export_segments_merged(leave, month_start, month_end):
                 values = self._row_for_leave_segment(segment)
                 for col, value in enumerate(values):
                     sheet.write(row, col, value, cell_fmt)
@@ -712,16 +741,15 @@ class HrLeaveStoreExportMixin(models.AbstractModel):
 
         payloads = []
         for leave in self._iter_export_root_leaves(leaves):
-            for segment in self._iter_leave_export_segments(leave, month_start, month_end):
-                for day in self._iter_days(segment["ngay_bd"], segment["ngay_kt"]):
-                    payloads.append(
-                        self._import_capnhatcong_row_payload(
-                            segment["leave"],
-                            day,
-                            day,
-                            ma_khieu=segment["ma_khieu"],
-                        )
+            for segment in self._iter_leave_export_segments_merged(leave, month_start, month_end):
+                payloads.append(
+                    self._import_capnhatcong_row_payload(
+                        segment["leave"],
+                        segment["ngay_bd"],
+                        segment["ngay_kt"],
+                        ma_khieu=segment["ma_khieu"],
                     )
+                )
 
         data = self._build_import_capnhatcong_xls(payloads)
         filename = "import_capnhatcong CUA HANG_%s-%02d.xls" % (year, month)

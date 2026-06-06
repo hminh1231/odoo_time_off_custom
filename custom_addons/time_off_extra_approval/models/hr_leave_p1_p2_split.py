@@ -15,8 +15,9 @@ Example: con_lai=3, requested=4  →  1 P1 + 2 P2 + 1 O
 Example: con_lai=5, requested=3  →  1 P1 + 2 P2
 
 All companion records are linked back to the originating P1 via
-split_group_id (a UUID stored as Char) so cascades (refuse/draft/unlink)
-can propagate to the whole group regardless of how many pieces exist.
+split_group_id (a UUID stored as Char) so refuse/draft cascades can propagate
+to the whole group regardless of how many pieces exist. Deletion is the one
+exception: it only removes the records the user explicitly selected.
 """
 
 import logging
@@ -242,17 +243,21 @@ class HrLeaveP1P2Split(models.Model):
     def unlink(self):
         if self.env.context.get("skip_p1p2_cascade"):
             return super().unlink()
-        companions = self.env["hr.leave"]
-        for leave in self:
-            companions |= leave._p1p2_get_companions()
-        # Detach group links to avoid search finding them during cascade.
-        (self | companions).with_context(leave_skip_state_check=True).write(
-            {"split_group_id": False}
-        )
+        # Deletion is intentionally scoped to the user's selection: only the
+        # records in ``self`` are removed, the rest of the split group is kept.
+        # (Approve / refuse still cascade to the whole group as before.)
+        affected_group_ids = {
+            leave.split_group_id for leave in self if leave.split_group_id
+        }
         res = super().unlink()
-        if companions:
-            try:
-                companions.with_context(skip_p1p2_cascade=True).unlink()
-            except (UserError, Exception):
-                _logger.warning("p1p2_split: could not unlink companions %s", companions.ids)
+        # If a split group is now down to a single segment, detach its group id
+        # so the leftover behaves like a normal standalone leave.
+        for group_id in affected_group_ids:
+            leftover = self.env["hr.leave"].search(
+                [("split_group_id", "=", group_id)]
+            )
+            if len(leftover) <= 1:
+                leftover.with_context(leave_skip_state_check=True).write(
+                    {"split_group_id": False}
+                )
         return res
