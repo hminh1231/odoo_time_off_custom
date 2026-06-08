@@ -58,3 +58,34 @@ class TestTimeOffRemainingBalance(TransactionCase):
             return_value=4,
         ):
             Leave._assert_con_lai_not_negative(self.employee, 1)
+
+    def test_date_only_request_days_are_used_for_negative_check(self):
+        Leave = self.env["hr.leave"]
+        days = Leave._vals_days_for_negative_check(
+            {
+                "employee_id": self.employee.id,
+                "request_date_from": date(2026, 6, 1),
+                "request_date_to": date(2026, 6, 5),
+            },
+            employee=self.employee,
+        )
+
+        self.assertEqual(days, 5)
+
+    def test_negative_preview_blocks_when_request_exceeds_remaining(self):
+        Leave = self.env["hr.leave"]
+        vals = {
+            "employee_id": self.employee.id,
+            "request_date_from": date(2026, 6, 1),
+            "request_date_to": date(2026, 6, 5),
+        }
+        with patch.object(
+            type(Leave),
+            "_con_lai_committed_days",
+            autospec=True,
+            return_value=1,
+        ):
+            preview = Leave.check_con_lai_negative_block(vals=vals)
+
+        self.assertTrue(preview["blocked"])
+        self.assertIn("Không đủ số phép còn lại", preview["title"])

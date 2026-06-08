@@ -501,6 +501,14 @@ class HrLeaveTimeOffSummary(models.Model):
             "message": _("Bạn đang hết ngày phép, có chắc chắn muốn tiếp tục không?"),
         }
 
+    @api.model
+    def _con_lai_negative_no_block(self):
+        return {
+            "blocked": False,
+            "title": "",
+            "message": "",
+        }
+
     def _recompute_employee_time_off_summary(self):
         employees = self.mapped("employee_id").filtered(lambda e: e.id)
         employees = employees.env["hr.employee"].search([("id", "in", employees.ids)])
@@ -577,39 +585,178 @@ class HrLeaveTimeOffSummary(models.Model):
         return leave_type_id in self._con_lai_unpaid_leave_type_ids()
 
     @api.model
-    def _vals_days_for_negative_check(self, vals, leave=None):
+    def _con_lai_to_date(self, value):
+        if not value:
+            return False
+        if isinstance(value, date) and not isinstance(value, datetime):
+            return value
+        if isinstance(value, datetime):
+            return value.date()
+        return fields.Date.to_date(value)
+
+    @api.model
+    def _con_lai_to_datetime(self, value, end=False):
+        if not value:
+            return False
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, date):
+            return datetime.combine(value, time.max if end else time.min)
+        parsed = fields.Datetime.to_datetime(value)
+        if parsed:
+            return parsed
+        parsed_date = fields.Date.to_date(value)
+        return (
+            datetime.combine(parsed_date, time.max if end else time.min)
+            if parsed_date
+            else False
+        )
+
+    @api.model
+    def _days_from_number_of_days_result(self, result):
+        if result is None:
+            return None
+        if isinstance(result, dict):
+            for key in ("days", "number_of_days", "number_of_days_display"):
+                if result.get(key) is not None:
+                    return float(result[key] or 0.0)
+            return None
+        if isinstance(result, (list, tuple)) and result:
+            return float(result[0] or 0.0)
+        if isinstance(result, (list, tuple)):
+            return None
+        return float(result or 0.0)
+
+    @api.model
+    def _days_from_dates_for_negative_check(self, start, end, employee=None):
+        start_date = self._con_lai_to_date(start)
+        end_date = self._con_lai_to_date(end)
+        if not start_date or not end_date:
+            return 0.0
+        if end_date < start_date:
+            start_date, end_date = end_date, start_date
+
+        start_dt = self._con_lai_to_datetime(start, end=False)
+        end_dt = self._con_lai_to_datetime(end, end=True)
+        if employee and start_dt and end_dt and hasattr(self, "_get_number_of_days"):
+            for employee_arg in (employee.id, employee):
+                try:
+                    days = self._days_from_number_of_days_result(
+                        self._get_number_of_days(start_dt, end_dt, employee_arg)
+                    )
+                    if days is not None:
+                        return days
+                except Exception:
+                    _logger.debug(
+                        "con_lai: cannot compute leave days with Odoo helper",
+                        exc_info=True,
+                    )
+                    continue
+
+        return float((end_date - start_date).days + 1)
+
+    @api.model
+    def _target_date_for_negative_check(self, vals, leave=None):
+        vals = vals or {}
+        for field_name in ("request_date_from", "date_from", "request_date_to", "date_to"):
+            if vals.get(field_name):
+                return self._con_lai_to_date(vals[field_name])
+        if leave:
+            for value in (
+                leave.request_date_from,
+                leave.date_from,
+                leave.request_date_to,
+                leave.date_to,
+            ):
+                if value:
+                    return self._con_lai_to_date(value)
+        return None
+
+    @api.model
+    def _vals_days_for_negative_check(self, vals, leave=None, employee=None):
         if not vals:
             return leave.number_of_days if leave else 0.0
         days = vals.get("number_of_days")
         if days is not None:
             return days or 0.0
+        start = vals.get("date_from") or vals.get("request_date_from")
+        end = vals.get("date_to") or vals.get("request_date_to")
+        if not start and leave:
+            start = leave.date_from or leave.request_date_from
+        if not end and leave:
+            end = leave.date_to or leave.request_date_to
+        if start and end:
+            return self._days_from_dates_for_negative_check(
+                start,
+                end,
+                employee=employee or (leave.employee_id if leave else None),
+            )
         return leave.number_of_days if leave else 0.0
 
     @api.model
-    def _assert_con_lai_not_negative(
+    def _con_lai_negative_projection(
         self, employee, projected_days, exclude_leave_ids=None, target_date=None
     ):
-        """Chặn cứng khi đơn sẽ kéo Còn lại < 0 (==0 vẫn cho phép)."""
         if not employee or projected_days <= 0:
-            return
+            return {
+                "negative": False,
+                "budget": (employee.tong_so_phep or 0.0) if employee else 0.0,
+                "used": 0.0,
+                "new": projected_days or 0.0,
+            }
         committed = self._con_lai_committed_days(
             employee,
             exclude_leave_ids=exclude_leave_ids,
             target_date=target_date,
         )
         budget = employee.tong_so_phep or 0.0
-        if budget - committed - projected_days < 0:
+        return {
+            "negative": budget - committed - projected_days < 0,
+            "budget": budget,
+            "used": committed,
+            "new": projected_days,
+        }
+
+    @api.model
+    def _con_lai_negative_error_message(self, employee, projection, create=True):
+        if create:
+            template = _(
+                "Không thể tạo đơn nghỉ: Số phép Còn lại của %(name)s sẽ bị âm.\n"
+                "Tổng phép: %(budget).2f — Đang sử dụng/đang chờ: %(used).2f — Đơn này: %(new).2f"
+            )
+        else:
+            template = _(
+                "Không thể lưu đơn nghỉ: Số phép Còn lại của %(name)s sẽ bị âm.\n"
+                "Tổng phép: %(budget).2f — Đang sử dụng/đang chờ: %(used).2f — Đơn này: %(new).2f"
+            )
+        return template % {
+            "name": employee.name or employee.display_name or "",
+            "budget": projection["budget"],
+            "used": projection["used"],
+            "new": projection["new"],
+        }
+
+    @api.model
+    def _assert_con_lai_not_negative(
+        self,
+        employee,
+        projected_days,
+        exclude_leave_ids=None,
+        target_date=None,
+        create=True,
+    ):
+        """Chặn cứng khi đơn sẽ kéo Còn lại < 0 (==0 vẫn cho phép)."""
+        projection = self._con_lai_negative_projection(
+            employee,
+            projected_days,
+            exclude_leave_ids=exclude_leave_ids,
+            target_date=target_date,
+        )
+        if projection["negative"]:
             raise ValidationError(
-                _(
-                    "Không thể tạo đơn nghỉ: Số phép Còn lại của %(name)s sẽ bị âm.\n"
-                    "Tổng phép: %(budget).2f — Đang sử dụng: %(used).2f — Đơn này: %(new).2f"
+                self._con_lai_negative_error_message(
+                    employee, projection, create=create
                 )
-                % {
-                    "name": employee.name or employee.display_name or "",
-                    "budget": budget,
-                    "used": committed,
-                    "new": projected_days,
-                }
             )
 
     def _assert_active_leave_balances_not_negative(self):
@@ -636,11 +783,74 @@ class HrLeaveTimeOffSummary(models.Model):
                     }
                 )
 
+    @api.model
+    def check_con_lai_negative_block(self, res_id=False, vals=None):
+        """RPC cho UI: chặn lưu khi đơn sẽ kéo Số phép còn lại xuống âm."""
+        if self._con_lai_negative_check_skipped():
+            return self._con_lai_negative_no_block()
+
+        vals = vals or {}
+        leave = self.env["hr.leave"]
+        if res_id:
+            leave = self.browse(res_id).exists()
+            if leave:
+                leave.check_access("read")
+        else:
+            self.check_access("create")
+
+        employee_id = self._employee_id_from_preview_vals(
+            vals, leave if res_id and leave else None
+        )
+        if not employee_id:
+            employee_id = self.env.user.employee_id.id
+        if not employee_id:
+            return self._con_lai_negative_no_block()
+
+        employee = self.env["hr.employee"].browse(employee_id)
+        if not employee.exists():
+            return self._con_lai_negative_no_block()
+
+        leave_type_id = self._coerce_id_from_value(vals.get("holiday_status_id")) or (
+            leave.holiday_status_id.id if res_id and leave and leave.holiday_status_id else False
+        )
+        if self._is_unpaid_leave_type(leave_type_id):
+            return self._con_lai_negative_no_block()
+
+        employee = employee._sudo_for_timeoff_access()
+        projected = self._vals_days_for_negative_check(
+            vals,
+            leave=leave if res_id and leave else None,
+            employee=employee,
+        )
+        target_date = self._target_date_for_negative_check(
+            vals,
+            leave=leave if res_id and leave else None,
+        )
+        projection = self._con_lai_negative_projection(
+            employee,
+            projected,
+            exclude_leave_ids=[leave.id] if res_id and leave else None,
+            target_date=target_date,
+        )
+        if not projection["negative"]:
+            return self._con_lai_negative_no_block()
+        return {
+            "blocked": True,
+            "needs_confirmation": False,
+            "title": _("Không đủ số phép còn lại"),
+            "message": self._con_lai_negative_error_message(
+                employee,
+                projection,
+                create=not bool(res_id),
+            ),
+        }
+
     @api.model_create_multi
     def create(self, vals_list):
         if not self._con_lai_negative_check_skipped():
             Employee = self.env["hr.employee"]
             additions = {}
+            target_dates = {}
             for vals in vals_list:
                 emp_id = self._coerce_id_from_value(vals.get("employee_id"))
                 if not emp_id:
@@ -648,16 +858,25 @@ class HrLeaveTimeOffSummary(models.Model):
                 lt_id = self._coerce_id_from_value(vals.get("holiday_status_id"))
                 if self._is_unpaid_leave_type(lt_id):
                     continue
-                days = self._vals_days_for_negative_check(vals)
+                employee = Employee.browse(emp_id)
+                if not employee.exists():
+                    continue
+                employee = employee._sudo_for_timeoff_access()
+                target_date = self._target_date_for_negative_check(vals)
+                key = (emp_id, target_date.year if target_date else None)
+                days = self._vals_days_for_negative_check(vals, employee=employee)
                 if days <= 0:
                     continue
-                additions[emp_id] = additions.get(emp_id, 0.0) + days
-            for emp_id, projected in additions.items():
+                additions[key] = additions.get(key, 0.0) + days
+                target_dates[key] = target_date
+            for (emp_id, _year), projected in additions.items():
                 employee = Employee.browse(emp_id)
                 if not employee.exists():
                     continue
                 self._assert_con_lai_not_negative(
-                    employee._sudo_for_timeoff_access(), projected
+                    employee._sudo_for_timeoff_access(),
+                    projected,
+                    target_date=target_dates.get((emp_id, _year)),
                 )
         records = super().create(vals_list)
         if not self.env.context.get("leave_fast_create"):
@@ -681,16 +900,26 @@ class HrLeaveTimeOffSummary(models.Model):
                 )
                 if self._is_unpaid_leave_type(lt_id):
                     continue
-                projected = self._vals_days_for_negative_check(vals, leave=leave)
-                if projected <= 0:
-                    continue
                 employee = Employee.browse(emp_id)
                 if not employee.exists():
                     continue
+                employee = employee._sudo_for_timeoff_access()
+                projected = self._vals_days_for_negative_check(
+                    vals,
+                    leave=leave,
+                    employee=employee,
+                )
+                if projected <= 0:
+                    continue
                 self._assert_con_lai_not_negative(
-                    employee._sudo_for_timeoff_access(),
+                    employee,
                     projected,
                     exclude_leave_ids=[leave.id],
+                    target_date=self._target_date_for_negative_check(
+                        vals,
+                        leave=leave,
+                    ),
+                    create=False,
                 )
         res = super().write(vals)
         if (
