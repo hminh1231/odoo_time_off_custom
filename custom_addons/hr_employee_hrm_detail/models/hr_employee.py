@@ -1,4 +1,5 @@
 from odoo import api, fields, models
+from odoo.addons.hr.models.hr_employee import _ALLOW_READ_HR_EMPLOYEE
 from odoo.exceptions import AccessError, ValidationError
 from odoo.fields import Domain
 from odoo.tools.translate import _
@@ -23,6 +24,19 @@ class HrEmployee(models.Model):
         bypass_access=False,
         **kwargs,
     ):
+        if (
+            self.env.context.get("_allow_read_hr_employee")
+            is _ALLOW_READ_HR_EMPLOYEE
+        ):
+            return super()._search(
+                domain,
+                offset=offset,
+                limit=limit,
+                order=order,
+                active_test=active_test,
+                bypass_access=bypass_access,
+                **kwargs,
+            )
         if self.browse().has_access("read") or bypass_access:
             domain = self.env["hr.employee.access.mixin"]._hr_employee_apply_access_domain(
                 domain, model_name=self._name
@@ -70,6 +84,13 @@ class HrEmployee(models.Model):
 
     @api.model
     def search_fetch(self, domain, field_names=None, offset=0, limit=None, order=None):
+        if (
+            self.env.context.get("_allow_read_hr_employee")
+            is _ALLOW_READ_HR_EMPLOYEE
+        ):
+            return super().search_fetch(
+                domain, field_names, offset, limit, order
+            )
         if self.browse().has_access("read"):
             domain = self.env["hr.employee.access.mixin"]._hr_employee_apply_access_domain(
                 domain, model_name=self._name
