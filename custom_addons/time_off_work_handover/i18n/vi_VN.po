@@ -1,0 +1,62 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+# 	* time_off_work_handover
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 19.0\n"
+"POT-Creation-Date: 2026-06-09 00:00+0000\n"
+"PO-Revision-Date: 2026-06-09 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Language: vi_VN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#. module: time_off_work_handover
+#: model_terms:ir.ui.view,arch_db:time_off_work_handover.hr_leave_view_form_dashboard_handover_actions
+#: model_terms:ir.ui.view,arch_db:time_off_work_handover.hr_leave_view_form_handover_recipients
+msgid "Accept work handover"
+msgstr "Chấp nhận bàn giao công việc"
+
+#. module: time_off_work_handover
+#: model_terms:ir.ui.view,arch_db:time_off_work_handover.hr_leave_view_form_dashboard_handover_actions
+#: model_terms:ir.ui.view,arch_db:time_off_work_handover.hr_leave_view_form_handover_recipients
+msgid "Refuse work handover"
+msgstr "Từ chối bàn giao công việc"
+
+#. module: time_off_work_handover
+#: model:ir.model.fields,field_description:time_off_work_handover.field_hr_leave__skip_work_handover
+#: model_terms:ir.ui.view,arch_db:time_off_work_handover.hr_leave_view_form_handover_recipients
+msgid "No work handover required"
+msgstr "Không cần bàn giao công việc"
+
+#. module: time_off_work_handover
+#: model_terms:ir.ui.view,arch_db:time_off_work_handover.view_hr_leave_handover_refuse_wizard_form
+msgid "Refuse Work Handover"
+msgstr "Từ chối bàn giao công việc"
+
+#. module: time_off_work_handover
+#: model:ir.model.fields,field_description:time_off_work_handover.field_hr_leave__handover_employee_ids
+#: model_terms:ir.ui.view,arch_db:time_off_work_handover.hr_leave_view_form_handover_recipients
+msgid "Work Handover To"
+msgstr "Bàn giao công việc cho"
+
+#. module: time_off_work_handover
+#: model_terms:ir.ui.view,arch_db:time_off_work_handover.hr_leave_view_form_dashboard_handover_actions
+#: model_terms:ir.ui.view,arch_db:time_off_work_handover.hr_leave_view_form_handover_recipients
+msgid "Work handover refusal details"
+msgstr "Chi tiết từ chối bàn giao công việc"
+
+#. module: time_off_work_handover
+#: model_terms:ir.ui.view,arch_db:time_off_work_handover.hr_leave_view_form_dashboard_handover_actions
+msgid "You were selected for work handover for this request. Please accept or refuse."
+msgstr "Bạn được chọn để nhận bàn giao công việc cho đơn này. Vui lòng chấp nhận hoặc từ chối."
+
+#. module: time_off_work_handover
+#: model_terms:ir.ui.view,arch_db:time_off_work_handover.hr_leave_view_form_dashboard_handover_actions
+#: model_terms:ir.ui.view,arch_db:time_off_work_handover.hr_leave_view_form_handover_recipients
+msgid "Choose another colleague to receive work handover."
+msgstr "Chọn đồng nghiệp khác để nhận bàn giao công việc."

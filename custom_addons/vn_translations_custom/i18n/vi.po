@@ -29,6 +29,29 @@ msgstr "Bàn giao: chức danh chuyển cấp tối đa"
 msgid "Handover: auto-cancel at max escalation level"
 msgstr "Bàn giao: tự động hủy ở cấp chuyển cấp tối đa"
 
+#. module: time_off_work_handover
+#: model_terms:ir.ui.view,arch_db:time_off_work_handover.hr_leave_view_form_dashboard_handover_actions
+#: model_terms:ir.ui.view,arch_db:time_off_work_handover.hr_leave_view_form_handover_recipients
+msgid "Accept work handover"
+msgstr "Chấp nhận bàn giao công việc"
+
+#. module: time_off_work_handover
+#: model_terms:ir.ui.view,arch_db:time_off_work_handover.hr_leave_view_form_dashboard_handover_actions
+#: model_terms:ir.ui.view,arch_db:time_off_work_handover.hr_leave_view_form_handover_recipients
+msgid "Refuse work handover"
+msgstr "Từ chối bàn giao công việc"
+
+#. module: time_off_work_handover
+#: model_terms:ir.ui.view,arch_db:time_off_work_handover.view_hr_leave_handover_refuse_wizard_form
+msgid "Refuse Work Handover"
+msgstr "Từ chối bàn giao công việc"
+
+#. module: time_off_work_handover
+#: model:ir.model.fields,field_description:time_off_work_handover.field_hr_leave__skip_work_handover
+#: model_terms:ir.ui.view,arch_db:time_off_work_handover.hr_leave_view_form_handover_recipients
+msgid "No work handover required"
+msgstr "Không cần bàn giao công việc"
+
 #. module: time_off_extra_approval
 msgid "Accept work handover"
 msgstr "Chấp nhận bàn giao công việc"
