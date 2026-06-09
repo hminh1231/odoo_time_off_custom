@@ -1,4 +1,5 @@
 from odoo import _, api, fields, models
+from odoo.addons.hr.models.hr_employee import _ALLOW_READ_HR_EMPLOYEE
 from odoo.exceptions import UserError
 
 _HANDOVER_PEER_RESPONSE_FIELDS = frozenset({"state", "responded_at", "refusal_reason"})
@@ -58,6 +59,19 @@ class HrLeaveHandoverAcceptance(models.Model):
             "Each colleague can only have one work handover line per time off request.",
         ),
     ]
+
+    def _with_handover_employee_read_context(self):
+        return self.with_context(_allow_read_hr_employee=_ALLOW_READ_HR_EMPLOYEE)
+
+    def read(self, fields=None, load="_classic_read"):
+        return super(
+            HrLeaveHandoverAcceptance, self._with_handover_employee_read_context()
+        ).read(fields, load)
+
+    def web_read(self, specification):
+        return super(
+            HrLeaveHandoverAcceptance, self._with_handover_employee_read_context()
+        ).web_read(specification)
 
     @api.onchange("employee_id", "handover_work_content")
     def _onchange_resequence_lines_realtime(self):

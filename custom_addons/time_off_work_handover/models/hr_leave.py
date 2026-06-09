@@ -53,12 +53,20 @@ def _job_title_rank_map():
 class HrLeaveHandover(models.Model):
     _inherit = "hr.leave"
 
-    def _with_timeoff_self_service_write_context(self):
-        """Handover M2M + leave-type stored computes during employee self-service."""
+    def _with_timeoff_self_service_handover_context(self):
+        """Handover self-service: read colleague names + leave-type writes without HR officer."""
         ctx = {"_allow_read_hr_employee": _ALLOW_READ_HR_EMPLOYEE}
         if not self.env.user.has_group("hr_holidays.group_hr_holidays_user"):
             ctx["_allow_write_hr_leave_type"] = _ALLOW_WRITE_HR_LEAVE_TYPE
         return self.with_context(**ctx)
+
+    _with_timeoff_self_service_write_context = _with_timeoff_self_service_handover_context
+
+    def _handover_employees_readable(self, employees):
+        """Sudo overlap/handover may reference more employees than the viewer may read."""
+        if not employees:
+            return self.env["hr.employee"]
+        return self.env["hr.employee"].search([("id", "in", employees.ids)])
 
     handover_employee_ids = fields.Many2many(
         comodel_name="hr.employee",
@@ -728,7 +736,8 @@ class HrLeaveHandover(models.Model):
         for leave in self:
             start_dt, end_dt = leave._get_requested_interval()
             if not start_dt or not end_dt:
-                leave.unavailable_handover_employee_ids = Employee
+                # Explicit empty search: bare model recordset can pick up stray prefetch ids on new leaves.
+                leave.unavailable_handover_employee_ids = Employee.search([("id", "in", [])])
                 continue
             overlapping = self.env["hr.leave"].sudo().search(
                 [
@@ -738,7 +747,10 @@ class HrLeaveHandover(models.Model):
                     ("date_to", ">", start_dt),
                 ]
             )
-            leave.unavailable_handover_employee_ids = overlapping.mapped("employee_id")
+            overlap_emps = overlapping.sudo().mapped("employee_id")
+            leave.unavailable_handover_employee_ids = leave._handover_employees_readable(
+                overlap_emps
+            )
 
     def _current_user_escalation_assigned_handover_recipient_line(self):
         """Acceptance row for current user if they were designated by handover_escalation_user_id (e.g. trưởng BP)."""
@@ -1436,7 +1448,7 @@ class HrLeaveHandover(models.Model):
 
     @api.onchange("handover_acceptance_ids", "handover_acceptance_ids.employee_id")
     def _onchange_handover_acceptance_ids(self):
-        for leave in self:
+        for leave in self._with_timeoff_self_service_handover_context():
             for idx, line in enumerate(leave.handover_acceptance_ids, start=1):
                 line.sequence = idx
             employees = leave.handover_acceptance_ids.mapped("employee_id")
@@ -1452,8 +1464,12 @@ class HrLeaveHandover(models.Model):
         "request_date_to_period",
     )
     def _onchange_handover_employee_availability(self):
-        for leave in self.filtered("handover_employee_ids"):
-            unavailable = leave._get_unavailable_handover_employees()
+        for leave in self._with_timeoff_self_service_handover_context().filtered(
+            "handover_employee_ids"
+        ):
+            unavailable = leave._handover_employees_readable(
+                leave._get_unavailable_handover_employees()
+            )
             if unavailable:
                 allowed = leave.handover_employee_ids - unavailable
                 leave.update({"handover_employee_ids": [Command.set(allowed.ids)]})
@@ -2057,6 +2073,21 @@ class HrLeaveHandover(models.Model):
                 self.filtered(lambda l: l.state in _HANDOVER_ACTIVE_STATES)._sync_handover_acceptance_lines()
                 self.filtered(lambda l: l.state in _HANDOVER_ACTIVE_STATES)._mark_pending_handover_lines_as_escalation_assigned()
                 self.filtered(lambda l: l.state in _HANDOVER_ACTIVE_STATES)._schedule_work_handover_activities()
+
+    def read(self, fields=None, load="_classic_read"):
+        return super(HrLeaveHandover, self._with_timeoff_self_service_handover_context()).read(
+            fields, load
+        )
+
+    def web_read(self, specification):
+        return super(HrLeaveHandover, self._with_timeoff_self_service_handover_context()).web_read(
+            specification
+        )
+
+    def onchange(self, values, field_names, fields_spec):
+        return super(HrLeaveHandover, self._with_timeoff_self_service_handover_context()).onchange(
+            values, field_names, fields_spec
+        )
 
     def write(self, vals):
         handover_lines_changed = bool(
