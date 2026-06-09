@@ -76,7 +76,7 @@ class HrLeaveOdoobotNotifyMixin(models.Model):
 
     def _odoobot_notify_rule_for_user(self, user, bot_type):
         self.ensure_one()
-        employee = user.employee_id if user else False
+        employee = user.sudo().employee_id if user else False
         return self._odoobot_notify_rule_for_employee(employee, bot_type)
 
     def _odoobot_scheduled_remind_due(self, rule, last_slot_field):

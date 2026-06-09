@@ -41,7 +41,8 @@ _OBSERVER_JOB_TITLES_BAC = frozenset({"asm", "cửa hàng trưởng", "nhóm tr�
 
 
 def _job_title_approval_sort_key(user, order_index):
-    title = user.employee_id.job_title if user.employee_id else False
+    employee = user.sudo().employee_id
+    title = employee.job_title if employee else False
     if title and title in order_index:
         return (order_index[title], user.id)
     return (len(order_index) + 1, user.id)
@@ -1706,9 +1707,10 @@ class HrLeaveResponsibleApproval(models.Model):
     @api.model_create_multi
     def create(self, vals_list):
         records = super().create(vals_list)
-        records._ensure_responsible_approval_lines()
-        records._responsible_backfill_pending_since_if_missing()
-        submit_responsible_leaves = records.filtered(
+        routing_records = records.sudo()
+        routing_records._ensure_responsible_approval_lines()
+        routing_records._responsible_backfill_pending_since_if_missing()
+        submit_responsible_leaves = routing_records.filtered(
             lambda l: l.validation_type == "employee_hr_responsibles" and l.state == "confirm"
         )
         if (

@@ -1,5 +1,9 @@
 from odoo.tests import TransactionCase, new_test_user, tagged
 
+from odoo.addons.time_off_responsible_approval.models.hr_leave import (
+    _job_title_approval_sort_key,
+)
+
 
 @tagged("post_install", "-at_install")
 class TestStaleEmployeeContext(TransactionCase):
@@ -62,3 +66,26 @@ class TestStaleEmployeeContext(TransactionCase):
         )
 
         self.assertEqual(LeaveType._domain_with_employee_mien([]), [])
+
+    def test_approval_sort_reads_approver_employee_with_sudo(self):
+        approver = new_test_user(
+            self.env,
+            login="timeoff-approval-sort-approver",
+            groups="base.group_user",
+        )
+        self.env["hr.employee"].create(
+            {
+                "name": "Approval Sort Approver",
+                "user_id": approver.id,
+                "company_id": approver.company_id.id,
+                "job_title": "trưởng bộ phận",
+            }
+        )
+
+        self.assertEqual(
+            _job_title_approval_sort_key(
+                approver.with_user(self.user),
+                {"trưởng bộ phận": 3},
+            ),
+            (3, approver.id),
+        )

@@ -2131,13 +2131,14 @@ class HrLeaveHandover(models.Model):
     @api.model_create_multi
     def create(self, vals_list):
         records = super(HrLeaveHandover, self._with_timeoff_self_service_write_context()).create(vals_list)
-        records.filtered(
+        workflow_records = records.sudo()
+        workflow_records.filtered(
             lambda l: l.handover_acceptance_ids and not l.handover_employee_ids
         )._sync_handover_employees_from_acceptance()
-        records._bootstrap_handover_workflow()
-        records._mark_handover_requested_at()
+        workflow_records._bootstrap_handover_workflow()
+        workflow_records._mark_handover_requested_at()
         if not self.env.context.get("leave_fast_create"):
-            records.filtered(lambda l: l.state == "confirm").with_context(
+            workflow_records.filtered(lambda l: l.state == "confirm").with_context(
                 **{_SKIP_SUBMIT_BOT_NOTIFY_CTX: False}
             )._dispatch_handover_submit_bot_after_confirm()
         return records
