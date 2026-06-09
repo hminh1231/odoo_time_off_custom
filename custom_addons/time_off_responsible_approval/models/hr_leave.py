@@ -1207,14 +1207,13 @@ class HrLeaveResponsibleApproval(models.Model):
                 ],
                 limit=1,
             )
-            if duplicate_message:
-                continue
-            self.message_post(
-                body=body_text,
-                message_type="notification",
-                subtype_xmlid="mail.mt_comment",
-                partner_ids=[line.user_id.partner_id.id],
-            )
+            if not duplicate_message:
+                self.message_post(
+                    body=body_text,
+                    message_type="notification",
+                    subtype_xmlid="mail.mt_comment",
+                    partner_ids=[line.user_id.partner_id.id],
+                )
             self._notify_responsible_current_turn_via_approval_bot(line.user_id)
         if self._leave_needs_observer_notify():
             observer = self._get_observer_user()

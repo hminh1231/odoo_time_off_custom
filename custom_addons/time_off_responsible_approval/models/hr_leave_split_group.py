@@ -68,6 +68,14 @@ class HrLeaveSplitGroup(models.Model):
             return False
         return len(self._get_split_group_leaves_all()) > 1
 
+    def _split_group_clear_orphan_if_single(self):
+        """Drop stale split_group_id when only one DB row remains (blocks OdooBot if kept)."""
+        orphans = self.filtered(
+            lambda l: l.split_group_id and not l._split_group_is_multi_segment()
+        )
+        if orphans:
+            orphans.sudo().write({"split_group_id": False})
+
     def _split_group_dedupe_for_notify(self):
         """When notifying approvers, only handle the primary record per split group."""
         result = self.env["hr.leave"]
@@ -314,12 +322,11 @@ class HrLeaveSplitGroup(models.Model):
 
     def _notify_responsible_current_turn_via_approval_bot(self, approver_user):
         self.ensure_one()
-        if self.split_group_id:
+        self._split_group_clear_orphan_if_single()
+        if self.split_group_id and self._split_group_is_multi_segment():
             if not self._is_split_group_primary_leave():
                 return
             group = self._get_split_group_leaves_all()
-            if len(group) <= 1:
-                return
             return self._notify_responsible_current_turn_via_approval_bot_group(
                 approver_user, group
             )
@@ -373,8 +380,7 @@ class HrLeaveSplitGroup(models.Model):
         for leave in self:
             if leave.validation_type != "employee_hr_responsibles" or leave.state != "confirm":
                 continue
-            if leave.split_group_id and not leave._split_group_is_multi_segment():
-                continue
+            leave._split_group_clear_orphan_if_single()
             if leave._split_group_is_multi_segment():
                 gid = leave.split_group_id
                 if gid in handled_groups:

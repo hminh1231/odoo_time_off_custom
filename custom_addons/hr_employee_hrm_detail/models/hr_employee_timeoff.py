@@ -92,7 +92,7 @@ class HrEmployeeTimeoff(models.Model):
 
     def _employee_for_timeoff_calendar(self):
         """Sudo + self-service context for calendar helpers (mandatory/unusual days)."""
-        if self.env.user.has_group("hr.group_hr_user"):
+        if self.env.user.has_group("hr.group_hr_manager"):
             return self
         return self._sudo_for_timeoff_access().with_context(
             **self._timeoff_self_service_context()
@@ -104,14 +104,14 @@ class HrEmployeeTimeoff(models.Model):
         )._get_mandatory_days(start_date, end_date)
 
     def _get_unusual_days(self, date_from, date_to=None):
-        if self.env.user.has_group("hr.group_hr_user"):
+        if self.env.user.has_group("hr.group_hr_manager"):
             return super()._get_unusual_days(date_from, date_to)
         self = self._employee_for_timeoff_calendar().sudo()
         date_from_date = datetime.strptime(date_from, "%Y-%m-%d %H:%M:%S").date()
         date_to_date = (
             datetime.strptime(date_to, "%Y-%m-%d %H:%M:%S").date() if date_to else None
         )
-        employee_versions = self.env["hr.version"].search(
+        employee_versions = self.env["hr.version"].sudo().search(
             [("employee_id", "=", self.id)]
         ).filtered(lambda version: version._is_overlapping_period(date_from_date, date_to_date))
         if not employee_versions:
@@ -169,8 +169,8 @@ class HrEmployeeTimeoff(models.Model):
         return employee._sudo_for_timeoff_access() if employee else employee
 
     def _sudo_for_timeoff_access(self):
-        """Read version-linked employee fields for permitted time-off UI without HR officer."""
-        if self.env.user.has_group("hr.group_hr_user"):
+        """Read version-linked employee fields for permitted time-off UI without HR administrator."""
+        if self.env.user.has_group("hr.group_hr_manager"):
             return self
         if not self:
             return self

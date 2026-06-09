@@ -430,8 +430,6 @@ class HrLeaveHandover(models.Model):
         "skip_work_handover",
         "employee_id",
         "employee_id.job_title",
-        "employee_id.current_version_id",
-        "employee_id.current_version_id.job_title",
     )
     def _check_skip_work_handover_permission(self):
         for leave in self.filtered("skip_work_handover"):
@@ -1476,21 +1474,13 @@ class HrLeaveHandover(models.Model):
                 }
 
     def _read_job_title_safely(self, employee):
-        """Read `job_title` on hr.employee, falling back to current hr.version in sudo if ACL hides it.
-
-        The Work tab in HR stores job title on the employee version model; the ORM can expose
-        it as a normal field, but in some access setups it is safer to read the underlying
-        `current_version_id.job_title` with elevated rights.
-        """
+        """Read job_title without tripping hr.version wage field ACL for HR officers."""
         if not employee:
             return False
         if employee.job_title:
             return employee.job_title
-        if employee.current_version_id and employee.current_version_id.job_title:
-            return employee.sudo().current_version_id.job_title
-        if employee.sudo().current_version_id and employee.sudo().current_version_id.job_title:
-            return employee.sudo().current_version_id.job_title
-        return False
+        version = employee.sudo().current_version_id
+        return version.job_title if version else False
 
     def _refresh_handover_activity_notes_for_employees(self, employees):
         """After assigned_by_user_id is updated, rewrite open handover activities so the note matches."""

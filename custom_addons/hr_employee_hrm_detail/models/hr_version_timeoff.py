@@ -1,4 +1,23 @@
-from odoo import models
+from odoo import api, models
+
+# Non-sensitive hr.version fields needed by time-off / org-chart flows (not wage/payroll).
+_TIMEOFF_VERSION_READ_FIELDS = frozenset(
+    {
+        "job_title",
+        "job_id",
+        "resource_calendar_id",
+        "date_version",
+        "employee_id",
+        "company_id",
+        "department_id",
+        "active",
+        "name",
+        "date_start",
+        "date_end",
+        "contract_date_start",
+        "contract_date_end",
+    }
+)
 
 
 class HrVersionTimeoff(models.Model):
@@ -30,3 +49,18 @@ class HrVersionTimeoff(models.Model):
                     ):
                         return None
         return super()._check_access(operation)
+
+    @api.model
+    def _has_field_access(self, field, operation):
+        """HR officers may read org/time-off fields on contracts but not wage (manager-only)."""
+        if (
+            operation == "read"
+            and not self.env.su
+            and field.name in _TIMEOFF_VERSION_READ_FIELDS
+            and (
+                self.env.user.has_group("hr.group_hr_user")
+                or self.env.user.employee_id
+            )
+        ):
+            return True
+        return super()._has_field_access(field, operation)
