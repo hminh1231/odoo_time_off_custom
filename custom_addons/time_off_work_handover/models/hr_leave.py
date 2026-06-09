@@ -7,7 +7,7 @@ from datetime import date, datetime, time, timedelta
 from markupsafe import Markup, escape
 
 from odoo import Command, api, fields, models
-from odoo.exceptions import UserError, ValidationError
+from odoo.exceptions import MissingError, UserError, ValidationError
 from odoo.tools import sql
 from odoo.tools.misc import format_date
 from odoo.tools.translate import _
@@ -2130,7 +2130,21 @@ class HrLeaveHandover(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        records = super(HrLeaveHandover, self._with_timeoff_self_service_write_context()).create(vals_list)
+        try:
+            records = super(
+                HrLeaveHandover, self._with_timeoff_self_service_write_context()
+            ).create(vals_list)
+        except MissingError:
+            _logger.exception(
+                "time_off_work_handover: MissingError during hr.leave create "
+                "uid=%s employee_ids=%s handover_employee_ids=%s "
+                "handover_acceptance_ids=%s",
+                self.env.uid,
+                [vals.get("employee_id") for vals in vals_list],
+                [vals.get("handover_employee_ids") for vals in vals_list],
+                [vals.get("handover_acceptance_ids") for vals in vals_list],
+            )
+            raise
         workflow_records = records.sudo()
         workflow_records.filtered(
             lambda l: l.handover_acceptance_ids and not l.handover_employee_ids
@@ -2142,3 +2156,16 @@ class HrLeaveHandover(models.Model):
                 **{_SKIP_SUBMIT_BOT_NOTIFY_CTX: False}
             )._dispatch_handover_submit_bot_after_confirm()
         return records
+
+    def web_read(self, specification):
+        try:
+            return super().web_read(specification)
+        except MissingError:
+            _logger.exception(
+                "time_off_work_handover: MissingError during hr.leave web_read "
+                "uid=%s leave_ids=%s specification_fields=%s",
+                self.env.uid,
+                self.ids,
+                sorted(specification),
+            )
+            raise
