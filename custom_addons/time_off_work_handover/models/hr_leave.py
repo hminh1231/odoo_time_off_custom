@@ -2157,6 +2157,47 @@ class HrLeaveHandover(models.Model):
             )._dispatch_handover_submit_bot_after_confirm()
         return records
 
+    def web_save(self, vals, specification, next_id=None):
+        """Keep the create/read boundary visible when relational reads fail."""
+        try:
+            if self:
+                self.write(vals)
+            else:
+                self = self.create(vals)
+        except MissingError:
+            _logger.exception(
+                "time_off_work_handover: MissingError during hr.leave web_save "
+                "write/create uid=%s leave_ids=%s employee_id=%s "
+                "handover_employee_ids=%s acceptance_employee_ids=%s",
+                self.env.uid,
+                self.ids,
+                vals.get("employee_id"),
+                vals.get("handover_employee_ids"),
+                [
+                    command[2].get("employee_id")
+                    for command in vals.get("handover_acceptance_ids", [])
+                    if isinstance(command, (list, tuple))
+                    and len(command) > 2
+                    and isinstance(command[2], dict)
+                ],
+            )
+            raise
+
+        if next_id:
+            self = self.browse(next_id)
+
+        try:
+            return self.with_context(bin_size=True).web_read(specification)
+        except MissingError:
+            _logger.exception(
+                "time_off_work_handover: MissingError during hr.leave web_save "
+                "serialization uid=%s leave_ids=%s specification_fields=%s",
+                self.env.uid,
+                self.ids,
+                sorted(specification),
+            )
+            raise
+
     def web_read(self, specification):
         try:
             return super().web_read(specification)
