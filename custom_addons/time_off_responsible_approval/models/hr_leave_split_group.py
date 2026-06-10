@@ -301,7 +301,7 @@ class HrLeaveSplitGroup(models.Model):
         stop_positions = self._get_org_chart_stop_positions()
         current_seq = lines[0].sequence if lines else None
         notify_lines = lines
-        if current_seq is not None:
+        if current_seq is not None and not self._get_special_configured_approval_users():
             all_pending = self.responsible_approval_line_ids.filtered(
                 lambda l: l.state == "pending" and l.sequence > current_seq
             ).sorted(lambda l: (l.sequence, l.id))
@@ -319,6 +319,7 @@ class HrLeaveSplitGroup(models.Model):
                 continue
             notified_users.add(approver.id)
             self._notify_responsible_current_turn_via_approval_bot(approver)
+        self._notify_special_readonly_notifiers()
 
     def _notify_responsible_current_turn_via_approval_bot(self, approver_user):
         self.ensure_one()

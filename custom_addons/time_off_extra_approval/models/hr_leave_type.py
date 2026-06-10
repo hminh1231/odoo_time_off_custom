@@ -79,8 +79,8 @@ class HolidaysType(models.Model):
     special_director_employee_line_ids = fields.One2many(
         comodel_name="hr.leave.type.special.employee.line",
         inverse_name="leave_type_id",
-        string="Special employees (all directors must approve)",
-        help="For listed employees, approval remains sequential by org flow until Director level; then all internal users with Director title must approve in order.",
+        string="Special employees",
+        help="Configure special approval and read-only notification recipients by employee ID HRM.",
     )
     special_director_sequential_approval = fields.Boolean(
         string="Sequential director approval",

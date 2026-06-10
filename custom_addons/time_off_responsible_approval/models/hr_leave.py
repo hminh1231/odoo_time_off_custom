@@ -146,7 +146,9 @@ class HrLeaveResponsibleApproval(models.Model):
     def _apply_responsible_timeout_escalation(self):
         self.ensure_one()
         self._sync_responsible_approval_lines()
-        if self.holiday_status_id.employee_responsible_approval_mode != "sequential":
+        if self._get_special_configured_approval_users():
+            return
+        if self._responsible_approval_mode() != "sequential":
             return
         if not self.responsible_approval_line_ids:
             return
@@ -198,7 +200,7 @@ class HrLeaveResponsibleApproval(models.Model):
             pending = self.responsible_approval_line_ids.filtered(
                 lambda line: line.state == "pending"
             ).sorted("sequence")
-            mode = self.holiday_status_id.employee_responsible_approval_mode or "any"
+            mode = self._responsible_approval_mode()
             current_lines = (
                 self._responsible_pending_current_wave()
                 if mode == "sequential"
@@ -285,7 +287,7 @@ class HrLeaveResponsibleApproval(models.Model):
                 if not pending:
                     leave.approval_actionable_user_ids = Users
                     continue
-                mode = leave.holiday_status_id.employee_responsible_approval_mode or "any"
+                mode = leave._responsible_approval_mode()
                 if mode == "sequential":
                     leave.approval_actionable_user_ids = leave._responsible_pending_current_wave().mapped("user_id")
                 else:
@@ -331,7 +333,7 @@ class HrLeaveResponsibleApproval(models.Model):
                 ).sorted(lambda ln: (ln.sequence, ln.id))
                 if not pending:
                     continue
-                mode = leave.holiday_status_id.employee_responsible_approval_mode or "any"
+                mode = leave._responsible_approval_mode()
                 # Compute with sudo so the step count is identical for every viewer
                 # (a non-HR approver such as ASM must not read a truncated chain and
                 # see "Bước 1 / 1" instead of the real "Bước 1 / 3").
@@ -399,7 +401,7 @@ class HrLeaveResponsibleApproval(models.Model):
                 if leave.state == "validate1" and not leave.responsible_approval_line_ids:
                     can = False
                 else:
-                    mode = leave.holiday_status_id.employee_responsible_approval_mode
+                    mode = leave._responsible_approval_mode()
                     approvers = leave._get_responsible_approval_users()
                     is_manager = leave.env.user.has_group("hr_holidays.group_hr_holidays_manager")
                     # Sequential: every user (including Time Off Administrators) must wait for the current
@@ -443,6 +445,7 @@ class HrLeaveResponsibleApproval(models.Model):
         "holiday_status_id.employee_responsible_approval_mode",
         "holiday_status_id.special_director_sequential_approval",
         "holiday_status_id.special_director_order_line_ids",
+        "holiday_status_id.special_director_employee_line_ids.approval_employee_ids",
         "holiday_status_id.multi_approval_step_ids",
         "responsible_approval_line_ids",
         "responsible_approval_line_ids.state",
@@ -625,6 +628,13 @@ class HrLeaveResponsibleApproval(models.Model):
         self.ensure_one()
         return self.validation_type in approval_constants.RESPONSIBLE_APPROVAL_VALIDATION_TYPES
 
+    def _responsible_approval_mode(self):
+        """Explicit special approvers are always all-required and sequential."""
+        self.ensure_one()
+        if self._get_special_configured_approval_users():
+            return "sequential"
+        return self.holiday_status_id.employee_responsible_approval_mode or "any"
+
     def _sync_responsible_approval_lines(self):
         """Extension hook: keep approval log rows aligned with the computed approver chain."""
         hook = getattr(super(), "_sync_responsible_approval_lines", None)
@@ -642,7 +652,9 @@ class HrLeaveResponsibleApproval(models.Model):
         for leave in self.with_context(**{_SKIP_RESPONSIBLE_AUTO_SKIP_CTX: True}):
             if not leave._is_responsible_approval_validation():
                 continue
-            if (leave.holiday_status_id.employee_responsible_approval_mode or "any") != "sequential":
+            if leave._get_special_configured_approval_users():
+                continue
+            if leave._responsible_approval_mode() != "sequential":
                 continue
             if not leave.responsible_approval_line_ids:
                 continue
@@ -873,6 +885,9 @@ class HrLeaveResponsibleApproval(models.Model):
 
     def _get_responsible_approval_users(self):
         self.ensure_one()
+        special_users = self._get_special_configured_approval_users()
+        if special_users:
+            return self._sort_special_approval_users_by_org_chart(special_users)
         override = self._get_responsible_approval_users_override()
         if override is not None:
             return override
@@ -913,6 +928,7 @@ class HrLeaveResponsibleApproval(models.Model):
         "holiday_status_id.employee_responsible_source",
         "holiday_status_id.special_director_employee_line_ids",
         "holiday_status_id.special_director_employee_line_ids.employee_id",
+        "holiday_status_id.special_director_employee_line_ids.approval_employee_ids",
         "holiday_status_id.special_director_sequential_approval",
         "holiday_status_id.special_director_order_line_ids",
         "employee_id",
@@ -979,7 +995,7 @@ class HrLeaveResponsibleApproval(models.Model):
                     "user_id": user.id,
                     "sequence": seq,
                 }
-                if lt.employee_responsible_approval_mode == "sequential" and seq == min_seq:
+                if leave._responsible_approval_mode() == "sequential" and seq == min_seq:
                     vals["pending_since"] = now
                 line_model.create(vals)
 
@@ -1009,9 +1025,9 @@ class HrLeaveResponsibleApproval(models.Model):
         title = (emp.job_title or "").strip().lower()
         mien = (emp.mien or "").strip()
 
-        # Special employee list (Dũng/Tuấn/Huy/Trà Phú/Long/Thế Anh/Vinh)
-        if self._get_special_employee_line():
-            return True
+        special_line = self._get_special_employee_line()
+        if special_line:
+            return not special_line.readonly_notifier_employee_ids
         # ASM/RSM → Admin chain (all Miền)
         if title in _OBSERVER_JOB_TITLES:
             return True
@@ -1030,9 +1046,60 @@ class HrLeaveResponsibleApproval(models.Model):
             lambda l: l.employee_id == self.employee_id
         )[:1]
 
-    def _is_multi_director_special_employee(self):
+    def _get_special_configured_approval_users(self):
+        """Internal users explicitly configured on this special employee row."""
         self.ensure_one()
-        return bool(self._get_special_employee_line())
+        line = self._get_special_employee_line().sudo()
+        if not line or not line.approval_employee_ids:
+            return self.env["res.users"]
+        return line.approval_employee_ids.mapped("user_id").filtered(
+            lambda user: user and not user.share
+        )
+
+    def _sort_special_approval_users_by_org_chart(self, users):
+        """Order selected approvers by the requester's manager chain, nearest first."""
+        self.ensure_one()
+        selected_ids = set(users.ids)
+        ordered_ids = []
+        employee = self.employee_id
+        Employee = self.env["hr.employee"].with_user(SUPERUSER_ID)
+        current_id = self._org_chart_sql_parent_id(employee.id) if employee else False
+        visited = set()
+        while current_id and current_id not in visited:
+            visited.add(current_id)
+            manager = Employee.browse(current_id)
+            user = manager.user_id
+            if user and user.id in selected_ids:
+                ordered_ids.append(user.id)
+                selected_ids.remove(user.id)
+            current_id = manager.parent_id.id
+        remaining = users.filtered(lambda user: user.id in selected_ids)
+        remaining = self._sort_responsible_users_by_job_title(remaining)
+        return self.env["res.users"].browse(ordered_ids + remaining.ids)
+
+    def _get_special_readonly_notifier_users(self):
+        """Internal users who receive the special employee's view-only DM."""
+        self.ensure_one()
+        leaves = self
+        if self.split_group_id and self._split_group_is_multi_segment():
+            leaves = self._get_split_group_leaves_all()
+        employees = (
+            leaves.mapped("holiday_status_id.special_director_employee_line_ids")
+            .filtered(lambda line: line.employee_id == self.employee_id)
+            .sudo()
+            .mapped("readonly_notifier_employee_ids")
+        )
+        if not employees:
+            return self.env["res.users"]
+        return employees.mapped("user_id").filtered(
+            lambda user: user and user.active and not user.share and user.partner_id
+        )
+
+    def _is_multi_director_special_employee(self):
+        """Legacy special flow, retained until explicit approvers are configured."""
+        self.ensure_one()
+        line = self._get_special_employee_line()
+        return bool(line and not line.approval_employee_ids)
 
     def _is_special_parallel_directors_leave(self):
         """Special employee flow: directors act in parallel (same step, simultaneous notify)."""
@@ -1138,6 +1205,124 @@ class HrLeaveResponsibleApproval(models.Model):
             if observer:
                 self._notify_responsible_current_turn_via_approval_bot(observer)
 
+    def _get_special_readonly_notification_details(self):
+        """Build one read-only notification payload for a single leave or grouped plan."""
+        self.ensure_one()
+        if (
+            self.split_group_id
+            and self._split_group_is_multi_segment()
+            and hasattr(self, "_get_approval_bot_split_group_notification_details")
+        ):
+            return self._get_approval_bot_split_group_notification_details(
+                self._get_split_group_leaves_all()
+            )
+        if hasattr(self, "_get_monthly_plan_approval_bot_details"):
+            monthly_details = self._get_monthly_plan_approval_bot_details()
+            if monthly_details:
+                return monthly_details
+        details = self._get_approval_bot_leave_notification_details()
+        leave_type = (self.holiday_status_id.name or "").strip() or "—"
+        days = self.number_of_days or 0.0
+        details.update(
+            {
+                "segment_lines": _(
+                    "• %(type)s: %(period)s (%(days)s ngày)"
+                )
+                % {
+                    "type": leave_type,
+                    "period": details["period"],
+                    "days": ("%g" % days) if days else "0",
+                },
+                "segment_count": 1,
+                "primary": self,
+            }
+        )
+        return details
+
+    def _special_readonly_notification_marker(self):
+        self.ensure_one()
+        if self.split_group_id and self._split_group_is_multi_segment():
+            return "split-%s" % self.split_group_id
+        return "leave-%s" % self.id
+
+    def _notify_special_readonly_notifier_via_approval_bot(self, notifier_user):
+        """Send the configured notifier a detail-only DM, with no approval actions."""
+        self.ensure_one()
+        if not notifier_user or notifier_user.share or not notifier_user.partner_id:
+            return
+        details = self._get_special_readonly_notification_details()
+        primary = details["primary"]
+        marker_key = primary._special_readonly_notification_marker()
+        marker_text = 'data-oe-readonly-timeoff="%s"' % marker_key
+        segment_lines = (details.get("segment_lines") or "").split("\n")
+        segments_html = Markup("<br/>").join(
+            Markup(escape(line)) for line in segment_lines if line
+        )
+        marker = Markup(
+            '<span data-oe-readonly-timeoff="{key}" style="display:none"></span>'
+        ).format(key=escape(marker_key))
+        intro = Markup(
+            _(
+                "<b>ĐƠN XIN NGHỈ PHÉP</b><br/>"
+                "Nhân viên: <b>{requester}</b><br/>"
+                "Mã nhân viên: <b>{id_hrm}</b><br/>"
+                "Bộ phận: <b>{department}</b><br/>"
+                "Thời gian nghỉ: <b>{period}</b><br/>"
+                "Tổng số ngày nghỉ: <b>{total_days}</b><br/>"
+                "Chi tiết:<br/>{segments}<br/>"
+                "Lý do: <b>{reason}</b><br/><br/>"
+            )
+        ).format(
+            requester=escape(str(details["requester"])),
+            id_hrm=escape(str(details["id_hrm"])),
+            department=escape(str(details["department"])),
+            period=escape(str(details["period"])),
+            total_days=escape(str(details["total_days"])),
+            segments=segments_html,
+            reason=escape(str(details["reason"])),
+        )
+        detail_link = primary._notify_discuss_leave_open_button_markup(
+            _("Xem thông tin chi tiết ngày nghỉ phép"),
+            discuss_link_type="approval",
+        )
+        try:
+            bot_user = self.env.ref(
+                "business_discuss_bots.user_bot_approval",
+                raise_if_not_found=False,
+            ) or self.env.ref("base.user_root")
+            chat = (
+                self.env["discuss.channel"]
+                .with_user(bot_user)
+                .sudo()
+                ._get_or_create_chat([notifier_user.partner_id.id], pin=True)
+            )
+            if self.env["mail.message"].sudo().search_count(
+                [
+                    ("model", "=", "discuss.channel"),
+                    ("res_id", "=", chat.id),
+                    ("body", "ilike", marker_text),
+                ],
+                limit=1,
+            ):
+                return
+            chat.with_user(bot_user).sudo().message_post(
+                body=marker + intro + detail_link,
+                message_type="comment",
+                subtype_xmlid="mail.mt_comment",
+            )
+        except Exception:
+            _logger.exception(
+                "time_off_extra_approval: failed read-only notifier DM leave_id=%s user_id=%s",
+                self.id,
+                notifier_user.id,
+            )
+
+    def _notify_special_readonly_notifiers(self):
+        """Notify each configured view-only recipient once per leave/split group."""
+        self.ensure_one()
+        for notifier_user in self._get_special_readonly_notifier_users():
+            self._notify_special_readonly_notifier_via_approval_bot(notifier_user)
+
     def _notify_responsible_current_turn(self, user=None):
         """Notify approver(s) for the active sequential wave (one user, or all parallel directors)."""
         self.ensure_one()
@@ -1186,7 +1371,7 @@ class HrLeaveResponsibleApproval(models.Model):
         stop_positions = self._get_org_chart_stop_positions()
         current_seq = lines[0].sequence if lines else None
         notify_lines = lines
-        if current_seq is not None:
+        if current_seq is not None and not self._get_special_configured_approval_users():
             all_pending = self.responsible_approval_line_ids.filtered(
                 lambda l: l.state == "pending" and l.sequence > current_seq
             ).sorted(lambda l: (l.sequence, l.id))
@@ -1220,6 +1405,7 @@ class HrLeaveResponsibleApproval(models.Model):
             observer = self._get_observer_user()
             if observer and observer not in lines.mapped("user_id"):
                 self._notify_responsible_current_turn_via_approval_bot(observer)
+        self._notify_special_readonly_notifiers()
 
     @api.model
     def _notify_responsible_current_turn_via_approval_bot(self, approver_user):
@@ -1315,7 +1501,7 @@ class HrLeaveResponsibleApproval(models.Model):
         for leave in self:
             if leave.validation_type != "employee_hr_responsibles":
                 continue
-            if leave.holiday_status_id.employee_responsible_approval_mode != "sequential":
+            if leave._responsible_approval_mode() != "sequential":
                 continue
             wave = leave._responsible_pending_current_wave()
             if not wave:
@@ -1452,7 +1638,7 @@ class HrLeaveResponsibleApproval(models.Model):
 
         is_manager = self.env.user.has_group("hr_holidays.group_hr_holidays_manager")
         is_responsible = self.env.user in self._get_responsible_approval_users()
-        mode = self.holiday_status_id.employee_responsible_approval_mode
+        mode = self._responsible_approval_mode()
         if mode == "sequential":
             if not is_responsible:
                 raise UserError(_("Bạn không được phép duyệt đơn nghỉ phép này."))
@@ -1518,7 +1704,7 @@ class HrLeaveResponsibleApproval(models.Model):
 
         is_manager = self.env.user.has_group("hr_holidays.group_hr_holidays_manager")
         is_responsible = self.env.user in self._get_responsible_approval_users()
-        mode = self.holiday_status_id.employee_responsible_approval_mode
+        mode = self._responsible_approval_mode()
         if mode == "sequential":
             if not is_responsible:
                 raise UserError(_("Bạn không được phép từ chối đơn nghỉ phép này."))
@@ -1602,7 +1788,7 @@ class HrLeaveResponsibleApproval(models.Model):
         leaves._ensure_responsible_approval_lines()
         for leave in leaves:
             try:
-                if leave.holiday_status_id.employee_responsible_approval_mode != "sequential":
+                if leave._responsible_approval_mode() != "sequential":
                     continue
                 wave = leave._responsible_pending_current_wave()
                 if not wave:
@@ -1657,7 +1843,7 @@ class HrLeaveResponsibleApproval(models.Model):
         to_timer = self.filtered(
             lambda l: l.validation_type == "employee_hr_responsibles"
             and l.state in ("confirm", "validate1")
-            and (l.holiday_status_id.employee_responsible_approval_mode or "any") == "sequential"
+            and l._responsible_approval_mode() == "sequential"
             and l.responsible_approval_line_ids
         )
         if to_timer:

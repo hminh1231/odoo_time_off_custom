@@ -42,34 +42,27 @@
                        class="o_inner_group"
                        invisible="leave_validation_type != 'employee_hr_responsibles'">
                     <p class="text-muted" colspan="2">
-                        For employees listed below, approval stays sequential by org chart until the Director level.
-                        If "Sequential director approval" is disabled, all Directors are notified and can approve in
-                        parallel. If enabled, Directors approve in sequence according to the second table.
+                        Enter the employee's ID HRM. Every employee in Approvals Employee must approve in
+                        organization-chart order. Read only Notifier recipients only receive the detail message.
                     </p>
                     <field name="special_director_employee_line_ids"
                            colspan="2"
                            nolabel="1">
                         <list string="Special employee list" editable="bottom" create="true" delete="true">
                             <field name="sequence" string="No." readonly="1"/>
-                            <field name="employee_id"
+                            <field name="employee_hrm_id"
                                    string="Employee"
-                                   options="{'no_create': True, 'no_create_edit': True}"
-                                   context="{'list_view_ref': 'hr.view_employee_tree', 'search_view_ref': 'hr.view_employee_filter'}"/>
-                            <field name="org_chart_stop_position" string="Stop at Job Position"/>
-                        </list>
-                    </field>
-                    <field name="special_director_sequential_approval"/>
-                    <field name="special_director_order_line_ids"
-                           colspan="2"
-                           nolabel="1"
-                           invisible="not special_director_sequential_approval">
-                        <list string="Director order" editable="bottom" create="true" delete="true">
-                            <field name="sequence" string="No." readonly="1"/>
-                            <field name="employee_id"
-                                   string="Director"
-                                   domain="[('job_title', '=', 'giám đốc')]"
-                                   options="{'no_create': True, 'no_create_edit': True}"
-                                   context="{'list_view_ref': 'hr.view_employee_tree', 'search_view_ref': 'hr.view_employee_filter'}"/>
+                                   required="1"
+                                   placeholder="ID HRM"/>
+                            <field name="employee_id" column_invisible="True"/>
+                            <field name="approval_employee_ids"
+                                   string="Approvals Employee"
+                                   widget="many2many_tags"
+                                   options="{'no_create': True, 'no_create_edit': True}"/>
+                            <field name="readonly_notifier_employee_ids"
+                                   string="Read only Notifier"
+                                   widget="many2many_tags"
+                                   options="{'no_create': True, 'no_create_edit': True}"/>
                         </list>
                     </field>
                 </group>
