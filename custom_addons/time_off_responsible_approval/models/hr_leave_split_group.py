@@ -595,7 +595,7 @@ class HrLeaveSplitGroup(models.Model):
     def action_responsible_approve(self):
         group_id = self.split_group_id if len(self) == 1 else False
         group_leave_ids = (
-            self._get_split_group_leaves().ids
+            self.sudo()._get_split_group_leaves().ids
             if len(self) == 1 and group_id
             else self.ids
         )

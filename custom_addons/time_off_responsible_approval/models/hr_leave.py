@@ -657,7 +657,93 @@ class HrLeaveResponsibleApproval(models.Model):
         hook = getattr(super(), "_sync_responsible_approval_lines", None)
         if hook:
             hook()
+        self._sync_special_configured_approval_lines()
         self._responsible_auto_skip_unavailable_pending_steps()
+
+    def _sync_special_configured_approval_lines(self):
+        """Align pending approval rows with the current explicit special configuration."""
+        line_model = self.env["hr.leave.responsible.approval"].sudo()
+        for leave in self:
+            if (
+                not leave.id
+                or leave.state not in ("confirm", "validate1")
+                or leave.validation_type != "employee_hr_responsibles"
+            ):
+                continue
+            configured = leave._get_special_configured_approval_users()
+            if not configured:
+                continue
+            approvers = leave._sort_special_approval_users_by_org_chart(configured)
+            expected_ids = set(approvers.ids)
+            lines = leave.sudo().responsible_approval_line_ids
+            existing_by_user = {line.user_id.id: line for line in lines}
+
+            obsolete = lines.filtered(
+                lambda line: line.state == "pending"
+                and line.user_id.id not in expected_ids
+            )
+            if obsolete:
+                obsolete.write(
+                    {
+                        "state": "skipped",
+                        "action_date": fields.Datetime.now(),
+                    }
+                )
+
+            now = fields.Datetime.now()
+            for sequence, user in enumerate(approvers, start=1):
+                line = existing_by_user.get(user.id)
+                if line:
+                    vals = {}
+                    if line.sequence != sequence:
+                        vals["sequence"] = sequence
+                    if line.state == "skipped":
+                        vals.update(
+                            {
+                                "state": "pending",
+                                "action_date": False,
+                                "pending_since": False,
+                            }
+                        )
+                    if vals:
+                        line.write(vals)
+                    continue
+                line_model.create(
+                    {
+                        "leave_id": leave.id,
+                        "user_id": user.id,
+                        "sequence": sequence,
+                        "pending_since": now if sequence == 1 else False,
+                    }
+                )
+
+            current_wave = leave.with_context(
+                **{_SKIP_RESPONSIBLE_AUTO_SKIP_CTX: True}
+            )._responsible_pending_current_wave_raw()
+            missing_since = current_wave.filtered(lambda line: not line.pending_since)
+            if missing_since:
+                missing_since.write({"pending_since": now})
+
+            _logger.info(
+                "time_off_responsible_approval: synchronized special chain "
+                "leave=%s lines=%s approvers=%s states=%s",
+                leave.id,
+                (
+                    leave.sudo()._get_split_group_leaves_all()
+                    if leave.split_group_id
+                    else leave.sudo()
+                )
+                .mapped("holiday_status_id.special_director_employee_line_ids")
+                .filtered(lambda line: line.employee_id == leave.employee_id)
+                .ids,
+                [(user.id, user.login) for user in approvers],
+                [
+                    (line.sequence, line.user_id.id, line.user_id.login, line.state)
+                    for line in leave.sudo().responsible_approval_line_ids.sorted(
+                        lambda item: (item.sequence, item.id)
+                    )
+                ],
+            )
 
     def _responsible_user_can_approve_step(self, user):
         return bool(user and not user.share and user.active)
@@ -1064,12 +1150,19 @@ class HrLeaveResponsibleApproval(models.Model):
         )[:1]
 
     def _get_special_configured_approval_users(self):
-        """Internal users explicitly configured on this special employee row."""
+        """Internal users configured for this employee across the whole split request."""
         self.ensure_one()
-        line = self._get_special_employee_line().sudo()
-        if not line or not line.approval_employee_ids:
+        leaves = self.sudo()
+        if self.split_group_id:
+            leaves = self.sudo()._get_split_group_leaves_all()
+        lines = (
+            leaves.mapped("holiday_status_id.special_director_employee_line_ids")
+            .filtered(lambda line: line.employee_id == self.employee_id)
+            .sudo()
+        )
+        if not lines:
             return self.env["res.users"]
-        return line.approval_employee_ids.mapped("user_id").filtered(
+        return lines.mapped("approval_employee_ids.user_id").filtered(
             lambda user: user and not user.share
         )
 
@@ -1650,11 +1743,14 @@ class HrLeaveResponsibleApproval(models.Model):
         leaves = self.sudo()
         leaves.invalidate_recordset(
             [
+                "extra_approver_user_ids",
                 "approval_actionable_user_ids",
                 "can_responsible_approve",
                 "approval_current_step_label",
             ]
         )
+        leaves._compute_extra_approver_user_ids()
+        leaves.flush_recordset(["extra_approver_user_ids"])
         leaves._compute_approval_actionable_user_ids()
         leaves.flush_recordset(["approval_actionable_user_ids"])
         _logger.info(
@@ -1690,8 +1786,7 @@ class HrLeaveResponsibleApproval(models.Model):
                 )
             )
 
-        if not self.responsible_approval_line_ids:
-            self._init_responsible_approval_lines()
+        self._ensure_responsible_approval_lines()
         self._responsible_approval_before_approve()
 
         user_line = self.responsible_approval_line_ids.filtered(
@@ -1764,8 +1859,7 @@ class HrLeaveResponsibleApproval(models.Model):
                 )
             )
 
-        if not self.responsible_approval_line_ids:
-            self._init_responsible_approval_lines()
+        self._ensure_responsible_approval_lines()
 
         user_line = self.responsible_approval_line_ids.filtered(
             lambda l: l.user_id == self.env.user
