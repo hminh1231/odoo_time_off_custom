@@ -8,8 +8,8 @@ $o-lark-text: #1f2329;
 $o-lark-text-muted: #8f959e;
 $o-lark-border: #e5e6eb;
 $o-lark-red: #f54a45;
-$o-lark-apps-bar-height: 4.5rem;
-$o-lark-apps-bar-icon-size: 1.85rem;
+$o-lark-apps-bar-height: 5.25rem;
+$o-lark-apps-bar-icon-size: 2.1rem;
 
 // Navbar: avatar trái, menu Apps phải — giữ màu tím Odoo mặc định
 @mixin o-mail-lark-main-navbar {
@@ -209,8 +209,8 @@ $o-lark-apps-bar-icon-size: 1.85rem;
         box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.04);
         min-height: 0 !important;
         max-height: $o-lark-apps-bar-height;
-        padding: 0.35rem 0.45rem calc(0.35rem + env(safe-area-inset-bottom, 0px)) !important;
-        gap: 0.2rem !important;
+        padding: 0.45rem 0.5rem calc(0.45rem + env(safe-area-inset-bottom, 0px)) !important;
+        gap: 0.25rem !important;
         overflow: hidden;
         align-items: stretch;
     }
@@ -228,7 +228,7 @@ $o-lark-apps-bar-icon-size: 1.85rem;
     }
 
     .o-mail-LarkAppsBar-slotEmpty {
-        min-height: 3.5rem;
+        min-height: 4rem;
         border: 1px dashed rgba($o-lark-blue, 0.35);
         border-radius: 6px;
         margin: 0.1rem 0.05rem;
@@ -279,8 +279,8 @@ $o-lark-apps-bar-icon-size: 1.85rem;
         max-height: 100%;
 
         .o-mail-LarkAppsBar-label {
-            font-size: 0.72rem;
-            margin-top: 0.12rem;
+            font-size: 0.78rem;
+            margin-top: 0.15rem;
             line-height: 1.15;
             max-height: 1.6em;
         }
@@ -607,5 +607,20 @@ body.o-mail-lark-discuss {
     .o-mail-DiscussContent-threadAvatar img,
     .o-mail-DiscussContent-selfAvatar {
         border-radius: 50% !important;
+    }
+
+    // Composer send — to hơn một chút trên mobile
+    @media (max-width: 767.98px) {
+        .o-mail-Composer-actions button[name="send-message"],
+        .o-mail-Composer .o-mail-Composer-send.rounded-circle {
+            min-width: 2.35rem;
+            min-height: 2.35rem;
+            padding: 0.45rem !important;
+
+            i.fa-paper-plane-o {
+                scale: 1 !important;
+                font-size: 1.1rem;
+            }
+        }
     }
 }
