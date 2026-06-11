@@ -3,7 +3,14 @@
 from odoo import api, fields, models
 
 _APPOINTMENT_MONTHLY_LEAVE_CUTOFF_DAY = 15
-_QUALIFICATION_TRIGGER_FIELDS = frozenset({"ngay_bo_nhiem", "ngay_vao_lam", "job_id"})
+_QUALIFICATION_TRIGGER_FIELDS = frozenset({
+    "ngay_bo_nhiem",
+    "ngay_vao_lam",
+    "job_id",
+    "job_title",
+    "mien",
+    "ma_bo_phan_id",
+})
 
 
 class HrEmployeeTenureMonthlyLeave(models.Model):
@@ -34,6 +41,22 @@ class HrEmployeeTenureMonthlyLeave(models.Model):
             return False
         return True
 
+    def _apply_monthly_leave_bonus_if_newly_eligible(self, before_eligible=None):
+        for employee in self:
+            was_eligible = (
+                before_eligible.get(employee.id)
+                if before_eligible is not None
+                else False
+            )
+            if not was_eligible and employee._monthly_leave_bonus_eligible():
+                employee._apply_monthly_leave_bonus()
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        employees = super().create(vals_list)
+        employees._apply_monthly_leave_bonus_if_newly_eligible(before_eligible={})
+        return employees
+
     def write(self, vals):
         qualification_before = {}
         if _QUALIFICATION_TRIGGER_FIELDS & set(vals):
@@ -43,12 +66,7 @@ class HrEmployeeTenureMonthlyLeave(models.Model):
                 )
         res = super().write(vals)
         if _QUALIFICATION_TRIGGER_FIELDS & set(vals):
-            newly_eligible = self.filtered(
-                lambda employee: not qualification_before.get(employee.id)
-                and employee._monthly_leave_bonus_eligible()
-            )
-            if newly_eligible:
-                newly_eligible._apply_monthly_leave_bonus()
+            self._apply_monthly_leave_bonus_if_newly_eligible(qualification_before)
         return res
 
     @api.model

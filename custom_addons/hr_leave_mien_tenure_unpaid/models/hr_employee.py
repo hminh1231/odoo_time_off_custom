@@ -26,11 +26,17 @@ class HrEmployee(models.Model):
             return self.ma_bo_phan_id.mien
         return False
 
+    def _employee_job_position_key(self):
+        """Normalized job label used for tenure / leave rules."""
+        self.ensure_one()
+        if "job_title" in self._fields and self.job_title:
+            return str(self.job_title).strip().casefold()
+        return (self.job_id.name or "").strip().casefold()
+
     def _is_tenure_unpaid_job_position(self):
         """Chức danh «Nhóm trưởng» — chỉ nhóm này mới áp quy tắc thâm niên/ngày lễ."""
         self.ensure_one()
-        job_name = (self.job_id.name or "").strip().casefold()
-        return job_name == TENURE_UNPAID_JOB_POSITION
+        return self._employee_job_position_key() == TENURE_UNPAID_JOB_POSITION
 
     def _mien_tenure_unpaid_applies(self):
         """Miền Bắc / Nam / ĐTT và chức danh «Nhóm trưởng»."""

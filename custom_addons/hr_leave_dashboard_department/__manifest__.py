@@ -1,6 +1,6 @@
 {
     "name": "Time Off Dashboard — Department on Popup",
-    "version": "19.0.1.0.8",
+    "version": "19.0.1.0.9",
     "category": "Human Resources",
     "summary": "HRM ID, department code, and leave reason on time-off popups (dashboard and overview)",
     "depends": ["hr_holidays", "hr_employee_hrm_detail"],

@@ -29,6 +29,7 @@
                 <attribute name="nolabel" remove="nolabel"/>
                 <attribute name="string">Lý do</attribute>
                 <attribute name="placeholder">Nhập lý do nghỉ phép...</attribute>
+                <attribute name="required">state == 'confirm'</attribute>
             </xpath>
         </field>
     </record>
