@@ -392,8 +392,9 @@ msgstr ""
 #. odoo-python
 #: code:addons/time_off_extra_approval/models/hr_leave.py:0
 msgid ""
-"Bạn đang gửi đơn nghỉ khẩn cấp (thời gian báo trước ngắn hơn quy định). Bạn "
-"có chắc chắn muốn tiếp tục không?"
+"Thời gian báo trước của đơn nghỉ đột xuất này chưa đáp ứng đúng quy định "
+"của Công ty. Bạn vẫn có thể gửi đơn, tuy nhiên đơn nghỉ sẽ được chuyển đến "
+"cấp quản lý để xem xét và phê duyệt. Bạn có muốn tiếp tục không?"
 msgstr ""
 
 #. module: time_off_extra_approval

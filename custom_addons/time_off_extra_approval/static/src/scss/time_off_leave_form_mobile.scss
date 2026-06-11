@@ -35,8 +35,8 @@
                 flex-direction: column;
                 align-items: center;
                 justify-content: center;
-                width: calc(100vw - 2 * 0.1rem) !important;
-                max-width: calc(100vw - 2 * 0.1rem);
+                width: calc(100vw - 2 * (0.1rem + #{map-get($spacers, 1)})) !important;
+                max-width: calc(100vw - 2 * (0.1rem + #{map-get($spacers, 1)}));
                 margin-left: auto !important;
                 margin-right: auto !important;
                 text-align: center;
@@ -65,79 +65,87 @@
         }
     }
 
-    // Calendar picker: nearly full screen width (0.1rem edge gutter).
-    $o-hr-leave-picker-edge: 0.1rem;
+    // Calendar picker: fit 7 columns inside viewport (edge gutter + 1 spacer unit inset).
+    $o-hr-leave-picker-edge: calc(0.1rem + #{map-get($spacers, 1)});
     $o-hr-leave-picker-width: calc(100vw - 2 * #{$o-hr-leave-picker-edge});
-    $o-hr-leave-picker-cell: calc(#{$o-hr-leave-picker-width} / 7);
 
     .modal .o_hr_leave_form .o_datetime_picker,
     body.modal-open:has(.modal .o_hr_leave_form) .o_popover.popover:has(.o_datetime_picker) .o_datetime_picker {
         --DateTimePicker__Day-template-rows: 6;
         --DateTimePicker__Day-template-columns: 7;
+        box-sizing: border-box;
         width: $o-hr-leave-picker-width !important;
         max-width: $o-hr-leave-picker-width;
         margin-left: auto;
         margin-right: auto;
-        padding: 0.65rem 0.35rem !important;
-        gap: 0.5rem !important;
+        padding: map-get($spacers, 2) map-get($spacers, 1) !important;
+        gap: map-get($spacers, 1) !important;
+        overflow: hidden;
 
         .o_datetime_picker_header {
-            min-height: 2.75rem;
+            min-height: 2.5rem;
             align-items: center;
-            margin-bottom: 0.15rem;
+            margin-bottom: 0.1rem;
 
             .btn {
-                min-width: 2.75rem;
-                min-height: 2.75rem;
-                padding: 0.5rem;
-                font-size: 1.1rem;
+                min-width: 2.5rem;
+                min-height: 2.5rem;
+                padding: map-get($spacers, 1);
+                font-size: 1rem;
             }
 
             .o_zoom_out {
-                font-size: 1.05rem;
+                font-size: 1rem;
             }
         }
 
         .o_date_picker {
             width: 100%;
-            gap: 0.15rem;
+            max-width: 100%;
+            min-width: 0;
+            gap: 0.1rem;
+            overflow: hidden;
         }
 
         .o_day_of_week_cell {
-            min-height: 2rem;
-            font-size: 0.85rem;
+            min-width: 0;
+            min-height: 1.75rem;
+            font-size: 0.8rem;
         }
 
         .o_date_item_cell {
             aspect-ratio: 1;
-            min-width: $o-hr-leave-picker-cell;
-            min-height: $o-hr-leave-picker-cell;
-            font-size: 1.05rem;
+            min-width: 0;
+            max-width: 100%;
+            width: 100%;
+            font-size: 0.95rem;
             font-weight: 500;
 
             > div {
-                font-size: 1.05rem;
+                font-size: 0.95rem;
                 line-height: 1;
             }
 
             &.o_today > div {
-                width: 85% !important;
-                min-height: 85%;
-                font-size: 1.1rem;
+                width: 80% !important;
+                min-height: 80%;
+                font-size: 1rem;
             }
         }
     }
 
     body.modal-open:has(.modal .o_hr_leave_form) {
         .o_popover.popover:has(.o_datetime_picker) {
+            box-sizing: border-box;
             position: fixed !important;
             left: $o-hr-leave-picker-edge !important;
-            right: $o-hr-leave-picker-edge !important;
+            right: auto !important;
             transform: none !important;
             width: $o-hr-leave-picker-width !important;
             max-width: $o-hr-leave-picker-width !important;
             margin-left: 0 !important;
             margin-right: 0 !important;
+            overflow: hidden;
 
             > .popover-arrow {
                 display: none;

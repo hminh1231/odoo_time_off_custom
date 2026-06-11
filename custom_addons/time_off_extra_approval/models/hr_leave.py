@@ -61,6 +61,20 @@ class HolidaysRequest(models.Model):
         help="Warning marker for approvers when this is emergency leave. "
         "Empty for employees who only have a work handover role on this request.",
     )
+    request_calendar_days_display = fields.Char(
+        string="Calendar days",
+        compute="_compute_request_calendar_days_display",
+        help="Inclusive calendar days between request start and end dates.",
+    )
+
+    @api.depends("request_date_from", "request_date_to")
+    def _compute_request_calendar_days_display(self):
+        for leave in self:
+            if not leave.request_date_from or not leave.request_date_to:
+                leave.request_calendar_days_display = False
+                continue
+            total_days = (leave.request_date_to - leave.request_date_from).days + 1
+            leave.request_calendar_days_display = _("%g %s") % (total_days, _("days"))
 
     def _action_return_reload_leave_form(self):
         """call_button only forwards dict actions to the web client; booleans are dropped, so the form must reload explicitly."""
@@ -608,8 +622,9 @@ class HolidaysRequest(models.Model):
             "needs_confirmation": True,
             "title": _("Xác nhận nghỉ khẩn cấp"),
             "message": _(
-                "Bạn đang gửi đơn nghỉ khẩn cấp (thời gian báo trước ngắn hơn quy định). "
-                "Bạn có chắc chắn muốn tiếp tục không?"
+                "Thời gian báo trước của đơn nghỉ đột xuất này chưa đáp ứng đúng quy định của Công ty. "
+                "Bạn vẫn có thể gửi đơn, tuy nhiên đơn nghỉ sẽ được chuyển đến cấp quản lý để xem xét và phê duyệt. "
+                "Bạn có muốn tiếp tục không?"
             ),
         }
 
@@ -701,8 +716,9 @@ class HolidaysRequest(models.Model):
                 "set_con_lai_zero_confirmed": False,
                 "title": _("Xác nhận nghỉ khẩn cấp"),
                 "message": _(
-                    "Bạn đang gửi đơn nghỉ khẩn cấp (thời gian báo trước ngắn hơn quy định). "
-                    "Bạn có chắc chắn muốn tiếp tục không?"
+                    "Thời gian báo trước của đơn nghỉ đột xuất này chưa đáp ứng đúng quy định của Công ty. "
+                    "Bạn vẫn có thể gửi đơn, tuy nhiên đơn nghỉ sẽ được chuyển đến cấp quản lý để xem xét và phê duyệt. "
+                    "Bạn có muốn tiếp tục không?"
                 ),
             }
         if need_con_lai:

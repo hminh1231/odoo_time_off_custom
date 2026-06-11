@@ -7,7 +7,7 @@
         <field name="arch" type="xml">
             <xpath expr="//div[@id='full_date']/div[last()]" position="replace">
                 <div class="o_hr_leave_duration_display">
-                    <field name="duration_display" readonly="1" class="w-auto"/>
+                    <field name="request_calendar_days_display" readonly="1" class="w-auto"/>
                 </div>
             </xpath>
         </field>
