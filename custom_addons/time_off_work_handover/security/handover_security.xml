@@ -37,7 +37,7 @@
         <record id="hr_leave_handover_acceptance_approver_read_rule" model="ir.rule">
             <field name="name">Work handover acceptance: approver read-only</field>
             <field name="model_id" ref="model_hr_leave_handover_acceptance"/>
-            <field name="domain_force">['|', '|', ('leave_id.responsible_approval_line_ids.user_id', '=', user.id), ('leave_id.multi_approval_line_ids.approver_user_id', '=', user.id), ('leave_id.extra_approver_user_ids', 'in', [user.id])]</field>
+            <field name="domain_force">['|', '|', '|', ('leave_id.responsible_approval_line_ids.user_id', '=', user.id), ('leave_id.multi_approval_line_ids.approver_user_id', '=', user.id), ('leave_id.extra_approver_user_ids', 'in', [user.id]), ('leave_id.special_readonly_notifier_user_ids', 'in', [user.id])]</field>
             <field name="groups" eval="[(4, ref('base.group_user'))]"/>
             <field name="perm_read" eval="True"/>
             <field name="perm_write" eval="False"/>

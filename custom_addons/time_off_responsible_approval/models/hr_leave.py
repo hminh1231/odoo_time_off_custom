@@ -97,6 +97,17 @@ class HrLeaveResponsibleApproval(models.Model):
         readonly=True,
         help="Users who can approve/refuse this leave based on the leave type configuration.",
     )
+    special_readonly_notifier_user_ids = fields.Many2many(
+        comodel_name="res.users",
+        relation="hr_leave_special_readonly_notifier_user_rel",
+        column1="leave_id",
+        column2="user_id",
+        string="Special read-only notifiers",
+        compute="_compute_special_readonly_notifier_user_ids",
+        store=True,
+        readonly=True,
+        help="Users configured as read-only notifiers for this requester's special-employee flow.",
+    )
     approval_actionable_user_ids = fields.Many2many(
         comodel_name="res.users",
         relation="hr_leave_approval_actionable_user_rel",
@@ -486,6 +497,18 @@ class HrLeaveResponsibleApproval(models.Model):
                 dept_users = dept_users.filtered(lambda u: u and not u.share)
                 users |= dept_users
             leave.extra_approver_user_ids = users
+
+    @api.depends(
+        "employee_id",
+        "split_group_id",
+        "holiday_status_id",
+        "holiday_status_id.special_director_employee_line_ids.employee_id",
+        "holiday_status_id.special_director_employee_line_ids.readonly_notifier_employee_ids",
+        "holiday_status_id.special_director_employee_line_ids.readonly_notifier_employee_ids.user_id",
+    )
+    def _compute_special_readonly_notifier_user_ids(self):
+        for leave in self:
+            leave.special_readonly_notifier_user_ids = leave._get_special_readonly_notifier_users()
 
     @api.depends(
         "state",
