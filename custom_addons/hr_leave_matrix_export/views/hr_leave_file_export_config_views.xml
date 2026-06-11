@@ -7,6 +7,7 @@
         <field name="arch" type="xml">
             <list string="Trích xuất file"
                   class="o_hr_leave_file_export_config_list"
+                  js_class="hr_leave_file_export_config_list"
                   editable="bottom"
                   create="true"
                   delete="true">
@@ -16,11 +17,12 @@
                        required="1"
                        placeholder="ID HRM"
                        width="120px"/>
+                <field name="employee_name" string="Tên nhân viên" readonly="1" width="160px"/>
                 <field name="employee_id" column_invisible="True"/>
-                <field name="export_leave_ch" string="Nghỉ phép CH" width="108px"/>
-                <field name="export_leave_vp" string="Nghỉ phép VP" width="108px"/>
-                <field name="export_import_capnhatcong_ch" string="Import công CH" width="108px"/>
-                <field name="export_import_capnhatcong_vp" string="Import công VP" width="108px"/>
+                <field name="export_leave_ch" string="Nghỉ phép CH" width="108px" widget="boolean"/>
+                <field name="export_leave_vp" string="Nghỉ phép VP" width="108px" widget="boolean"/>
+                <field name="export_import_capnhatcong_ch" string="Import công CH" width="152px" widget="boolean"/>
+                <field name="export_import_capnhatcong_vp" string="Import công VP" width="152px" widget="boolean"/>
             </list>
         </field>
     </record>
@@ -31,6 +33,7 @@
         <field name="arch" type="xml">
             <search string="Trích xuất file">
                 <field name="employee_hrm_id" string="ID nhân viên"/>
+                <field name="employee_name" string="Tên nhân viên"/>
                 <field name="employee_id"/>
                 <separator/>
                 <filter string="File nghỉ phép VP" name="leave_vp" domain="[('export_leave_vp', '=', True)]"/>

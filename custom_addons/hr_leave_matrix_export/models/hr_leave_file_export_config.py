@@ -36,6 +36,12 @@ class HrLeaveFileExportConfig(models.Model):
         ondelete="cascade",
         index=True,
     )
+    employee_name = fields.Char(
+        string="Employee Name",
+        related="employee_id.name",
+        readonly=True,
+        store=True,
+    )
     export_leave_ch = fields.Boolean(string="Nghỉ phép CH", default=False)
     export_leave_vp = fields.Boolean(string="Nghỉ phép VP", default=False)
     export_import_capnhatcong_ch = fields.Boolean(

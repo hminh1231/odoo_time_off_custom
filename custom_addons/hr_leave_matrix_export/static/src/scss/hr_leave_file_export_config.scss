@@ -1,25 +1,17 @@
 // Compact, color-coded layout — left-aligned Excel-style grid.
 
-$o-export-config-stt-bg: #eef1f4;
 $o-export-config-stt-head: #d5dbe1;
-
-$o-export-config-id-bg: #e8f4fc;
 $o-export-config-id-head: #bdd7ee;
-
-$o-export-config-leave-ch-bg: #e8f8ef;
+$o-export-config-name-head: #d4e6f1;
 $o-export-config-leave-ch-head: #a9dfbf;
-
-$o-export-config-leave-vp-bg: #e3f0fb;
 $o-export-config-leave-vp-head: #85c1e9;
-
-$o-export-config-import-ch-bg: #fef9e7;
 $o-export-config-import-ch-head: #f9e79f;
-
-$o-export-config-import-vp-bg: #f4ecf7;
 $o-export-config-import-vp-head: #d2b4de;
 
-$o-export-config-checked: #27ae60;
+$o-export-config-checked-cell: #b8d4f0;
+$o-export-config-checked-mark: #1f6fb2;
 $o-export-config-border: #b4b4b4;
+$o-export-config-row-bg: #ffffff;
 
 .o_list_view.o_hr_leave_file_export_config_list {
     --ListRenderer-margin-x: 0;
@@ -33,9 +25,9 @@ $o-export-config-border: #b4b4b4;
     }
 
     .o_list_table {
-        width: 620px !important;
-        min-width: 620px;
-        max-width: 620px;
+        width: 860px !important;
+        min-width: 860px;
+        max-width: 860px;
         table-layout: fixed;
         border-collapse: collapse;
         border: 1px solid $o-export-config-border;
@@ -55,12 +47,24 @@ $o-export-config-border: #b4b4b4;
     .o_list_table th {
         font-size: 0.8125rem;
         font-weight: 700;
-        line-height: 1.2;
+        line-height: 1.25;
         color: #1f2933;
     }
 
+    .o_list_table tbody td {
+        background-color: $o-export-config-row-bg;
+    }
+
     .o_list_table tbody tr:hover td {
-        filter: brightness(0.98);
+        background-color: #fafafa;
+    }
+
+    .o_list_table tbody tr:hover td:has(.form-check-input:checked) {
+        background-color: $o-export-config-checked-cell;
+    }
+
+    .o_list_table tbody tr:hover td.o_data_cell[name^="export_"]:not(:has(.form-check-input:checked)) {
+        background-color: #fff !important;
     }
 
     .o_list_table th.o_list_record_selector,
@@ -79,7 +83,6 @@ $o-export-config-border: #b4b4b4;
         min-width: 3rem !important;
         max-width: 3rem !important;
         text-align: center;
-        background-color: $o-export-config-stt-bg;
     }
 
     .o_list_table th[data-name="sequence"] {
@@ -92,11 +95,23 @@ $o-export-config-border: #b4b4b4;
         min-width: 7.5rem !important;
         max-width: 7.5rem !important;
         text-align: left;
-        background-color: $o-export-config-id-bg;
     }
 
     .o_list_table th[data-name="employee_hrm_id"] {
         background-color: $o-export-config-id-head;
+        text-align: center;
+    }
+
+    .o_list_table th[data-name="employee_name"],
+    .o_list_table td.o_data_cell[name="employee_name"] {
+        width: 10rem !important;
+        min-width: 10rem !important;
+        max-width: 10rem !important;
+        text-align: left;
+    }
+
+    .o_list_table th[data-name="employee_name"] {
+        background-color: $o-export-config-name-head;
         text-align: center;
     }
 
@@ -118,43 +133,84 @@ $o-export-config-border: #b4b4b4;
 
     .o_list_table th[data-name="export_leave_ch"],
     .o_list_table th[data-name="export_leave_vp"],
-    .o_list_table th[data-name="export_import_capnhatcong_ch"],
-    .o_list_table th[data-name="export_import_capnhatcong_vp"] {
+    .o_list_table td.o_data_cell[name="export_leave_ch"],
+    .o_list_table td.o_data_cell[name="export_leave_vp"] {
         width: 6.75rem !important;
         min-width: 6.75rem !important;
         max-width: 6.75rem !important;
         text-align: center;
     }
 
-    .o_list_table td.o_data_cell[name="export_leave_ch"] {
-        background-color: $o-export-config-leave-ch-bg;
-    }
-
-    .o_list_table td.o_data_cell[name="export_leave_vp"] {
-        background-color: $o-export-config-leave-vp-bg;
-    }
-
-    .o_list_table td.o_data_cell[name="export_import_capnhatcong_ch"] {
-        background-color: $o-export-config-import-ch-bg;
-    }
-
+    .o_list_table th[data-name="export_import_capnhatcong_ch"],
+    .o_list_table th[data-name="export_import_capnhatcong_vp"],
+    .o_list_table td.o_data_cell[name="export_import_capnhatcong_ch"],
     .o_list_table td.o_data_cell[name="export_import_capnhatcong_vp"] {
-        background-color: $o-export-config-import-vp-bg;
+        width: 9.5rem !important;
+        min-width: 9.5rem !important;
+        max-width: 9.5rem !important;
+        text-align: center;
     }
 
     .o_list_table td.o_boolean_toggle_cell,
     .o_list_table td.o_boolean_cell {
-        width: 6.75rem !important;
-        min-width: 6.75rem !important;
-        max-width: 6.75rem !important;
         text-align: center;
     }
 
-    .o_list_table td.o_data_cell[name^="export_"] {
-        .form-check-input:checked {
-            background-color: $o-export-config-checked;
-            border-color: $o-export-config-checked;
+    // Keep checkbox centered (Odoo sets width:100% on widgets in o_selected_row).
+    .o_list_table tbody td.o_data_cell[name^="export_"] {
+        text-align: center !important;
+
+        > .o-checkbox,
+        > .o_field_widget.o_field_boolean {
+            display: inline-block !important;
+            width: auto !important;
+            max-width: 100%;
+            margin: 0 auto;
+            vertical-align: middle;
         }
+
+        .o-checkbox {
+            margin: 0 !important;
+            padding: 0;
+            width: fit-content;
+
+            .form-check-input {
+                float: none !important;
+                margin: 0 !important;
+                position: static;
+                width: 1rem;
+                height: 1rem;
+            }
+
+            .form-check-input:not(:checked) {
+                background-color: #fff !important;
+                border: 2px solid #000 !important;
+                box-shadow: none !important;
+            }
+
+            .form-check-input:checked {
+                background-color: $o-export-config-checked-mark;
+                border: 2px solid $o-export-config-checked-mark !important;
+            }
+
+            .form-check-label {
+                display: none !important;
+                width: 0;
+                padding: 0;
+                margin: 0;
+            }
+        }
+    }
+
+    .o_data_row.o_selected_row > td.o_data_cell[name^="export_"] {
+        > .o_field_widget.o_field_boolean:not(.o_readonly_modifier) {
+            width: auto !important;
+            display: inline-block !important;
+        }
+    }
+
+    .o_list_table tbody td.o_data_cell[name^="export_"]:has(.form-check-input:checked) {
+        background-color: $o-export-config-checked-cell !important;
     }
 
     .o_list_table th.o_list_open_form_view,
