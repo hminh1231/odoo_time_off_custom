@@ -29,24 +29,24 @@ class TestMonthlyLeaveAppointmentBonus(TransactionCase):
         return self.env["hr.employee"].create(values)
 
     def test_create_with_qualifying_dates_grants_bonus(self):
-        employee = self._create_employee(ngay_bo_nhiem=date(2026, 3, 10))
+        employee = self._create_employee(ngay_bo_nhiem=date(2026, 3, 1))
         self.assertEqual(employee.tong_so_phep, 1.0)
         self.assertEqual(
             employee.last_monthly_leave_bonus_date,
             self.today.replace(day=1),
         )
 
-    def test_appointment_before_day_15_grants_bonus_on_save(self):
+    def test_appointment_on_day_1_grants_bonus_on_save(self):
         employee = self._create_employee()
 
-        employee.write({"ngay_bo_nhiem": date(2026, 3, 10)})
+        employee.write({"ngay_bo_nhiem": date(2026, 3, 1)})
 
         self.assertEqual(employee.tong_so_phep, 1.0)
 
-    def test_appointment_on_day_15_blocks_bonus(self):
+    def test_appointment_after_day_1_blocks_bonus(self):
         employee = self._create_employee()
 
-        employee.write({"ngay_bo_nhiem": date(2026, 3, 15)})
+        employee.write({"ngay_bo_nhiem": date(2026, 3, 10)})
 
         self.assertEqual(employee.tong_so_phep, 0.0)
 
@@ -60,7 +60,7 @@ class TestMonthlyLeaveAppointmentBonus(TransactionCase):
         self.assertEqual(employee.tong_so_phep, 0.0)
 
     def test_legacy_current_month_bonus_is_reversed_on_departure(self):
-        employee = self._create_employee(ngay_bo_nhiem=date(2026, 3, 10))
+        employee = self._create_employee(ngay_bo_nhiem=date(2026, 3, 1))
         employee.with_context(
             skip_departure_monthly_leave_cutoff=True,
             skip_departure_monthly_leave_reversal=True,
@@ -76,13 +76,37 @@ class TestMonthlyLeaveAppointmentBonus(TransactionCase):
 
         self.assertEqual(employee.tong_so_phep, 0.0)
 
-    def test_under_four_years_blocks_bonus(self):
+    def test_team_leader_under_four_years_blocks_bonus(self):
         employee = self._create_employee(
             ngay_vao_lam=self.today - relativedelta(years=3),
         )
 
-        employee.write({"ngay_bo_nhiem": date(2026, 3, 10)})
+        employee.write({"ngay_bo_nhiem": date(2026, 3, 1)})
 
+        self.assertEqual(employee.tong_so_phep, 0.0)
+
+    def test_non_team_leader_grants_bonus_without_four_years(self):
+        employee = self._create_employee(
+            job_title="nhân viên",
+            ngay_vao_lam=self.today - relativedelta(years=1),
+            ngay_bo_nhiem=date(2026, 3, 1),
+        )
+        self.assertEqual(employee.tong_so_phep, 1.0)
+
+    def test_non_team_leader_requires_appointment_day_1(self):
+        employee = self._create_employee(
+            job_title="nhân viên",
+            ngay_vao_lam=False,
+            ngay_bo_nhiem=date(2026, 3, 10),
+        )
+        self.assertEqual(employee.tong_so_phep, 0.0)
+
+    def test_outside_mien_blocks_bonus_for_any_job(self):
+        employee = self._create_employee(
+            mien=False,
+            job_title="nhân viên",
+            ngay_bo_nhiem=date(2026, 3, 1),
+        )
         self.assertEqual(employee.tong_so_phep, 0.0)
 
     def test_ma_bo_phan_mien_and_job_title_grant_bonus_on_create(self):
@@ -92,14 +116,63 @@ class TestMonthlyLeaveAppointmentBonus(TransactionCase):
         employee = self._create_employee(
             mien=False,
             ma_bo_phan_id=store.id,
-            ngay_bo_nhiem=date(2026, 3, 10),
+            ngay_bo_nhiem=date(2026, 3, 1),
         )
         self.assertEqual(employee.tong_so_phep, 1.0)
+
+    def test_already_eligible_without_prior_bonus_grants_on_write(self):
+        employee = self._create_employee(
+            job_title="nhân viên",
+            ngay_bo_nhiem=date(2026, 3, 1),
+        )
+        employee.write({"tong_so_phep": 0.0, "last_monthly_leave_bonus_date": False})
+
+        employee.write({"ma_bo_phan_id": employee.ma_bo_phan_id.id})
+
+        self.assertEqual(employee.tong_so_phep, 1.0)
+
+    def test_version_job_title_write_grants_bonus(self):
+        employee = self.env["hr.employee"].create(
+            {
+                "name": "Version Title Employee",
+                "mien": "ĐTT",
+                "ngay_bo_nhiem": date(2026, 6, 1),
+                "tong_so_phep": 0.0,
+            }
+        )
+        employee.write({"tong_so_phep": 0.0, "last_monthly_leave_bonus_date": False})
+        version = employee.version_id or employee.current_version_id
+        self.assertTrue(version)
+        version.write({"job_title": "cửa hàng trưởng"})
+        self.assertEqual(employee.tong_so_phep, 1.0)
+
+    def test_correction_to_ineligible_removes_current_month_bonus(self):
+        employee = self._create_employee(ngay_bo_nhiem=date(2026, 3, 1))
+        self.assertEqual(employee.tong_so_phep, 1.0)
+
+        employee.write({"ngay_bo_nhiem": date(2026, 3, 10)})
+
+        self.assertEqual(employee.tong_so_phep, 0.0)
+        self.assertFalse(employee.last_monthly_leave_bonus_date)
+
+    def test_correction_back_to_eligible_regrants_bonus(self):
+        employee = self._create_employee(ngay_bo_nhiem=date(2026, 3, 1))
+        self.assertEqual(employee.tong_so_phep, 1.0)
+
+        employee.write({"ngay_bo_nhiem": date(2026, 3, 10)})
+        self.assertEqual(employee.tong_so_phep, 0.0)
+
+        employee.write({"ngay_bo_nhiem": date(2026, 3, 1)})
+        self.assertEqual(employee.tong_so_phep, 1.0)
+        self.assertEqual(
+            employee.last_monthly_leave_bonus_date,
+            self.today.replace(day=1),
+        )
 
     def test_cron_applies_bonus_for_eligible_employee(self):
         employee = self._create_employee(
             ngay_vao_lam=date(2020, 1, 1),
-            ngay_bo_nhiem=date(2020, 1, 5),
+            ngay_bo_nhiem=date(2020, 1, 1),
         )
 
         self.assertEqual(employee.tong_so_phep, 1.0)

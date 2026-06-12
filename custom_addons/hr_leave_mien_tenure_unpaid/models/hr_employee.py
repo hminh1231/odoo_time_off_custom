@@ -40,12 +40,17 @@ class HrEmployee(models.Model):
         self.ensure_one()
         return self._employee_job_position_key() == TENURE_UNPAID_JOB_POSITION
 
+    def _mien_monthly_leave_bonus_applies(self):
+        """Miền Bắc / Nam / ĐTT — áp dụng cộng phép hàng tháng cho mọi chức danh."""
+        self.ensure_one()
+        return self._get_leave_mien_for_rules() in MIEN_TENURE_UNPAID_CODES
+
     def _mien_tenure_unpaid_applies(self):
         """Miền Bắc / Nam / ĐTT và chức danh «Nhóm trưởng»."""
         self.ensure_one()
         if not self._is_tenure_unpaid_job_position():
             return False
-        return self._get_leave_mien_for_rules() in MIEN_TENURE_UNPAID_CODES
+        return self._mien_monthly_leave_bonus_applies()
 
     def _mien_tenure_has_four_years(self, reference_date=None):
         """Đủ 4 năm làm việc tính từ Ngày vào làm tới ngày tham chiếu (mặc định: hôm nay)."""

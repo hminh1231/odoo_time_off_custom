@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     "name": "Time Off — Miền tenure unpaid (O)",
-    "version": "19.0.1.0.9",
+    "version": "19.0.1.0.14",
     "category": "Human Resources",
     "summary": "Bắt buộc (O) khi chưa đủ 4 năm hoặc nghỉ trùng ngày lễ (Bắc, Nam, ĐTT)",
     "description": """
@@ -13,8 +13,11 @@
           **Nghỉ không lương (O)**.
         * **Đủ 4 năm** nhưng khoảng nghỉ có ngày trùng **Public Holiday** → bắt buộc
           **Nghỉ không lương (O)**.
-        * **Nhóm trưởng** đủ **4 năm** và **Ngày bổ nhiệm** trước ngày 15 → hệ thống
-          tự động cộng **+1** vào **Tổng số phép** mỗi tháng.
+        * Cộng **+1 Tổng số phép** mỗi tháng (miền **Bắc / Nam / ĐTT**):
+          **Ngày bổ nhiệm** phải là **ngày 1**; **Nhóm trưởng** thêm điều kiện đủ
+          **4 năm** từ **Ngày vào làm**; chức danh khác không xét thâm niên.
+        * Quy tắc bắt buộc **(O)** khi chưa đủ 4 năm hoặc nghỉ trùng ngày lễ vẫn chỉ
+          áp dụng cho chức danh **Nhóm trưởng**.
     """,
     "depends": [
         "hr_holidays",

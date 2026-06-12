@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
     <record id="ir_cron_apply_monthly_leave_bonus" model="ir.cron">
-        <field name="name">Cộng phép hàng tháng (Nhóm trưởng đủ 4 năm)</field>
+        <field name="name">Cộng phép hàng tháng (Bắc/Nam/ĐTT đủ 4 năm)</field>
         <field name="model_id" ref="hr.model_hr_employee"/>
         <field name="state">code</field>
         <field name="code">model.cron_apply_monthly_leave_bonus()</field>
