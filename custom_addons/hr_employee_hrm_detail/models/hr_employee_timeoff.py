@@ -346,6 +346,35 @@ class HrEmployeeTimeoff(models.Model):
                 bonus_month.month,
             )
 
+    def _restore_departure_monthly_leave_reversal(self):
+        """Undo the previous departure deduction before recalculating it."""
+        for employee in self.sudo().filtered(
+            "departure_monthly_leave_reversal_date"
+        ):
+            reversed_month = employee.departure_monthly_leave_reversal_date
+            employee.with_context(
+                **{
+                    _SKIP_DEPARTURE_MONTHLY_LEAVE_CUTOFF_CTX: True,
+                    _SKIP_DEPARTURE_MONTHLY_LEAVE_REVERSAL_CTX: True,
+                }
+            ).write(
+                {
+                    "tong_so_phep": (employee.tong_so_phep or 0.0) + 1.0,
+                    "departure_monthly_leave_reversal_date": False,
+                }
+            )
+            _logger.info(
+                "Restored departure leave deduction for employee %s from %s-%02d",
+                employee.id,
+                reversed_month.year,
+                reversed_month.month,
+            )
+
+    def _sync_departure_monthly_leave_reversal(self, bonus_date):
+        """Recalculate the departure deduction after its date is corrected."""
+        self._restore_departure_monthly_leave_reversal()
+        self._reverse_departure_monthly_leave_bonus(bonus_date)
+
     def _is_single_day_monthly_leave_bonus(self, new_total):
         self.ensure_one()
         return isinstance(new_total, (int, float)) and abs(
@@ -407,7 +436,7 @@ class HrEmployeeTimeoff(models.Model):
                 _SKIP_DEPARTURE_MONTHLY_LEAVE_REVERSAL_CTX
             )
         ):
-            self._reverse_departure_monthly_leave_bonus(
+            self._sync_departure_monthly_leave_reversal(
                 self._monthly_leave_bonus_date()
             )
         return result

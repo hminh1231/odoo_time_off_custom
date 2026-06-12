@@ -96,6 +96,60 @@ class TestMonthlyLeaveDeparture(TransactionCase):
 
         self.assertEqual(self.employee.tong_so_phep, 4)
 
+    def test_corrected_early_departure_recomputes_exactly_one_deduction(self):
+        employee = self.employee.with_context(
+            monthly_leave_bonus_date=date(2026, 10, 1)
+        )
+        employee.write({"ngay_nghi_viec": date(2026, 10, 15)})
+
+        employee.write({"ngay_nghi_viec": date(2026, 10, 18)})
+
+        self.assertEqual(self.employee.tong_so_phep, 4)
+        self.assertEqual(
+            self.employee.departure_monthly_leave_reversal_date,
+            date(2026, 10, 1),
+        )
+
+    def test_corrected_departure_after_cutoff_restores_deduction(self):
+        employee = self.employee.with_context(
+            monthly_leave_bonus_date=date(2026, 10, 1)
+        )
+        employee.write({"ngay_nghi_viec": date(2026, 10, 15)})
+
+        employee.write({"ngay_nghi_viec": date(2026, 10, 20)})
+
+        self.assertEqual(self.employee.tong_so_phep, 5)
+        self.assertFalse(
+            self.employee.departure_monthly_leave_reversal_date
+        )
+
+    def test_clearing_departure_date_restores_deduction(self):
+        employee = self.employee.with_context(
+            monthly_leave_bonus_date=date(2026, 10, 1)
+        )
+        employee.write({"ngay_nghi_viec": date(2026, 10, 15)})
+
+        employee.write({"ngay_nghi_viec": False})
+
+        self.assertEqual(self.employee.tong_so_phep, 5)
+        self.assertFalse(
+            self.employee.departure_monthly_leave_reversal_date
+        )
+
+    def test_correcting_departure_to_early_date_applies_deduction(self):
+        employee = self.employee.with_context(
+            monthly_leave_bonus_date=date(2026, 10, 1)
+        )
+        employee.write({"ngay_nghi_viec": date(2026, 10, 20)})
+
+        employee.write({"ngay_nghi_viec": date(2026, 10, 15)})
+
+        self.assertEqual(self.employee.tong_so_phep, 4)
+        self.assertEqual(
+            self.employee.departure_monthly_leave_reversal_date,
+            date(2026, 10, 1),
+        )
+
     def test_future_departure_does_not_remove_current_month_bonus(self):
         self._record_monthly_bonus(date(2026, 10, 1))
 
