@@ -17,6 +17,9 @@ _MONTHLY_LEAVE_BONUS_DATE_CTX = "monthly_leave_bonus_date"
 _SKIP_DEPARTURE_MONTHLY_LEAVE_CUTOFF_CTX = (
     "skip_departure_monthly_leave_cutoff"
 )
+_SKIP_DEPARTURE_MONTHLY_LEAVE_REVERSAL_CTX = (
+    "skip_departure_monthly_leave_reversal"
+)
 _DEPARTURE_MONTHLY_LEAVE_CUTOFF_DAY = 20
 # HR-only fields that time-off logic must read on the user's own employee record.
 _TIMEOFF_SELF_READ_FIELDS = frozenset({"version_id", "mien", "ma_bo_phan_id"})
@@ -198,6 +201,16 @@ class HrEmployeeTimeoff(models.Model):
 
     phep_chuan = fields.Float(string="Phép chuẩn")
     tong_so_phep = fields.Float(string="Tổng số phép")
+    last_monthly_leave_bonus_date = fields.Date(
+        string="Tháng cộng phép gần nhất",
+        readonly=True,
+        copy=False,
+    )
+    departure_monthly_leave_reversal_date = fields.Date(
+        string="Tháng đã trừ phép do nghỉ việc",
+        readonly=True,
+        copy=False,
+    )
     da_su_dung = fields.Float(
         string="Số phép đã sử dụng",
         compute="_compute_time_off_summary",
@@ -282,18 +295,69 @@ class HrEmployeeTimeoff(models.Model):
         bonus_date = bonus_date or self._monthly_leave_bonus_date()
         return not self._blocks_monthly_leave_bonus(bonus_date)
 
+    def _legacy_monthly_leave_bonus_was_granted(self, bonus_date):
+        """Whether an untracked pre-upgrade monthly credit can be inferred."""
+        self.ensure_one()
+        return False
+
     def _apply_monthly_leave_bonus(self, bonus_date=None):
         """Add one paid-leave day to ``tong_so_phep`` when eligible."""
         bonus_date = bonus_date or self._monthly_leave_bonus_date()
+        bonus_month = bonus_date.replace(day=1)
         ctx = {
             _MONTHLY_LEAVE_BONUS_DATE_CTX: bonus_date,
             _SKIP_DEPARTURE_MONTHLY_LEAVE_CUTOFF_CTX: True,
+            _SKIP_DEPARTURE_MONTHLY_LEAVE_REVERSAL_CTX: True,
         }
         for employee in self:
             if not employee._monthly_leave_bonus_eligible(bonus_date):
                 continue
             new_total = (employee.tong_so_phep or 0.0) + 1.0
-            employee.with_context(**ctx).write({"tong_so_phep": new_total})
+            employee.with_context(**ctx).write(
+                {
+                    "tong_so_phep": new_total,
+                    "last_monthly_leave_bonus_date": bonus_month,
+                }
+            )
+
+    def _reverse_departure_monthly_leave_bonus(self, bonus_date):
+        """Remove a granted monthly +1 when departure is before day 20."""
+        bonus_month = bonus_date.replace(day=1)
+        for employee in self.sudo():
+            departure_date = employee.ngay_nghi_viec
+            if (
+                not departure_date
+                or departure_date.day >= _DEPARTURE_MONTHLY_LEAVE_CUTOFF_DAY
+                or departure_date.replace(day=1) != bonus_month
+                or employee.departure_monthly_leave_reversal_date == bonus_month
+            ):
+                continue
+
+            tracked_bonus = employee.last_monthly_leave_bonus_date == bonus_month
+            legacy_bonus = (
+                not employee.last_monthly_leave_bonus_date
+                and employee._legacy_monthly_leave_bonus_was_granted(bonus_date)
+            )
+            if not tracked_bonus and not legacy_bonus:
+                continue
+
+            employee.with_context(
+                **{
+                    _SKIP_DEPARTURE_MONTHLY_LEAVE_CUTOFF_CTX: True,
+                    _SKIP_DEPARTURE_MONTHLY_LEAVE_REVERSAL_CTX: True,
+                }
+            ).write(
+                {
+                    "tong_so_phep": (employee.tong_so_phep or 0.0) - 1.0,
+                    "departure_monthly_leave_reversal_date": bonus_month,
+                }
+            )
+            _logger.info(
+                "Reversed monthly leave bonus for employee %s on %s-%02d",
+                employee.id,
+                bonus_month.year,
+                bonus_month.month,
+            )
 
     def _is_single_day_monthly_leave_bonus(self, new_total):
         self.ensure_one()
@@ -349,7 +413,17 @@ class HrEmployeeTimeoff(models.Model):
                         "thay đổi Hạn mức phép có lương / tháng."
                     )
                 )
-        return super().write(vals)
+        result = super().write(vals)
+        if (
+            "ngay_nghi_viec" in vals
+            and not self.env.context.get(
+                _SKIP_DEPARTURE_MONTHLY_LEAVE_REVERSAL_CTX
+            )
+        ):
+            self._reverse_departure_monthly_leave_bonus(
+                self._monthly_leave_bonus_date()
+            )
+        return result
 
     @api.model
     def _summary_paid_leave_type_ids(self):

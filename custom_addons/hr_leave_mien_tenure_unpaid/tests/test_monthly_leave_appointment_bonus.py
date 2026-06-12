@@ -31,6 +31,10 @@ class TestMonthlyLeaveAppointmentBonus(TransactionCase):
     def test_create_with_qualifying_dates_grants_bonus(self):
         employee = self._create_employee(ngay_bo_nhiem=date(2026, 3, 10))
         self.assertEqual(employee.tong_so_phep, 1.0)
+        self.assertEqual(
+            employee.last_monthly_leave_bonus_date,
+            self.today.replace(day=1),
+        )
 
     def test_appointment_before_day_15_grants_bonus_on_save(self):
         employee = self._create_employee()
@@ -51,6 +55,23 @@ class TestMonthlyLeaveAppointmentBonus(TransactionCase):
 
         employee.with_context(monthly_leave_bonus_date=date(2026, 6, 1)).write(
             {"tong_so_phep": 1.0}
+        )
+
+        self.assertEqual(employee.tong_so_phep, 0.0)
+
+    def test_legacy_current_month_bonus_is_reversed_on_departure(self):
+        employee = self._create_employee(ngay_bo_nhiem=date(2026, 3, 10))
+        employee.with_context(
+            skip_departure_monthly_leave_cutoff=True,
+            skip_departure_monthly_leave_reversal=True,
+        ).write({"last_monthly_leave_bonus_date": False})
+
+        employee.with_context(
+            monthly_leave_bonus_date=self.today.replace(day=1)
+        ).write(
+            {
+                "ngay_nghi_viec": self.today.replace(day=15),
+            }
         )
 
         self.assertEqual(employee.tong_so_phep, 0.0)
@@ -86,3 +107,7 @@ class TestMonthlyLeaveAppointmentBonus(TransactionCase):
         self.env["hr.employee"].cron_apply_monthly_leave_bonus()
 
         self.assertEqual(employee.tong_so_phep, 2.0)
+        self.assertEqual(
+            employee.last_monthly_leave_bonus_date,
+            self.today.replace(day=1),
+        )

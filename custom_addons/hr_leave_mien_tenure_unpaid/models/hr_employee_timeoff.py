@@ -41,6 +41,15 @@ class HrEmployeeTenureMonthlyLeave(models.Model):
             return False
         return True
 
+    def _legacy_monthly_leave_bonus_was_granted(self, bonus_date):
+        """Infer the automatic credit created before accrual tracking existed."""
+        self.ensure_one()
+        return bool(
+            self._mien_tenure_unpaid_applies()
+            and self._mien_tenure_has_four_years(reference_date=bonus_date)
+            and not self._blocks_appointment_monthly_leave_bonus(bonus_date)
+        )
+
     def _apply_monthly_leave_bonus_if_newly_eligible(self, before_eligible=None):
         for employee in self:
             was_eligible = (

@@ -15,6 +15,17 @@ class TestMonthlyLeaveDeparture(TransactionCase):
             }
         )
 
+    def _record_monthly_bonus(self, bonus_date):
+        bonus_month = bonus_date.replace(day=1)
+        self.employee.with_context(
+            skip_departure_monthly_leave_cutoff=True,
+        ).write(
+            {
+                "tong_so_phep": (self.employee.tong_so_phep or 0.0) + 1.0,
+                "last_monthly_leave_bonus_date": bonus_month,
+            }
+        )
+
     def test_departure_before_day_20_blocks_monthly_bonus(self):
         self.employee.ngay_nghi_viec = date(2026, 10, 15)
 
@@ -59,3 +70,43 @@ class TestMonthlyLeaveDeparture(TransactionCase):
         ).write({"tong_so_phep": 7})
 
         self.assertEqual(self.employee.tong_so_phep, 7)
+
+    def test_departure_before_day_20_reverses_granted_monthly_bonus(self):
+        self._record_monthly_bonus(date(2026, 10, 1))
+        self.assertEqual(self.employee.tong_so_phep, 6)
+
+        self.employee.with_context(
+            monthly_leave_bonus_date=date(2026, 10, 1)
+        ).write({"ngay_nghi_viec": date(2026, 10, 15)})
+
+        self.assertEqual(self.employee.tong_so_phep, 5)
+        self.assertEqual(
+            self.employee.departure_monthly_leave_reversal_date,
+            date(2026, 10, 1),
+        )
+
+    def test_departure_reversal_is_only_applied_once(self):
+        employee = self.employee.with_context(
+            monthly_leave_bonus_date=date(2026, 10, 1)
+        )
+        self._record_monthly_bonus(date(2026, 10, 1))
+        employee.write({"ngay_nghi_viec": date(2026, 10, 15)})
+
+        employee.write({"ngay_nghi_viec": date(2026, 10, 16)})
+
+        self.assertEqual(self.employee.tong_so_phep, 5)
+
+    def test_future_departure_does_not_remove_current_month_bonus(self):
+        self._record_monthly_bonus(date(2026, 10, 1))
+
+        self.employee.with_context(
+            monthly_leave_bonus_date=date(2026, 10, 1)
+        ).write({"ngay_nghi_viec": date(2026, 11, 15)})
+
+        self.assertEqual(self.employee.tong_so_phep, 6)
+
+        self.employee.with_context(
+            monthly_leave_bonus_date=date(2026, 11, 1)
+        ).write({"tong_so_phep": 7})
+
+        self.assertEqual(self.employee.tong_so_phep, 6)

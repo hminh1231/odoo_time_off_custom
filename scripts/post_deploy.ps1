@@ -1,6 +1,6 @@
 param(
     [string]$DbName = "odoo_db",
-    [string]$Modules = "hr_employee_multi_responsible,time_off_extra_approval,time_off_responsible_approval,hr_job_title_vn,hr_employee_cccd_scan,hr_employee_self_only,business_discuss_bots"
+    [string]$Modules = "hr_employee_multi_responsible,hr_employee_hrm_detail,hr_leave_mien_tenure_unpaid,time_off_extra_approval,time_off_responsible_approval,hr_job_title_vn,hr_employee_cccd_scan,hr_employee_self_only,business_discuss_bots"
 )
 
 Write-Host "Updating modules on database: $DbName"
