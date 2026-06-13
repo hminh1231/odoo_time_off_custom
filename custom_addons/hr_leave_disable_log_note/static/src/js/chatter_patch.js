@@ -7,19 +7,37 @@ import { patch } from "@web/core/utils/patch";
 patch(Chatter.prototype, {
     setup() {
         super.setup(...arguments);
-        onMounted(() => this._syncTimeOffLogNoteVisibility());
-        onPatched(() => this._syncTimeOffLogNoteVisibility());
+        onMounted(() => this._syncTimeOffChatterVisibility());
+        onPatched(() => this._syncTimeOffChatterVisibility());
     },
 
-    _syncTimeOffLogNoteVisibility() {
-        const logNoteButton = this.rootRef.el?.querySelector(".o-mail-Chatter-logNote");
-        if (logNoteButton) {
-            logNoteButton.hidden = this.props.threadModel === "hr.leave";
+    _syncTimeOffChatterVisibility() {
+        const root = this.rootRef.el;
+        if (!root) {
+            return;
+        }
+        const hideCommunication = this.props.threadModel === "hr.leave";
+        const selectors = [
+            ".o-mail-Chatter-sendMessage",
+            ".o-mail-Chatter-logNote",
+            ".o-mail-SearchMessageResult",
+            ".o-mail-Thread",
+        ];
+        for (const selector of selectors) {
+            for (const element of root.querySelectorAll(selector)) {
+                element.hidden = hideCommunication;
+            }
+        }
+        const searchButton = root
+            .querySelector(".o-mail-Chatter-topbar .oi-search")
+            ?.closest("button");
+        if (searchButton) {
+            searchButton.hidden = hideCommunication;
         }
     },
 
     toggleComposer(mode = false, options = {}) {
-        if (mode === "note" && this.props.threadModel === "hr.leave") {
+        if (mode && this.props.threadModel === "hr.leave") {
             return;
         }
         return super.toggleComposer(mode, options);

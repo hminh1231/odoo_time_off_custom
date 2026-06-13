@@ -1,8 +1,8 @@
 {
     "name": "Time Off - Disable Log Note",
-    "version": "19.0.1.1.0",
+    "version": "19.0.1.2.0",
     "category": "Human Resources/Time Off",
-    "summary": "Hide the Log note action on Time Off requests",
+    "summary": "Hide communication actions and history on Time Off requests",
     "depends": ["hr_holidays", "mail"],
     "assets": {
         "web.assets_backend": [
