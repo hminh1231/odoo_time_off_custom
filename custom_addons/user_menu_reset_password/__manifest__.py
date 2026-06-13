@@ -1,6 +1,6 @@
 {
     "name": "User Menu Enhancements",
-    "version": "19.0.1.2.0",
+    "version": "19.0.1.2.1",
     "category": "Administration",
     "summary": "Show user identity and Change Password in the backend user menu",
     "depends": ["web"],

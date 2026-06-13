@@ -1,31 +1,28 @@
 .o_user_menu {
-    .dropdown-toggle {
-        padding-inline: 0.5rem;
+    // The identity now lives inside the dropdown.
+    .oe_topbar_name {
+        display: none !important;
     }
 }
 
-.o_user_menu_dropdown {
-    min-width: 15rem;
+.o_user_menu_identity {
+    width: 15rem;
+    max-width: 20rem;
 
-    .o_user_menu_identity {
-        max-width: 20rem;
-    }
+.o_user_menu_identity_avatar {
+    width: 2.5rem;
+    height: 2.5rem;
+    flex: 0 0 2.5rem;
+    object-fit: cover;
+}
 
-    .o_user_menu_identity_avatar {
-        width: 2.5rem;
-        height: 2.5rem;
-        flex: 0 0 2.5rem;
-        object-fit: cover;
-    }
+.o_user_menu_identity_name {
+    font-size: 0.95rem;
+    line-height: 1.25;
+}
 
-    .o_user_menu_identity_name {
-        font-size: 0.95rem;
-        line-height: 1.25;
-    }
-
-    .o_user_menu_identity_database {
-        margin-top: 0.2rem;
-        font-size: 0.72rem;
-        line-height: 1.2;
-    }
+.o_user_menu_identity_database {
+    margin-top: 0.2rem;
+    font-size: 0.72rem;
+    line-height: 1.2;
 }

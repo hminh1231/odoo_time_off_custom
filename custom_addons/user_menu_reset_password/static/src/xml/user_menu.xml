@@ -1,27 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates xml:space="preserve">
-    <t t-name="user_menu_reset_password.UserMenu"
-       t-inherit="web.UserMenu"
-       t-inherit-mode="extension">
-        <xpath expr="//Dropdown[button/img[contains(concat(' ', normalize-space(@class), ' '), ' o_user_avatar ')]]" position="attributes">
-            <attribute name="menuClass">'o_user_menu_dropdown'</attribute>
-        </xpath>
-
-        <xpath expr="//Dropdown/button[img[contains(concat(' ', normalize-space(@class), ' '), ' o_user_avatar ')]]" position="attributes">
-            <attribute name="t-att-title">userName</attribute>
-            <attribute name="t-att-aria-label">userName</attribute>
-        </xpath>
-
-        <xpath expr="//small[contains(concat(' ', normalize-space(@class), ' '), ' oe_topbar_name ')]" position="replace"/>
-
-        <xpath expr="//t[@t-set-slot='content']/t[@t-foreach='getElements()']" position="before">
+    <t t-name="user_menu_reset_password.UserMenuIdentity">
+        <div>
             <div class="o_user_menu_identity d-flex align-items-center gap-3 px-3 py-3">
                 <img class="o_user_menu_identity_avatar rounded-circle"
-                     t-att-src="source"
+                     t-att-src="avatarSource"
                      alt="User"/>
                 <div class="min-w-0">
-                    <div class="o_user_menu_identity_name fw-semibold text-truncate"
-                         t-esc="userName"/>
+                    <div class="o_user_menu_identity_name fw-semibold text-truncate">
+                        <t t-esc="userName"/>
+                    </div>
                     <div t-if="env.debug"
                          class="o_user_menu_identity_database font-monospace text-muted text-truncate">
                         <i class="fa fa-database me-1"/>
@@ -30,6 +18,6 @@
                 </div>
             </div>
             <div role="separator" class="dropdown-divider mt-0"/>
-        </xpath>
+        </div>
     </t>
 </templates>
