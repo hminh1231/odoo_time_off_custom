@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="hr_leave_view_form_cancel_permission" model="ir.ui.view">
+        <field name="name">hr.leave.form.cancel.permission</field>
+        <field name="model">hr.leave</field>
+        <field name="inherit_id" ref="hr_holidays.hr_leave_view_form"/>
+        <field name="priority">200</field>
+        <field name="arch" type="xml">
+            <xpath expr="//header" position="inside">
+                <field name="can_cancel" invisible="1"/>
+                <field name="can_back_to_approve" invisible="1"/>
+            </xpath>
+            <xpath expr="//header/button[@name='action_cancel']" position="attributes">
+                <attribute name="invisible">not can_cancel or not id</attribute>
+            </xpath>
+            <xpath expr="//header/button[@name='action_back_to_approval']" position="attributes">
+                <attribute name="invisible">not can_back_to_approve or not id</attribute>
+            </xpath>
+        </field>
+    </record>
+    <record id="hr_leave_view_form_manager_cancel_permission" model="ir.ui.view">
+        <field name="name">hr.leave.form.manager.cancel.permission</field>
+        <field name="model">hr.leave</field>
+        <field name="inherit_id" ref="hr_holidays.hr_leave_view_form_manager"/>
+        <field name="priority">200</field>
+        <field name="arch" type="xml">
+            <xpath expr="//header" position="inside">
+                <field name="can_cancel" invisible="1"/>
+                <field name="can_back_to_approve" invisible="1"/>
+            </xpath>
+            <xpath expr="//header/button[@name='action_cancel']" position="attributes">
+                <attribute name="invisible">not can_cancel or not id</attribute>
+            </xpath>
+            <xpath expr="//header/button[@name='action_back_to_approval']" position="attributes">
+                <attribute name="invisible">not can_back_to_approve or not id</attribute>
+            </xpath>
+        </field>
+    </record>
+</odoo>

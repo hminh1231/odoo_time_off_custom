@@ -2,7 +2,7 @@
 <odoo>
     <record model="res.groups.privilege" id="res_groups_privilege_employee_edit">
         <field name="name">Edit Employee Profile</field>
-        <field name="sequence">13</field>
+        <field name="sequence">14</field>
         <field name="category_id" ref="base.module_category_human_resources"/>
         <field name="description">Controls whether the user can create or edit employee records.</field>
         <field name="placeholder">Không</field>
@@ -18,7 +18,7 @@
 
     <record model="res.groups.privilege" id="res_groups_privilege_view_personal">
         <field name="name">View Personal Information</field>
-        <field name="sequence">14</field>
+        <field name="sequence">15</field>
         <field name="category_id" ref="base.module_category_human_resources"/>
         <field name="description">Controls whether the user can see the Personal tab on employee profiles.</field>
         <field name="placeholder">Không</field>

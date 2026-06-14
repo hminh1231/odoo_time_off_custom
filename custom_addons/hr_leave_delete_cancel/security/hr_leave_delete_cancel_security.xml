@@ -4,7 +4,7 @@
         <field name="name">Delete Time Off</field>
         <field name="sequence">12</field>
         <field name="category_id" ref="base.module_category_human_resources"/>
-        <field name="description">Allows deleting and cancelling time off requests of employees.</field>
+        <field name="description">Allows deleting time off requests of employees.</field>
         <field name="placeholder">Không</field>
     </record>
 
@@ -12,7 +12,23 @@
         <field name="name">Allowed</field>
         <field name="sequence">10</field>
         <field name="privilege_id" ref="res_groups_privilege_leave_delete"/>
-        <field name="comment">The user can delete and cancel time off requests of employees.</field>
+        <field name="comment">The user can delete time off requests of employees.</field>
+        <field name="user_ids" eval="[(4, ref('base.user_root')), (4, ref('base.user_admin'))]"/>
+    </record>
+
+    <record model="res.groups.privilege" id="res_groups_privilege_leave_cancel">
+        <field name="name">Cancel Time Off</field>
+        <field name="sequence">13</field>
+        <field name="category_id" ref="base.module_category_human_resources"/>
+        <field name="description">Allows cancelling time off requests of employees.</field>
+        <field name="placeholder">Không</field>
+    </record>
+
+    <record id="group_hr_holidays_leave_cancel" model="res.groups">
+        <field name="name">Allowed</field>
+        <field name="sequence">10</field>
+        <field name="privilege_id" ref="res_groups_privilege_leave_cancel"/>
+        <field name="comment">The user can cancel time off requests of employees.</field>
         <field name="user_ids" eval="[(4, ref('base.user_root')), (4, ref('base.user_admin'))]"/>
     </record>
 </odoo>

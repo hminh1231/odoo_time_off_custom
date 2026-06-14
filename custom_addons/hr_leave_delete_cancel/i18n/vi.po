@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Odoo Server 19.0\n"
 "Report-Msgid-Bugs-To: \n"
-"PO-Revision-Date: 2026-06-03 00:00+0000\n"
+"PO-Revision-Date: 2026-06-14 00:00+0000\n"
 "Last-Translator: \n"
 "Language-Team: \n"
 "MIME-Version: 1.0\n"
@@ -32,10 +32,60 @@ msgstr "Cho phép"
 
 #. module: hr_leave_delete_cancel
 #: model:res.groups.privilege,description:hr_leave_delete_cancel.res_groups_privilege_leave_delete
-msgid "Allows deleting and cancelling time off requests of employees."
-msgstr "Cho phép xoá và huỷ đơn nghỉ phép của nhân viên."
+msgid "Allows deleting time off requests of employees."
+msgstr "Cho phép xoá đơn nghỉ phép của nhân viên."
+
+#. module: hr_leave_delete_cancel
+#: model:res.groups,comment:hr_leave_delete_cancel.group_hr_holidays_leave_delete
+msgid "The user can delete time off requests of employees."
+msgstr "Người dùng có thể xoá đơn nghỉ phép của nhân viên."
 
 #. module: hr_leave_delete_cancel
 #: code:addons/hr_leave_delete_cancel/models/hr_leave.py:0
-msgid "You are not allowed to delete or cancel time off requests of employees."
-msgstr "Bạn không có quyền xoá hoặc huỷ đơn nghỉ phép của nhân viên."
+msgid "You are not allowed to delete time off requests of employees."
+msgstr "Bạn không có quyền xoá đơn nghỉ phép của nhân viên."
+
+#. module: hr_leave_delete_cancel
+#: model:res.groups.privilege,name:hr_leave_delete_cancel.res_groups_privilege_leave_cancel
+msgid "Cancel Time Off"
+msgstr "Huỷ ngày phép"
+
+#. module: hr_leave_delete_cancel
+#: model:res.groups.privilege,placeholder:hr_leave_delete_cancel.res_groups_privilege_leave_cancel
+msgid "Không"
+msgstr "Không"
+
+#. module: hr_leave_delete_cancel
+#: model:res.groups,name:hr_leave_delete_cancel.group_hr_holidays_leave_cancel
+msgid "Allowed"
+msgstr "Cho phép"
+
+#. module: hr_leave_delete_cancel
+#: model:res.groups.privilege,description:hr_leave_delete_cancel.res_groups_privilege_leave_cancel
+msgid "Allows cancelling time off requests of employees."
+msgstr "Cho phép huỷ đơn nghỉ phép của nhân viên."
+
+#. module: hr_leave_delete_cancel
+#: model:res.groups,comment:hr_leave_delete_cancel.group_hr_holidays_leave_cancel
+msgid "The user can cancel time off requests of employees."
+msgstr "Người dùng có thể huỷ đơn nghỉ phép của nhân viên."
+
+#. module: hr_leave_delete_cancel
+#: code:addons/hr_leave_delete_cancel/models/hr_leave.py:0
+msgid "You are not allowed to cancel time off requests of employees."
+msgstr "Bạn không có quyền huỷ đơn nghỉ phép của nhân viên."
+
+#. module: hr_leave_delete_cancel
+#: code:addons/hr_leave_delete_cancel/models/hr_leave.py:0
+msgid "You are not allowed to reset time off requests of employees to approval."
+msgstr "Bạn không có quyền đưa đơn nghỉ phép của nhân viên về trạng thái chờ duyệt."
+
+#. module: hr_leave_delete_cancel
+#: code:addons/hr_leave_delete_cancel/models/hr_leave.py:0
+msgid "You cannot cancel this time off request after work handover has been accepted."
+msgstr "Bạn không thể huỷ đơn nghỉ phép sau khi đã có người chấp nhận bàn giao công việc."
+
+#. module: hr_leave_delete_cancel
+#: code:addons/hr_leave_delete_cancel/models/hr_leave.py:0
+msgid "You can only cancel your own time off request while it is waiting for approval and before work handover is accepted."
+msgstr "Bạn chỉ được huỷ đơn nghỉ phép của chính mình khi đơn đang chờ duyệt và chưa có ai chấp nhận bàn giao công việc."
