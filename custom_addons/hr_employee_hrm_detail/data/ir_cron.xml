@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
     <record id="ir_cron_snapshot_con_lai_prev_year" model="ir.cron">
-        <field name="name">Chốt số phép còn lại cuối năm</field>
+        <field name="name">Chốt và đặt lại số phép đầu năm</field>
         <field name="model_id" ref="hr.model_hr_employee"/>
         <field name="state">code</field>
         <field name="code">model.cron_snapshot_con_lai_prev_year()</field>

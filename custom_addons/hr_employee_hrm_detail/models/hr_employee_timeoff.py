@@ -548,25 +548,30 @@ class HrEmployeeTimeoff(models.Model):
 
     @api.model
     def cron_snapshot_con_lai_prev_year(self):
-        """Chạy vào 01/01 hàng năm: lưu con_lai của năm vừa kết thúc vào con_lai_nam_truoc.
-
-        Không reset tong_so_phep hay da_su_dung — HR tự xử lý việc đó.
-        """
+        """Chốt phép năm trước rồi đưa quỹ phép của năm mới về 0."""
         today = fields.Date.context_today(self)
         prev_year = today.year - 1
         previous_year_date = date(prev_year, 12, 31)
-        employees = self.sudo().search([("active", "=", True)])
+        employees = self.sudo().search(
+            [
+                ("active", "=", True),
+                ("nam_chot_con_lai", "!=", prev_year),
+            ]
+        )
         if not employees:
             return
 
         for emp in employees:
             leave_taken = emp._get_leave_days_used_for_summary(previous_year_date)
-            emp.write({
-                "con_lai_nam_truoc": max(
-                    0.0, (emp.tong_so_phep or 0.0) - leave_taken
-                ),
-                "nam_chot_con_lai": prev_year,
-            })
+            emp.write(
+                {
+                    "con_lai_nam_truoc": max(
+                        0.0, (emp.tong_so_phep or 0.0) - leave_taken
+                    ),
+                    "nam_chot_con_lai": prev_year,
+                    "tong_so_phep": 0.0,
+                }
+            )
         tracked_leaves = self.env["hr.leave"].sudo().search(
             [
                 "|",
@@ -584,7 +589,8 @@ class HrEmployeeTimeoff(models.Model):
                 }
             )
         _logger.info(
-            "hr_employee_hrm_detail: snapshotted con_lai for %d employees (year=%d)",
+            "hr_employee_hrm_detail: rolled over leave balances for %d employees "
+            "(previous year=%d)",
             len(employees),
             prev_year,
         )

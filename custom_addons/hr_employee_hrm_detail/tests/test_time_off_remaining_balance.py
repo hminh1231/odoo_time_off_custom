@@ -37,6 +37,27 @@ class TestTimeOffRemainingBalance(TransactionCase):
         self.assertEqual(self.employee.da_su_dung, 7)
         self.assertEqual(self.employee.con_lai, 0)
 
+    def test_year_rollover_snapshots_then_resets_current_balance_once(self):
+        with patch.object(
+            type(self.employee),
+            "_get_leave_days_used_for_summary",
+            autospec=True,
+            return_value=2,
+        ):
+            self.env["hr.employee"].cron_snapshot_con_lai_prev_year()
+
+        self.assertEqual(self.employee.con_lai_nam_truoc, 3)
+        self.assertEqual(self.employee.nam_chot_con_lai, 2025)
+        self.assertEqual(self.employee.tong_so_phep, 0)
+        self.assertEqual(self.employee.con_lai, 0)
+
+        self.employee.write({"tong_so_phep": 1})
+        self.env["hr.employee"].cron_snapshot_con_lai_prev_year()
+
+        self.assertEqual(self.employee.con_lai_nam_truoc, 3)
+        self.assertEqual(self.employee.tong_so_phep, 1)
+        self.assertEqual(self.employee.con_lai, 1)
+
     def test_zero_balance_does_not_request_confirmation(self):
         Leave = self.env["hr.leave"]
         preview = Leave.check_con_lai_zero_confirmation(
