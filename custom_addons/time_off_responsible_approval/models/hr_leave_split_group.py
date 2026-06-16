@@ -602,7 +602,7 @@ class HrLeaveSplitGroup(models.Model):
         res = super().action_responsible_approve()
         if self.env.context.get(_SKIP_SPLIT_GROUP_APPROVE_CASCADE_CTX):
             return res
-        surviving = self.browse(group_leave_ids).exists()
+        surviving = self.sudo().browse(group_leave_ids).exists()
         for leave in surviving:
             if not leave._split_group_is_multi_segment():
                 continue
@@ -612,7 +612,7 @@ class HrLeaveSplitGroup(models.Model):
             ctx = {_SKIP_SPLIT_GROUP_APPROVE_CASCADE_CTX: True}
             for sibling in siblings.sorted("id"):
                 try:
-                    sibling.with_context(**ctx).action_responsible_approve()
+                    sibling.sudo().with_context(**ctx).action_responsible_approve()
                 except UserError:
                     _logger.warning(
                         "split_group: could not cascade approve leave_id=%s sibling=%s",
@@ -620,7 +620,7 @@ class HrLeaveSplitGroup(models.Model):
                         sibling.id,
                         exc_info=True,
                     )
-        self.browse(group_leave_ids).exists()._refresh_responsible_actionable_users()
+        self.sudo().browse(group_leave_ids).exists()._refresh_responsible_actionable_users()
         return res
 
     def action_responsible_refuse(self, reason=False):
@@ -630,7 +630,7 @@ class HrLeaveSplitGroup(models.Model):
             return super().action_responsible_refuse(reason=reason)
 
         self.ensure_one()
-        targets = self._expand_split_group_refuse_targets()
+        targets = self.sudo()._expand_split_group_refuse_targets()
         if len(targets) <= 1:
             return super().action_responsible_refuse(reason=reason)
 
@@ -640,7 +640,7 @@ class HrLeaveSplitGroup(models.Model):
             "skip_outcome_bot_notify": True,
         }
         for leave in targets.sorted("id"):
-            leave.with_context(**ctx).action_responsible_refuse(reason=reason_text)
+            leave.sudo().with_context(**ctx).action_responsible_refuse(reason=reason_text)
 
         primary = self._get_split_group_primary_leave()
         primary._notify_requester_approval_outcome_via_bot(
