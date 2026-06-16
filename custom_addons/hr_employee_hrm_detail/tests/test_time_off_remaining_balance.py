@@ -66,7 +66,7 @@ class TestTimeOffRemainingBalance(TransactionCase):
 
         self.assertFalse(preview["needs_confirmation"])
 
-    def test_summary_counts_only_p1_p2_leave_types(self):
+    def test_summary_counts_only_paid_leave_types(self):
         Leave = self.env["hr.leave"]
         with (
             patch.object(
@@ -94,7 +94,7 @@ class TestTimeOffRemainingBalance(TransactionCase):
             read_group.call_args.kwargs["domain"],
         )
 
-    def test_committed_budget_counts_only_p1_p2_leave_types(self):
+    def test_committed_budget_counts_only_paid_leave_types(self):
         Leave = self.env["hr.leave"]
         with (
             patch.object(
@@ -119,6 +119,43 @@ class TestTimeOffRemainingBalance(TransactionCase):
             ("state", "in", ("confirm", "validate1", "validate")),
             read_group.call_args.kwargs["domain"],
         )
+
+    def test_summary_paid_leave_types_include_maternity_p(self):
+        paid_p = self.env["hr.leave.type"].create(
+            {
+                "name": "Paid Time Off (P)",
+                "requires_allocation": False,
+                "company_id": self.env.company.id,
+            }
+        )
+        paid_p1 = self.env["hr.leave.type"].create(
+            {
+                "name": "Annual Leave (P1)",
+                "requires_allocation": False,
+                "company_id": self.env.company.id,
+            }
+        )
+        paid_p2 = self.env["hr.leave.type"].create(
+            {
+                "name": "Annual Leave (P2)",
+                "requires_allocation": False,
+                "company_id": self.env.company.id,
+            }
+        )
+        unpaid_o = self.env["hr.leave.type"].create(
+            {
+                "name": "Unpaid Leave (O)",
+                "requires_allocation": False,
+                "company_id": self.env.company.id,
+            }
+        )
+
+        paid_ids = self.employee._summary_paid_leave_type_ids()
+
+        self.assertIn(paid_p.id, paid_ids)
+        self.assertIn(paid_p1.id, paid_ids)
+        self.assertIn(paid_p2.id, paid_ids)
+        self.assertNotIn(unpaid_o.id, paid_ids)
         self.assertIn(
             ("holiday_status_id", "in", [11, 12]),
             read_group.call_args.kwargs["domain"],

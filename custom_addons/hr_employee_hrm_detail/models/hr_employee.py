@@ -290,6 +290,10 @@ class HrEmployee(models.Model):
     ngay_nghi_viec = fields.Date(string='Ngày nghỉ việc', groups='hr.group_hr_user', tracking=True)
     ngay_chinh_thuc = fields.Date(string='Ngày chính thức', groups='hr.group_hr_user', tracking=True)
 
+    # Maternity
+    thai_san_di_lam_lai = fields.Date(string='Đi làm lại', groups='hr.group_hr_user', tracking=True)
+    thai_san_ngay_cap_phep = fields.Date(string='Ngày cấp phép', groups='hr.group_hr_user', tracking=True)
+
     # Recruitment and Notes
     nguon_tuyen_dung = fields.Char(string='Nguồn tuyển dụng', groups='hr.group_hr_user', tracking=True)
     ghi_chu = fields.Text(string='Ghi chú', groups='hr.group_hr_user', tracking=True)

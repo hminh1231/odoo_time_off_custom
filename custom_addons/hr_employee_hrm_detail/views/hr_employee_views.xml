@@ -45,6 +45,12 @@
                         <field name="ghi_chu"/>
                     </group>
                 </group>
+                <group string="Maternity (Thai sản)" groups="hr.group_hr_user">
+                    <group>
+                        <field name="thai_san_di_lam_lai"/>
+                        <field name="thai_san_ngay_cap_phep"/>
+                    </group>
+                </group>
             </xpath>
         </field>
     </record>

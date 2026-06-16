@@ -444,18 +444,18 @@ class HrEmployeeTimeoff(models.Model):
 
     @api.model
     def _summary_paid_leave_type_ids(self):
-        """ID các loại phép có lương làm giảm quỹ: chỉ P1 và P2."""
+        """ID các loại phép có lương làm giảm quỹ: P, P1 và P2."""
         LeaveType = self.env["hr.leave.type"]
         if hasattr(LeaveType, "search_by_code"):
             try:
                 paid_types = LeaveType
-                for code in ("P1", "P2"):
+                for code in ("P", "P1", "P2"):
                     paid_types |= LeaveType.search_by_code(code, limit=None)
                 if paid_types:
                     return paid_types.ids
             except Exception:  # pragma: no cover
                 _logger.debug(
-                    "summary: cannot resolve paid leave types P1/P2", exc_info=True
+                    "summary: cannot resolve paid leave types P/P1/P2", exc_info=True
                 )
         return []
 
@@ -480,7 +480,7 @@ class HrEmployeeTimeoff(models.Model):
         return date(target_date.year, 1, 1), date(target_date.year, 12, 31)
 
     def _get_leave_days_used_for_summary(self, target_date=None):
-        """Tổng ngày P1/P2 đang hiệu lực trong năm của ``target_date``.
+        """Tổng ngày P/P1/P2 đang hiệu lực trong năm của ``target_date``.
 
         Tính cả đơn đang chờ duyệt; không tính O, đơn hủy hoặc đơn bị từ chối.
         """
@@ -517,7 +517,7 @@ class HrEmployeeTimeoff(models.Model):
                 employee.con_lai = employee.tong_so_phep
             return
         for employee in employees:
-            # Dùng cùng tập đơn đang chiếm quỹ với bộ chia P1/P2/O.
+            # Dùng cùng tập đơn đang chiếm quỹ với bộ chia P/P1/P2/O.
             leave_taken = employee._get_leave_days_used_for_summary()
             raw_remaining = (employee.tong_so_phep or 0.0) - leave_taken
             employee.da_su_dung = leave_taken

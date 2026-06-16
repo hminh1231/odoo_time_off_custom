@@ -376,6 +376,10 @@ class HrLeaveMonthlySplit(models.Model):
             return False
         if not leave.employee_id or not leave.request_date_from or not leave.request_date_to:
             return False
+        if hasattr(leave, "_maternity_leave_rule_applies") and leave._maternity_leave_rule_applies(
+            leave.employee_id
+        ):
+            return False
         if not self._monthly_p1p2_mien_applies(leave.employee_id):
             return False
         exclude = [leave.id] if leave.id else []
@@ -734,6 +738,10 @@ class HrLeaveMonthlySplit(models.Model):
         targets = set()
         for leave in self:
             employee = leave.employee_id
+            if hasattr(leave, "_maternity_leave_rule_applies") and leave._maternity_leave_rule_applies(
+                employee
+            ):
+                continue
             if not employee or not self._monthly_p1p2_mien_applies(employee):
                 continue
             date_from = leave._get_leave_start_date()
