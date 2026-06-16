@@ -1848,11 +1848,11 @@ class HrLeaveResponsibleApproval(models.Model):
             self._responsible_approval_after_approve(approved_line=user_line)
 
         if mode == "any":
-            return self._action_validate(check_state=False)
+            return self.sudo()._action_validate(check_state=False)
 
         pending = self.responsible_approval_line_ids.filtered(lambda l: l.state == "pending")
         if not pending:
-            return self._action_validate(check_state=False)
+            return self.sudo()._action_validate(check_state=False)
 
         self.sudo().activity_update()
         return True
@@ -1898,7 +1898,7 @@ class HrLeaveResponsibleApproval(models.Model):
                 {"state": "refused", "action_date": fields.Datetime.now()}
             )
 
-        return self.action_refuse(reason=reason)
+        return self.sudo().action_refuse(reason=reason)
 
     def cron_escalate_responsible_approval_timeouts(self):
         """Sequential Employee HR Responsibles: skip current step after escalation delay (default 2h)."""
