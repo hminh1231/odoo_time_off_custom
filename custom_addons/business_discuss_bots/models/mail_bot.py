@@ -1,6 +1,7 @@
 import re
 import unicodedata
 import logging
+from datetime import date
 
 from markupsafe import Markup
 
@@ -24,6 +25,7 @@ class MailBot(models.AbstractModel):
         "handover_accepted",
         "handover_pending",
         "handover_refused",
+        "pending_handover_detail",
         "help",
     }
     _GATE_TICKET_SUPPORTED_INTENTS = {"approval_status", "approval_who", "help"}
@@ -54,7 +56,15 @@ class MailBot(models.AbstractModel):
             body[:200],
             command,
         )
-        answer = self._get_answer(channel, body, values, command)
+        try:
+            answer = self._get_answer(channel, body, values, command)
+        except Exception:
+            _logger.exception(
+                "business_discuss_bots: bot logic failed channel_id=%s body=%r",
+                channel.id,
+                body[:200],
+            )
+            return
         if not answer:
             _logger.info("business_discuss_bots: no answer for channel_id=%s body=%r", channel.id, body[:200])
             return
@@ -67,13 +77,20 @@ class MailBot(models.AbstractModel):
             author_id,
         )
         for ans in answers:
-            channel.with_context(business_bot_skip_apply_logic=True).sudo().message_post(
-                author_id=author_id,
-                body=Markup(ans) if not isinstance(ans, Markup) else ans,
-                message_type="comment",
-                silent=True,
-                subtype_xmlid="mail.mt_comment",
-            )
+            try:
+                channel.with_context(business_bot_skip_apply_logic=True).sudo().message_post(
+                    author_id=author_id,
+                    body=Markup(ans) if not isinstance(ans, Markup) else ans,
+                    message_type="comment",
+                    silent=True,
+                    subtype_xmlid="mail.mt_comment",
+                )
+            except Exception:
+                _logger.exception(
+                    "business_discuss_bots: failed to post bot answer channel_id=%s author_id=%s",
+                    channel.id,
+                    author_id,
+                )
 
     def _business_bot_route(self, channel, body, values, command=False):
         if command or channel.channel_type != "chat":
@@ -90,11 +107,14 @@ class MailBot(models.AbstractModel):
             return False
         if "hr.leave" not in self.env:
             return _("Bot chưa truy cập được dữ liệu Time Off trên hệ thống hiện tại.")
-        intent = self._classify_intent(body)
-        if intent in ("daily_tasks", "pending_approval_detail"):
-            if intent == "daily_tasks":
-                return self._run_secretary_daily_tasks_skill()
+        normalized = self._normalize_text(body)
+        if self._is_daily_tasks_intent(normalized):
+            return self._run_secretary_daily_tasks_skill()
+        if self._is_pending_approval_detail_intent(normalized):
             return self._run_pending_approval_detail_skill()
+        if self._is_pending_handover_detail_intent(normalized):
+            return self._run_pending_handover_detail_skill()
+        intent = self._classify_intent(body)
         if skill_key == "main":
             _logger.info("business_discuss_bots: route channel_id=%s skill=main", channel.id)
             return self._run_main_router_skill(body)
@@ -124,7 +144,11 @@ class MailBot(models.AbstractModel):
                 return skill_key
         return False
 
-    _SECRETARY_CLEAN_INTENTS = frozenset({"daily_tasks", "pending_approval_detail"})
+    _SECRETARY_CLEAN_INTENTS = frozenset({
+        "daily_tasks",
+        "pending_approval_detail",
+        "pending_handover_detail",
+    })
     _HANDOVER_INTENTS = frozenset({
         "handover_status",
         "handover_accepted",
@@ -136,11 +160,13 @@ class MailBot(models.AbstractModel):
         normalized = self._normalize_text(body)
         if not normalized:
             return False
-        intent = self._classify_intent(body)
-        if intent in self._SECRETARY_CLEAN_INTENTS:
-            if intent == "daily_tasks":
-                return self._run_secretary_daily_tasks_skill()
+        if self._is_daily_tasks_intent(normalized):
+            return self._run_secretary_daily_tasks_skill()
+        if self._is_pending_approval_detail_intent(normalized):
             return self._run_pending_approval_detail_skill()
+        if self._is_pending_handover_detail_intent(normalized):
+            return self._run_pending_handover_detail_skill()
+        intent = self._classify_intent(body)
         hr_tokens = (
             "time off",
             "xin nghi",
@@ -158,6 +184,7 @@ class MailBot(models.AbstractModel):
             "approval_status",
             "approval_who",
             "pending_approval_detail",
+            "pending_handover_detail",
             "latest_leave",
             "handover_status",
             "handover_accepted",
@@ -179,7 +206,11 @@ class MailBot(models.AbstractModel):
             )
 
         core = False
+        if intent == "pending_handover_detail":
+            return self._run_pending_handover_detail_skill()
         if intent in self._HANDOVER_INTENTS:
+            if self._is_pending_handover_detail_intent(normalized):
+                return self._run_pending_handover_detail_skill()
             if "ban giao" in normalized or "handover" in normalized:
                 core = self._run_handover_skill(intent)
             elif self._is_pending_approval_detail_intent(normalized):
@@ -188,11 +219,15 @@ class MailBot(models.AbstractModel):
                 return False
         elif intent in ("latest_leave", "approval_who", "approval_status"):
             core = self.with_context(business_discuss_leave_on_main_bot=True)._run_approval_skill(intent)
+        elif intent == "help" and self._is_pending_handover_detail_intent(normalized):
+            return self._run_pending_handover_detail_skill()
         elif intent == "help" and self._is_pending_approval_detail_intent(normalized):
             return self._run_pending_approval_detail_skill()
         elif intent == "help" and any(t in normalized for t in hr_tokens):
             core = self._run_main_help_with_leave_summary()
         elif any(t in normalized for t in hr_tokens):
+            if self._is_pending_handover_detail_intent(normalized):
+                return self._run_pending_handover_detail_skill()
             if self._is_pending_approval_detail_intent(normalized):
                 return self._run_pending_approval_detail_skill()
             core = self._run_approval_skill("latest_leave")
@@ -298,39 +333,100 @@ class MailBot(models.AbstractModel):
         lines.extend(self._format_pending_approval_detail_line(leave) for leave in leaves)
         return "<br/>".join(lines)
 
-    def _count_pending_handover_leaves_for_user(self, user=None):
+    def _search_pending_handover_items_for_user(self, user=None):
+        """Pending handover work for the current user (recipient or escalation owner)."""
         user = user or self.env.user
         employee = user.sudo().employee_id
-        if not employee:
-            return 0
-        if "hr.leave.handover.acceptance" not in self.env:
-            return 0
-        Acceptance = self.env["hr.leave.handover.acceptance"].sudo()
+        items = []
+        seen_leave_ids = set()
+        if employee and "hr.leave.handover.acceptance" in self.env:
+            Acceptance = self.env["hr.leave.handover.acceptance"].sudo()
+            pending_lines = Acceptance.search(
+                [
+                    ("employee_id", "=", employee.id),
+                    ("state", "=", "pending"),
+                    ("leave_id.state", "in", ("confirm",)),
+                ],
+                order="leave_id asc, id asc",
+            )
+            pending_lines = pending_lines.sorted(
+                key=lambda line: (
+                    line.leave_id.request_date_from or date.min,
+                    line.leave_id.id,
+                )
+            )
+            for line in pending_lines:
+                leave = line.leave_id
+                if employee not in leave.handover_employee_ids or leave.id in seen_leave_ids:
+                    continue
+                items.append({"leave": leave, "kind": "recipient", "line": line})
+                seen_leave_ids.add(leave.id)
         Leave = self.env["hr.leave"]
-        leave_ids = set()
-        pending_lines = Acceptance.search(
-            [
-                ("employee_id", "=", employee.id),
-                ("state", "=", "pending"),
-                ("leave_id.state", "in", ("confirm",)),
-            ]
-        )
-        for line in pending_lines:
-            leave = line.leave_id
-            if employee in leave.handover_employee_ids:
-                leave_ids.add(leave.id)
         if "handover_escalated" in Leave._fields:
             escalation_leaves = Leave.with_user(user).search(
                 [
                     ("state", "in", ("confirm", "validate1")),
                     ("handover_escalated", "=", True),
                     ("handover_escalation_user_id", "=", user.id),
-                ]
+                ],
+                order="request_date_from asc, create_date asc, id asc",
             )
             for leave in escalation_leaves:
-                if leave.handover_escalation_pick_prompt:
-                    leave_ids.add(leave.id)
-        return len(leave_ids)
+                if leave.handover_escalation_pick_prompt and leave.id not in seen_leave_ids:
+                    items.append({"leave": leave, "kind": "escalation", "line": False})
+                    seen_leave_ids.add(leave.id)
+        return items
+
+    def _count_pending_handover_leaves_for_user(self, user=None):
+        return len(self._search_pending_handover_items_for_user(user=user))
+
+    def _handover_display_leave(self, leave):
+        if hasattr(leave, "_get_handover_bot_notify_leave"):
+            return leave._get_handover_bot_notify_leave()
+        return leave
+
+    def _format_pending_handover_detail_line(self, item):
+        leave = self._handover_display_leave(item["leave"])
+        employee = leave.employee_id
+        name = employee.name if employee else _("Không rõ")
+        emp_id = self._employee_display_id(employee) if employee else "—"
+        title = (employee.job_title or "").strip() if employee else ""
+        title = title or _("không rõ")
+        date_range = self._leave_date_range_text(leave)
+        if item["kind"] == "escalation":
+            action = _("cần bạn chỉ định người nhận bàn giao")
+        else:
+            action = _("cần bạn xác nhận bàn giao")
+        line = item.get("line")
+        work_content = (line.handover_work_content or "").strip() if line else ""
+        result = _(
+            "_ đơn bàn giao việc của <b>%(name)s</b> (ID nhân viên: %(emp_id)s) "
+            "với chức danh là %(title)s, xin nghỉ %(date_range)s, %(action)s"
+        ) % {
+            "name": name,
+            "emp_id": emp_id,
+            "title": title,
+            "date_range": date_range,
+            "action": action,
+        }
+        if work_content:
+            result += _("<br/>&nbsp;&nbsp;Nội dung bàn giao: %(content)s") % {
+                "content": work_content,
+            }
+        return result
+
+    def _run_pending_handover_detail_skill(self):
+        items = self._search_pending_handover_items_for_user()
+        if not items:
+            return _("Hiện bạn không có đơn bàn giao việc nào đang chờ xử lý.")
+        count = len(items)
+        if count == 1:
+            header = _("1 đơn bàn giao việc đang chờ bạn xử lý:")
+        else:
+            header = _("%(count)s đơn bàn giao việc đó lần lượt là:") % {"count": count}
+        lines = [header]
+        lines.extend(self._format_pending_handover_detail_line(item) for item in items)
+        return "<br/>".join(lines)
 
     def _run_main_help_with_leave_summary(self):
         employee = self.env.user.employee_id
@@ -484,6 +580,8 @@ class MailBot(models.AbstractModel):
         """Approver asks who submitted leave requests waiting for their approval."""
         if not text:
             return False
+        if self._mentions_handover_request(text):
+            return False
         if any(marker in text for marker in ("cua toi", "cua minh", "don cua toi", "don cua minh")):
             return False
         strong_phrases = (
@@ -551,6 +649,132 @@ class MailBot(models.AbstractModel):
                 return True
         return has_leave and needs_approval and asks_detail
 
+    def _mentions_handover_request(self, text):
+        return any(
+            token in text
+            for token in (
+                "ban giao",
+                "handover",
+                "don ban giao",
+                "ban giao viec",
+                "ban giao cong viec",
+            )
+        )
+
+    def _is_handover_detail_followup_intent(self, text):
+        if not text:
+            return False
+        if any(marker in text for marker in ("cua toi", "cua minh", "don cua toi", "don cua minh")):
+            return False
+        asks_detail = any(
+            word in text
+            for word in ("chi tiet", "liet ke", "danh sach", "noi ro", "noi chi tiet", "ke chi tiet")
+        )
+        return asks_detail and self._mentions_handover_request(text)
+
+    def _is_own_leave_handover_status_intent(self, text):
+        """Handover status on the user's own submitted leave (not secretary inbox)."""
+        if not self._mentions_handover_request(text):
+            return False
+        if any(marker in text for marker in ("cua toi", "cua minh", "don cua toi", "don cua minh")):
+            return True
+        return any(
+            token in text
+            for token in (
+                "chap nhan",
+                "tu choi",
+                "dong y",
+                "trang thai",
+                "tinh trang",
+                "ai da chap nhan",
+                "ai dang cho",
+                "ai dang cho phan hoi",
+                "ai da tu choi",
+                "da chap nhan",
+                "dang cho phan hoi",
+                "da tu choi",
+                "ket qua ban giao",
+            )
+        )
+
+    def _is_pending_handover_detail_intent(self, text):
+        """User asks which handover requests are waiting for their action."""
+        if not text:
+            return False
+        if any(marker in text for marker in ("cua toi", "cua minh", "don cua toi", "don cua minh")):
+            return False
+        if self._is_own_leave_handover_status_intent(text):
+            return False
+        strong_phrases = (
+            "don ban giao can xu ly la cua ai",
+            "don ban giao can xu ly la ai",
+            "don ban giao la cua ai",
+            "ban giao viec la cua ai",
+            "ban giao viec can xu ly la ai",
+            "ai can ban giao",
+            "ai nho ban giao",
+            "danh sach don ban giao",
+            "liet ke don ban giao",
+            "chi tiet don ban giao",
+            "chi tiet ban giao viec",
+            "chi tiet ban giao",
+            "noi chi tiet don ban giao",
+            "noi chi tiet ban giao",
+            "ke chi tiet don ban giao",
+            "noi cho minh don ban giao",
+            "noi minh don ban giao",
+            "ke don ban giao",
+            "don ban giao di",
+            "don ban giao nao can xu ly",
+            "nhung don ban giao",
+            "ban giao nao can xu ly",
+            "ban giao nao can toi xu ly",
+            "list pending handovers",
+            "whose handover needs action",
+        )
+        if any(phrase in text for phrase in strong_phrases):
+            return True
+        if self._is_handover_detail_followup_intent(text):
+            return True
+        has_handover = self._mentions_handover_request(text)
+        if not has_handover:
+            return False
+        asks_detail = any(
+            word in text
+            for word in (
+                "cua ai",
+                "la ai",
+                "danh sach",
+                "chi tiet",
+                "liet ke",
+                "nhung don",
+                "don nao",
+                "noi chi tiet",
+                "noi ro",
+                "ke chi tiet",
+                "noi cho",
+                "noi minh",
+                "ke cho",
+            )
+        )
+        needs_action = any(
+            word in text
+            for word in (
+                "can xu ly",
+                "can toi xu ly",
+                "cho xu ly",
+                "cho toi xu ly",
+                "dang cho xu ly",
+                "can ban giao",
+            )
+        )
+        if asks_detail or needs_action:
+            return True
+        # Default: a plain "đơn bàn giao" question is secretary inbox, not own-leave status.
+        if any(phrase in text for phrase in ("don ban giao", "ban giao viec", "ban giao cong viec")):
+            return True
+        return "ban giao" in text or "handover" in text
+
     def _is_handover_pending_intent(self, text):
         if not text:
             return False
@@ -575,6 +799,8 @@ class MailBot(models.AbstractModel):
             return "daily_tasks"
         if self._is_pending_approval_detail_intent(text):
             return "pending_approval_detail"
+        if self._is_pending_handover_detail_intent(text):
+            return "pending_handover_detail"
         if any(token in text for token in ("menu", "help", "giup", "tro giup", "huong dan")):
             return "help"
         if any(token in text for token in ("gan nhat", "ngay nao", "khi nao")):
@@ -588,7 +814,11 @@ class MailBot(models.AbstractModel):
         if any(token in text for token in ("refused", "tu choi", "khong nhan")):
             return "handover_refused"
         if any(token in text for token in ("ban giao", "handover")):
-            return "handover_status"
+            if self._is_pending_handover_detail_intent(text):
+                return "pending_handover_detail"
+            if self._is_own_leave_handover_status_intent(text):
+                return "handover_status"
+            return "pending_handover_detail"
         if any(
             token in text
             for token in (
@@ -623,6 +853,8 @@ class MailBot(models.AbstractModel):
             return self._approval_help_message()
         if intent == "pending_approval_detail":
             return self._run_pending_approval_detail_skill()
+        if intent == "pending_handover_detail":
+            return self._run_pending_handover_detail_skill()
         if intent == "latest_leave":
             return self._format_latest_leave_answer(latest)
 
@@ -666,6 +898,8 @@ class MailBot(models.AbstractModel):
         return "<br/>".join(response_lines)
 
     def _run_handover_skill(self, intent):
+        if intent == "pending_handover_detail":
+            return self._run_pending_handover_detail_skill()
         employee = self.env.user.employee_id
         if not employee:
             return _("Mình chưa thấy hồ sơ nhân sự gắn với tài khoản của bạn nên chưa kiểm tra được bàn giao công việc.")
@@ -829,7 +1063,8 @@ class MailBot(models.AbstractModel):
             "1) Ai đã chấp nhận bàn giao<br/>"
             "2) Ai đang chờ phản hồi bàn giao<br/>"
             "3) Ai đã từ chối bàn giao<br/>"
-            "4) Trạng thái bàn giao hiện tại"
+            "4) Trạng thái bàn giao hiện tại<br/>"
+            "5) Chi tiết đơn bàn giao việc cần bạn xử lý"
         )
 
     def _redirect_to_main_bot_message(self, task_name):
