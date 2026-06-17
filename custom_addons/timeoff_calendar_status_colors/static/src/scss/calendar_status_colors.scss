@@ -1,0 +1,80 @@
+$o-timeoff-validated: $o-success;
+$o-timeoff-pending: $o-warning;
+$o-timeoff-refused: $o-danger;
+
+@mixin o-timeoff-status-vars($color) {
+    $color-subtle: mix($o-white, $color, 55%);
+
+    --fc-event-bg-color: #{$color-subtle};
+    --o-event-bg: #{$color};
+    --o-event-bg--subtle-rgb: #{to-rgb($color-subtle)};
+
+    &.fc-bg-event {
+        --fc-bg-event-color: #{$color-subtle};
+    }
+
+    &.fc-event:not(.o_event_dot):not(.fc-dragging) {
+        --fc-event-text-color: #{color-contrast($color-subtle)};
+        --fc-event-border-color: #{tint-color($color, 50%)};
+    }
+
+    &.o_event_dot {
+        background-color: rgba(var(--o-event-bg--subtle-rgb), var(--o-bg-opacity));
+
+        &:before {
+            color: var(--o-event-bg, #{$color});
+        }
+    }
+}
+
+.o_calendar_filter {
+    --calendarFilter-icon--plain: url("/timeoff_calendar_status_colors/static/src/img/plain_validated.svg");
+    --calendarFilter-icon--hatched: url("/timeoff_calendar_status_colors/static/src/img/hatched_pending.svg");
+    --calendarFilter-icon--line: url("/timeoff_calendar_status_colors/static/src/img/line_refused.svg");
+}
+
+.o_timeoff_calendar .o_calendar_renderer {
+    @for $i from 0 through length($o-colors-complete) - 1 {
+        .o_calendar_color_#{$i} {
+            &:not(.o_event_hatched):not(.o_event_striked) {
+                @include o-timeoff-status-vars($o-timeoff-validated);
+
+                &:not(.o_event_dot):not(.fc-daygrid-event):not(.fc-timegrid-event),
+                &.fc-bg-event {
+                    background-color: mix($o-white, $o-timeoff-validated, 55%) !important;
+                }
+            }
+
+            &.o_event_hatched {
+                @include o-timeoff-status-vars($o-timeoff-pending);
+
+                &.o_event_hatched:has(.fc-bg) {
+                    --fc-event-bg-color: #{$o-view-background-color};
+                }
+
+                &.o_event_hatched:not(.o_event_dot):not(.fc-daygrid-event):not(.fc-timegrid-event),
+                &.o_event_hatched .fc-bg {
+                    background: repeating-linear-gradient(
+                        45deg,
+                        RGBA(to-rgb($o-timeoff-pending), .3),
+                        RGBA(to-rgb($o-timeoff-pending), .3) 10px,
+                        RGBA(to-rgb($o-timeoff-pending), .6) 10px,
+                        RGBA(to-rgb($o-timeoff-pending), .6) 20px
+                    ) !important;
+                }
+            }
+
+            &.o_event_striked {
+                @include o-timeoff-status-vars($o-timeoff-refused);
+
+                &.o_event_striked:not(.o_event_dot) {
+                    background: linear-gradient(
+                        transparent 0 45%,
+                        $o-timeoff-refused 45% 55%,
+                        transparent 55% 100%
+                    ) !important;
+                }
+            }
+        }
+    }
+}
