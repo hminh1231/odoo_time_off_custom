@@ -26,6 +26,7 @@ _DEPARTURE_MONTHLY_LEAVE_CUTOFF_DAY = 20
 _TIMEOFF_SELF_READ_FIELDS = frozenset({"version_id", "mien", "ma_bo_phan_id"})
 # Tên Job Position được phép chỉnh `monthly_paid_leave_cap`.
 _MONTHLY_CAP_EDITOR_JOB_POSITION = "sale admin"
+_MATERNITY_LICENSE_DATE_FIELD = "thai_san_ngay_cap_phep"
 
 
 class HrEmployeeTimeoff(models.Model):
@@ -382,7 +383,47 @@ class HrEmployeeTimeoff(models.Model):
             new_total - (self.tong_so_phep or 0.0) - 1.0
         ) < 0.000001
 
+    def _maternity_license_bonus_units(self):
+        self.ensure_one()
+        license_date = getattr(self.sudo(), _MATERNITY_LICENSE_DATE_FIELD, False)
+        license_date = fields.Date.to_date(license_date) if license_date else False
+        return 1.0 if license_date and license_date.day == 1 else 0.0
+
+    def _sync_maternity_license_bonus_to_total(self, old_bonus_by_employee):
+        ctx = {
+            _SKIP_DEPARTURE_MONTHLY_LEAVE_CUTOFF_CTX: True,
+            _SKIP_DEPARTURE_MONTHLY_LEAVE_REVERSAL_CTX: True,
+        }
+        for employee in self.sudo():
+            old_bonus = old_bonus_by_employee.get(employee.id, 0.0)
+            new_bonus = employee._maternity_license_bonus_units()
+            delta = new_bonus - old_bonus
+            if abs(delta) < 0.000001:
+                continue
+            employee.with_context(**ctx).write(
+                {"tong_so_phep": (employee.tong_so_phep or 0.0) + delta}
+            )
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        records = super().create(vals_list)
+        to_sync = records.filtered(
+            lambda employee: employee._maternity_license_bonus_units()
+        )
+        if to_sync:
+            to_sync._sync_maternity_license_bonus_to_total({})
+        return records
+
     def write(self, vals):
+        sync_maternity_bonus = _MATERNITY_LICENSE_DATE_FIELD in vals
+        old_maternity_bonus = (
+            {
+                employee.id: employee._maternity_license_bonus_units()
+                for employee in self.sudo()
+            }
+            if sync_maternity_bonus
+            else {}
+        )
         if (
             "tong_so_phep" in vals
             and not self.env.context.get(_SKIP_DEPARTURE_MONTHLY_LEAVE_CUTOFF_CTX)
@@ -431,6 +472,8 @@ class HrEmployeeTimeoff(models.Model):
                     )
                 )
         result = super().write(vals)
+        if sync_maternity_bonus:
+            self._sync_maternity_license_bonus_to_total(old_maternity_bonus)
         if (
             "ngay_nghi_viec" in vals
             and not self.env.context.get(
@@ -505,16 +548,7 @@ class HrEmployeeTimeoff(models.Model):
         )
         return groups[0][0] if groups else 0.0
 
-    def _maternity_first_day_balance_bonus(self, target_date=None):
-        self.ensure_one()
-        license_date = getattr(self.sudo(), "thai_san_ngay_cap_phep", False)
-        license_date = fields.Date.to_date(license_date) if license_date else False
-        if not license_date or license_date.day != 1:
-            return 0.0
-        period_start, period_end = self._time_off_summary_period_bounds(target_date)
-        return 1.0 if period_start <= license_date <= period_end else 0.0
-
-    @api.depends("tong_so_phep", "thai_san_ngay_cap_phep")
+    @api.depends("tong_so_phep")
     def _compute_time_off_summary(self):
         employees = self._employees_for_timeoff_summary_compute()
         if not employees:
@@ -528,10 +562,7 @@ class HrEmployeeTimeoff(models.Model):
         for employee in employees:
             # Dùng cùng tập đơn đang chiếm quỹ với bộ chia P/P1/P2/O.
             leave_taken = employee._get_leave_days_used_for_summary()
-            maternity_bonus = employee._maternity_first_day_balance_bonus()
-            raw_remaining = (
-                (employee.tong_so_phep or 0.0) + maternity_bonus - leave_taken
-            )
+            raw_remaining = (employee.tong_so_phep or 0.0) - leave_taken
             employee.da_su_dung = leave_taken
             employee.con_lai = max(0.0, raw_remaining)
             if raw_remaining < 0:
