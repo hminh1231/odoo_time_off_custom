@@ -107,7 +107,10 @@ class HolidaysRequest(models.Model):
 
     def _apply_emergency_leave_on_vals(self, vals, leave=None):
         """Set is_emergency_leave on vals; raise UserError if violation without confirmation."""
-        if self.env.context.get(_SKIP_EMERGENCY_LEAVE_CHECK_CTX) or self.env.context.get("leave_fast_create"):
+        if (
+            self.env.context.get(_SKIP_EMERGENCY_LEAVE_CHECK_CTX)
+            or self.env.context.get("leave_fast_create")
+        ):
             return
         merged = self._merge_vals_for_emergency_check(vals, leave=leave)
         info = self._emergency_leave_violation_info(merged, leave=leave)
@@ -120,6 +123,9 @@ class HolidaysRequest(models.Model):
         if self.env.context.get(_EMERGENCY_LEAVE_CTX):
             vals["is_emergency_leave"] = True
             return
+        if self.env.context.get("import_file"):
+            vals.setdefault("is_emergency_leave", True)
+            return
         raise UserError(
             _(
                 "This time off request does not meet the advance-notice rule. "
@@ -131,7 +137,7 @@ class HolidaysRequest(models.Model):
 
     def _check_past_leave_limit_on_vals(self, vals, leave=None):
         """Block creating/moving leave requests more than 3 calendar days in the past."""
-        if self.env.context.get(_SKIP_PAST_LEAVE_LIMIT_CTX):
+        if self.env.context.get(_SKIP_PAST_LEAVE_LIMIT_CTX) or self.env.context.get("import_file"):
             return
         start = self._past_leave_limit_violation_start(vals=vals, leave=leave)
         if start:
@@ -162,7 +168,7 @@ class HolidaysRequest(models.Model):
 
     @api.constrains("request_date_from", "date_from")
     def _check_past_leave_limit_constraint(self):
-        if self.env.context.get(_SKIP_PAST_LEAVE_LIMIT_CTX):
+        if self.env.context.get(_SKIP_PAST_LEAVE_LIMIT_CTX) or self.env.context.get("import_file"):
             return
         for leave in self:
             start = self._past_leave_limit_violation_start(leave=leave)

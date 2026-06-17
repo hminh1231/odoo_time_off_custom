@@ -569,6 +569,8 @@ class HrLeaveHandover(models.Model):
 
     @api.constrains("handover_acceptance_ids")
     def _check_handover_required_on_submit(self):
+        if self.env.context.get("import_file"):
+            return
         for leave in self:
             if (
                 leave.state in ("confirm", "validate1", "validate")

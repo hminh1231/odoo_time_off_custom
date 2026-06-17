@@ -96,7 +96,7 @@ class HrLeave(models.Model):
     @api.model_create_multi
     def create(self, vals_list):
         records = super().create(vals_list)
-        if not self.env.context.get("leave_fast_create"):
+        if not self.env.context.get("leave_fast_create") and not self.env.context.get("import_file"):
             records._ensure_leave_reason_persisted(vals_list)
             records._validate_leave_reason_required(vals_list)
         return records
