@@ -158,9 +158,10 @@ class HrEmployee(models.Model):
         employees = super().create(vals_list)
         if any(MIEN_ACCESS_FIELDS & set(vals) for vals in vals_list):
             self.env.registry.clear_cache()
-        if any("thai_san_ngay_cap_phep" in vals for vals in vals_list) and hasattr(
-            employees, "_compute_time_off_summary"
-        ):
+        if any(
+            {"unpaid_leave_start_date", "unpaid_leave_return_date"} & set(vals)
+            for vals in vals_list
+        ) and hasattr(employees, "_compute_time_off_summary"):
             employees._compute_time_off_summary()
         return employees
 
@@ -187,7 +188,7 @@ class HrEmployee(models.Model):
         if MIEN_ACCESS_FIELDS & set(vals):
             # ir.rule domains are ormcache'd per uid; refresh when Miền scope changes.
             self.env.registry.clear_cache()
-        if "thai_san_ngay_cap_phep" in vals and hasattr(
+        if {"unpaid_leave_start_date", "unpaid_leave_return_date"} & set(vals) and hasattr(
             self, "_compute_time_off_summary"
         ):
             self._compute_time_off_summary()
@@ -298,9 +299,9 @@ class HrEmployee(models.Model):
     ngay_nghi_viec = fields.Date(string='Ngày nghỉ việc', groups='hr.group_hr_user', tracking=True)
     ngay_chinh_thuc = fields.Date(string='Ngày chính thức', groups='hr.group_hr_user', tracking=True)
 
-    # Maternity
-    thai_san_di_lam_lai = fields.Date(string='Đi làm lại', groups='hr.group_hr_user', tracking=True)
-    thai_san_ngay_cap_phep = fields.Date(string='Ngày cấp phép', groups='hr.group_hr_user', tracking=True)
+    # Unpaid leave period
+    unpaid_leave_start_date = fields.Date(string='Ngày bắt đầu nghỉ', groups='hr.group_hr_user', tracking=True)
+    unpaid_leave_return_date = fields.Date(string='Ngày bắt đầu đi làm', groups='hr.group_hr_user', tracking=True)
 
     # Recruitment and Notes
     nguon_tuyen_dung = fields.Char(string='Nguồn tuyển dụng', groups='hr.group_hr_user', tracking=True)

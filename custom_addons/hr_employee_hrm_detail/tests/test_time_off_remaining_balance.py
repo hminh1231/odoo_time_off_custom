@@ -157,33 +157,33 @@ class TestTimeOffRemainingBalance(TransactionCase):
         self.assertIn(paid_p2.id, paid_ids)
         self.assertNotIn(unpaid_o.id, paid_ids)
 
-    def test_maternity_first_day_license_adds_one_total_day_and_recomputes(self):
+    def test_unpaid_leave_start_day_one_adds_one_total_day_and_recomputes(self):
         with patch.object(
             type(self.employee),
             "_get_leave_days_used_for_summary",
             autospec=True,
             return_value=0,
         ):
-            self.employee.write({"thai_san_ngay_cap_phep": date(2026, 2, 1)})
+            self.employee.write({"unpaid_leave_start_date": date(2026, 2, 1)})
             self.assertEqual(self.employee.tong_so_phep, 6)
             self.assertEqual(self.employee.con_lai, 6)
 
-            self.employee.write({"thai_san_ngay_cap_phep": date(2026, 2, 2)})
+            self.employee.write({"unpaid_leave_start_date": date(2026, 2, 2)})
             self.assertEqual(self.employee.tong_so_phep, 5)
             self.assertEqual(self.employee.con_lai, 5)
 
-            self.employee.write({"thai_san_ngay_cap_phep": date(2026, 3, 1)})
+            self.employee.write({"unpaid_leave_start_date": date(2026, 3, 1)})
             self.assertEqual(self.employee.tong_so_phep, 6)
             self.assertEqual(self.employee.con_lai, 6)
 
-    def test_maternity_license_total_day_keeps_remaining_derived_from_used_days(self):
+    def test_unpaid_leave_start_total_day_keeps_remaining_derived_from_used_days(self):
         with patch.object(
             type(self.employee),
             "_get_leave_days_used_for_summary",
             autospec=True,
             return_value=2,
         ):
-            self.employee.write({"thai_san_ngay_cap_phep": date(2026, 2, 1)})
+            self.employee.write({"unpaid_leave_start_date": date(2026, 2, 1)})
 
             self.assertEqual(self.employee.tong_so_phep, 6)
             self.assertEqual(self.employee.da_su_dung, 2)

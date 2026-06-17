@@ -26,7 +26,7 @@ _DEPARTURE_MONTHLY_LEAVE_CUTOFF_DAY = 20
 _TIMEOFF_SELF_READ_FIELDS = frozenset({"version_id", "mien", "ma_bo_phan_id"})
 # Tên Job Position được phép chỉnh `monthly_paid_leave_cap`.
 _MONTHLY_CAP_EDITOR_JOB_POSITION = "sale admin"
-_MATERNITY_LICENSE_DATE_FIELD = "thai_san_ngay_cap_phep"
+_UNPAID_LEAVE_START_DATE_FIELD = "unpaid_leave_start_date"
 
 
 class HrEmployeeTimeoff(models.Model):
@@ -383,20 +383,20 @@ class HrEmployeeTimeoff(models.Model):
             new_total - (self.tong_so_phep or 0.0) - 1.0
         ) < 0.000001
 
-    def _maternity_license_bonus_units(self):
+    def _unpaid_leave_start_bonus_units(self):
         self.ensure_one()
-        license_date = getattr(self.sudo(), _MATERNITY_LICENSE_DATE_FIELD, False)
+        license_date = getattr(self.sudo(), _UNPAID_LEAVE_START_DATE_FIELD, False)
         license_date = fields.Date.to_date(license_date) if license_date else False
         return 1.0 if license_date and license_date.day == 1 else 0.0
 
-    def _sync_maternity_license_bonus_to_total(self, old_bonus_by_employee):
+    def _sync_unpaid_leave_start_bonus_to_total(self, old_bonus_by_employee):
         ctx = {
             _SKIP_DEPARTURE_MONTHLY_LEAVE_CUTOFF_CTX: True,
             _SKIP_DEPARTURE_MONTHLY_LEAVE_REVERSAL_CTX: True,
         }
         for employee in self.sudo():
             old_bonus = old_bonus_by_employee.get(employee.id, 0.0)
-            new_bonus = employee._maternity_license_bonus_units()
+            new_bonus = employee._unpaid_leave_start_bonus_units()
             delta = new_bonus - old_bonus
             if abs(delta) < 0.000001:
                 continue
@@ -408,20 +408,20 @@ class HrEmployeeTimeoff(models.Model):
     def create(self, vals_list):
         records = super().create(vals_list)
         to_sync = records.filtered(
-            lambda employee: employee._maternity_license_bonus_units()
+            lambda employee: employee._unpaid_leave_start_bonus_units()
         )
         if to_sync:
-            to_sync._sync_maternity_license_bonus_to_total({})
+            to_sync._sync_unpaid_leave_start_bonus_to_total({})
         return records
 
     def write(self, vals):
-        sync_maternity_bonus = _MATERNITY_LICENSE_DATE_FIELD in vals
-        old_maternity_bonus = (
+        sync_unpaid_leave_start_bonus = _UNPAID_LEAVE_START_DATE_FIELD in vals
+        old_unpaid_leave_start_bonus = (
             {
-                employee.id: employee._maternity_license_bonus_units()
+                employee.id: employee._unpaid_leave_start_bonus_units()
                 for employee in self.sudo()
             }
-            if sync_maternity_bonus
+            if sync_unpaid_leave_start_bonus
             else {}
         )
         if (
@@ -472,8 +472,8 @@ class HrEmployeeTimeoff(models.Model):
                     )
                 )
         result = super().write(vals)
-        if sync_maternity_bonus:
-            self._sync_maternity_license_bonus_to_total(old_maternity_bonus)
+        if sync_unpaid_leave_start_bonus:
+            self._sync_unpaid_leave_start_bonus_to_total(old_unpaid_leave_start_bonus)
         if (
             "ngay_nghi_viec" in vals
             and not self.env.context.get(
