@@ -1,0 +1,65 @@
+// Daily leave report list — multiline headers and centered STT.
+
+.o_list_view.o_hr_leave_daily_report_list {
+    .o_list_table th[data-name="stt"],
+    .o_list_table td.o_data_cell[name="stt"] {
+        width: 3.25rem !important;
+        min-width: 3.25rem !important;
+        max-width: 3.25rem !important;
+        text-align: center !important;
+    }
+
+    .o_list_table th[data-name="request_date_from"],
+    .o_list_table th[data-name="request_date_to"],
+    .o_list_table th[data-name="number_of_days"] {
+        white-space: pre-line !important;
+        line-height: 1.25;
+        text-align: center;
+        vertical-align: bottom;
+        overflow: visible !important;
+        text-overflow: unset !important;
+
+        span.text-truncate,
+        .d-flex,
+        .d-flex span {
+            display: block !important;
+            white-space: pre-line !important;
+            text-overflow: unset !important;
+            overflow: visible !important;
+            word-break: break-word;
+            line-height: 1.25;
+            min-width: 0;
+            flex: none !important;
+            max-width: none !important;
+        }
+
+        .d-flex {
+            align-items: flex-end !important;
+            justify-content: center !important;
+        }
+    }
+
+    .o_list_table th[data-name="request_date_from"],
+    .o_list_table td.o_data_cell[name="request_date_from"] {
+        width: 6.25rem !important;
+        min-width: 6.25rem !important;
+        max-width: 6.25rem !important;
+        text-align: center;
+    }
+
+    .o_list_table th[data-name="request_date_to"],
+    .o_list_table td.o_data_cell[name="request_date_to"] {
+        width: 6.25rem !important;
+        min-width: 6.25rem !important;
+        max-width: 6.25rem !important;
+        text-align: center;
+    }
+
+    .o_list_table th[data-name="number_of_days"],
+    .o_list_table td.o_data_cell[name="number_of_days"] {
+        width: 5rem !important;
+        min-width: 5rem !important;
+        max-width: 5rem !important;
+        text-align: center;
+    }
+}

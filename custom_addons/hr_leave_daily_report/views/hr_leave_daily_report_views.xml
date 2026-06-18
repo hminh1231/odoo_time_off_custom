@@ -53,6 +53,14 @@
                         ('request_date_to', '&gt;=', context_today()),
                     ]"
                 />
+                <filter
+                    string="Ngày mai"
+                    name="tomorrow"
+                    domain="[
+                        ('request_date_from', '&lt;=', (context_today() + relativedelta(days=1)).strftime('%Y-%m-%d')),
+                        ('request_date_to', '&gt;=', (context_today() + relativedelta(days=1)).strftime('%Y-%m-%d')),
+                    ]"
+                />
                 <separator/>
                 <filter string="Miền Bắc" name="mien_bac" domain="[('employee_leave_mien', '=', 'Bắc')]"/>
                 <filter string="Miền Nam" name="mien_nam" domain="[('employee_leave_mien', '=', 'Nam')]"/>
