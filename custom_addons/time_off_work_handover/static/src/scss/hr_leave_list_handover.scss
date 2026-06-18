@@ -1,0 +1,80 @@
+// Leave list: show full cell content and allow horizontal scroll for wide rows.
+
+.o_list_view.o_hr_leave_handover_list {
+    .o_content {
+        overflow-x: auto;
+    }
+
+    .o_list_renderer {
+        display: block;
+        width: max-content;
+        max-width: 100%;
+    }
+
+    .o_list_table {
+        width: max-content !important;
+        min-width: 100%;
+        table-layout: auto;
+    }
+
+    .o_list_table th,
+    .o_list_table td {
+        white-space: normal;
+        word-break: break-word;
+        overflow: visible;
+        text-overflow: unset;
+        vertical-align: top;
+    }
+
+    .o_data_cell,
+    .o_field_widget,
+    .o_field_widget span,
+    .o_field_badge span {
+        overflow: visible !important;
+        text-overflow: unset !important;
+        white-space: normal !important;
+    }
+
+    .o_data_cell.text-truncate,
+    .o_field_widget.text-truncate {
+        text-overflow: unset !important;
+    }
+
+    .o_data_cell[name="handover_recipient_display"],
+    .o_data_cell[name="handover_work_content_display"],
+    .o_data_cell[name="leave_reason_display"] {
+        white-space: pre-wrap !important;
+        word-break: break-word;
+        min-width: 10rem;
+        max-width: 16rem;
+        line-height: 1.4;
+    }
+
+    .o_list_table th[data-name="handover_recipient_display"],
+    .o_list_table th[data-name="handover_work_content_display"] {
+        max-width: 6rem;
+        vertical-align: bottom;
+
+        span.text-truncate,
+        .d-flex span {
+            display: block !important;
+            white-space: pre-line !important;
+            text-overflow: unset !important;
+            overflow: visible !important;
+            word-break: break-word;
+            line-height: 1.25;
+            min-width: 0;
+            flex: none !important;
+        }
+
+        .d-flex {
+            align-items: flex-end !important;
+        }
+    }
+
+    .o_data_cell[name="employee_id"] .o_m2o_avatar,
+    .o_data_cell[name="employee_id"] .o_avatar,
+    .o_data_cell[name="employee_id"] img {
+        display: none !important;
+    }
+}

@@ -1,6 +1,6 @@
 {
     "name": "Time Off Work Handover",
-    "version": "19.0.1.0.16",
+    "version": "19.0.1.0.20",
     "category": "Human Resources",
     "summary": "Work handover workflow for time off requests",
     "depends": [
@@ -29,6 +29,7 @@
     "assets": {
         "web.assets_backend": [
             "time_off_work_handover/static/src/scss/handover_replacement.scss",
+            "time_off_work_handover/static/src/scss/hr_leave_list_handover.scss",
         ],
     },
     "installable": True,
