@@ -38,13 +38,13 @@ class HolidaysRequest(models.Model):
         compute="_compute_status_display_label",
     )
     last_refusal_reason = fields.Text(
-        string="Last Refusal Reason",
+        string="Lý do từ chối",
         copy=False,
         readonly=True,
     )
     last_refuser_id = fields.Many2one(
         "res.users",
-        string="Last Refuser",
+        string="Người từ chối",
         copy=False,
         readonly=True,
     )

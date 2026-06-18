@@ -17,6 +17,7 @@
         "security/ir.model.access.csv",
         "views/hr_leave_type_views.xml",
         "views/hr_leave_form_mobile_date_views.xml",
+        "views/hr_leave_form_refusal_views.xml",
         "views/hr_leave_odoobot_notify_config_views.xml",
     ],
     "assets": {
