@@ -1,7 +1,7 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 {
     "name": "Time Off — Daily Leave Report",
-    "version": "19.0.1.0.2",
+    "version": "19.0.1.0.3",
     "category": "Human Resources/Time Off",
     "summary": "Daily leave listing under Management (Ngày nghỉ theo ngày)",
     "depends": [
@@ -13,6 +13,7 @@
     ],
     "data": [
         "security/ir.model.access.csv",
+        "security/hr_leave_daily_report_security.xml",
         "views/hr_leave_daily_report_views.xml",
     ],
     "license": "LGPL-3",
