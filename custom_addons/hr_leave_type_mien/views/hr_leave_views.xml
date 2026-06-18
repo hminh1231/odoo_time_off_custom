@@ -18,6 +18,30 @@
         </field>
     </record>
 
+    <record id="hr_leave_view_search_mien_filter" model="ir.ui.view">
+        <field name="name">hr.leave.search.mien.filter</field>
+        <field name="model">hr.leave</field>
+        <field name="inherit_id" ref="hr_holidays.view_hr_holidays_filter"/>
+        <field name="arch" type="xml">
+            <field name="employee_id" position="after">
+                <field name="employee_leave_mien"/>
+            </field>
+            <xpath expr="//filter[@name='filter_date_from']" position="before">
+                <separator/>
+                <filter string="Miền Bắc" name="mien_bac" domain="[('employee_leave_mien', '=', 'Bắc')]"/>
+                <filter string="Miền Nam" name="mien_nam" domain="[('employee_leave_mien', '=', 'Nam')]"/>
+                <filter string="Miền ĐTT" name="mien_dtt" domain="[('employee_leave_mien', '=', 'ĐTT')]"/>
+                <filter string="VP" name="mien_vp" domain="[('employee_leave_mien', '=', 'VP')]"/>
+            </xpath>
+            <xpath expr="//searchpanel/field[@name='department_id']" position="after">
+                <field name="employee_leave_mien" string="Miền" icon="fa-map-marker" enable_counters="1"/>
+            </xpath>
+            <xpath expr="//filter[@name='group_date_from']" position="before">
+                <filter name="group_mien" string="Miền" context="{'group_by': 'employee_leave_mien'}"/>
+            </xpath>
+        </field>
+    </record>
+
     <record id="hr_leave_view_form_mien_filter" model="ir.ui.view">
         <field name="name">hr.leave.form.mien.filter</field>
         <field name="model">hr.leave</field>

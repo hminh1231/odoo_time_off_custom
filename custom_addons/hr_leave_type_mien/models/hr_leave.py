@@ -47,6 +47,19 @@ class HrLeave(models.Model):
         string="Ngày kết thúc",
         compute="_compute_leave_list_date_display",
     )
+    employee_leave_mien = fields.Selection(
+        selection=[
+            ("Bắc", "Miền Bắc"),
+            ("Nam", "Miền Nam"),
+            ("ĐTT", "Miền ĐTT"),
+            ("VP", "VP"),
+        ],
+        string="Miền",
+        compute="_compute_employee_leave_mien",
+        store=True,
+        index=True,
+        readonly=True,
+    )
 
     # ------------------------------------------------------------------
     # Helpers
@@ -350,6 +363,14 @@ class HrLeave(models.Model):
     # ------------------------------------------------------------------
     # Computes
     # ------------------------------------------------------------------
+
+    @api.depends("employee_id", "employee_id.mien", "employee_id.ma_bo_phan_id.mien")
+    def _compute_employee_leave_mien(self):
+        for leave in self:
+            employee = leave.employee_id
+            leave.employee_leave_mien = (
+                employee._get_leave_mien() if employee else False
+            )
 
     @api.depends(
         "employee_id",
