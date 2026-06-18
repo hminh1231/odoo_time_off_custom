@@ -364,7 +364,12 @@ class HrLeave(models.Model):
     # Computes
     # ------------------------------------------------------------------
 
-    @api.depends("employee_id", "employee_id.mien", "employee_id.ma_bo_phan_id.mien")
+    @api.depends(
+        "employee_id",
+        "employee_id.mien",
+        "employee_id.ma_bo_phan_id",
+        "employee_id.ma_bo_phan_id.mien",
+    )
     def _compute_employee_leave_mien(self):
         for leave in self:
             employee = leave.employee_id

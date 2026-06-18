@@ -71,15 +71,12 @@ class HrLeaveDailyReport(models.Model):
 
     @api.depends("leave_id", "leave_id.status_display_label", "state")
     def _compute_status_display_label(self):
+        state_labels = dict(self._fields["state"].selection)
         for report in self:
-            if report.state == "validate":
-                report.status_display_label = "Đã duyệt"
-                continue
             leave = report.leave_id
             if leave and "status_display_label" in leave._fields and leave.status_display_label:
                 report.status_display_label = leave.status_display_label
             else:
-                state_labels = dict(self._fields["state"].selection)
                 report.status_display_label = state_labels.get(report.state, report.state or "")
 
     def init(self):
@@ -108,7 +105,7 @@ class HrLeaveDailyReport(models.Model):
                 INNER JOIN hr_employee e ON l.employee_id = e.id
                 LEFT JOIN hr_version v ON v.id = e.current_version_id
                 WHERE e.active IS TRUE
-                  AND l.state = 'validate'
+                  AND l.state != 'cancel'
             )
             """
         )

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="resource_calendar_leaves_search_mien_inherit" model="ir.ui.view">
+        <field name="name">resource.calendar.leaves.search.mien.inherit</field>
+        <field name="model">resource.calendar.leaves</field>
+        <field name="inherit_id" ref="hr_holidays.resource_calendar_leaves_view_search_inherit"/>
+        <field name="arch" type="xml">
+            <filter name="filter_date" position="after">
+                <separator/>
+                <filter name="holiday_scope_vp" string="Văn Phòng" domain="[('holiday_scope', '=', 'vp')]"/>
+                <filter name="holiday_scope_ch" string="Cửa Hàng" domain="[('holiday_scope', '=', 'ch')]"/>
+            </filter>
+        </field>
+    </record>
+
+    <record id="resource_calendar_leaves_tree_mien_inherit" model="ir.ui.view">
+        <field name="name">resource.calendar.leaves.list.mien.inherit</field>
+        <field name="model">resource.calendar.leaves</field>
+        <field name="inherit_id" ref="hr_holidays.resource_calendar_leaves_tree_inherit"/>
+        <field name="arch" type="xml">
+            <xpath expr="//list" position="attributes">
+                <attribute name="js_class">public_holiday_mien_list</attribute>
+            </xpath>
+            <xpath expr="//field[@name='name']" position="after">
+                <field name="holiday_scope" column_invisible="1"/>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="hr_holidays.open_view_public_holiday" model="ir.actions.act_window">
+        <field name="context">{
+            'search_default_filter_date': True,
+            'search_default_holiday_scope_vp': 1,
+            'default_holiday_scope': 'vp'
+        }</field>
+    </record>
+</odoo>

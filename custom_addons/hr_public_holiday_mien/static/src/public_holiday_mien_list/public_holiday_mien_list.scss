@@ -1,0 +1,9 @@
+.o_public_holiday_scope_toggle {
+    background-color: var(--o-view-background-color, #fff);
+
+    .btn.active {
+        background-color: var(--o-brand-primary, #714b67);
+        border-color: var(--o-brand-primary, #714b67);
+        color: #fff;
+    }
+}

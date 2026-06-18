@@ -79,6 +79,10 @@ class HrLeave(models.Model):
     def _should_check_leave_reason(self, vals):
         if not vals:
             return False
+        # Public-holiday create/write re-evaluates overlapping hr.leave rows via
+        # sudo().write({'state': 'confirm'}) — not a user submit action.
+        if self.env.su and set(vals.keys()) <= {"state"}:
+            return False
         tracked = {
             "name",
             "private_name",

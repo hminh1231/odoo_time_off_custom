@@ -18,7 +18,9 @@
                     name="status_display_label"
                     string="Trạng thái"
                     widget="badge"
-                    decoration-success="1"
+                    decoration-warning="state in ('confirm', 'validate1')"
+                    decoration-success="state == 'validate'"
+                    decoration-danger="state == 'refuse'"
                 />
                 <field name="state" column_invisible="1"/>
                 <field name="job_title" column_invisible="1"/>
@@ -64,6 +66,10 @@
                 <filter string="Miền Nam" name="mien_nam" domain="[('employee_leave_mien', '=', 'Nam')]"/>
                 <filter string="Miền ĐTT" name="mien_dtt" domain="[('employee_leave_mien', '=', 'ĐTT')]"/>
                 <filter string="VP" name="mien_vp" domain="[('employee_leave_mien', '=', 'VP')]"/>
+                <separator/>
+                <filter string="Đã xác thực" name="validated" domain="[('state', '=', 'validate')]"/>
+                <filter string="Cần phê duyệt" name="to_approve" domain="[('state', 'in', ('confirm', 'validate1'))]"/>
+                <filter string="Bị từ chối" name="refused" domain="[('state', '=', 'refuse')]"/>
                 <group>
                     <filter string="Miền" name="group_mien" context="{'group_by': 'employee_leave_mien'}"/>
                     <filter string="Trạng thái" name="group_state" context="{'group_by': 'state'}"/>

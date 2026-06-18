@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="hr_public_holiday_mien.ListView" t-inherit="web.ListView" t-inherit-mode="primary">
+        <xpath expr="//t[@t-component='props.Renderer']" position="before">
+            <div class="o_public_holiday_scope_toggle d-flex justify-content-center py-2 border-bottom">
+                <div class="btn-group" role="group" aria-label="Phạm vi ngày lễ">
+                    <button type="button"
+                        class="btn btn-secondary"
+                        t-att-class="{ active: holidayScopeState.scope === 'vp' }"
+                        t-on-click="() => this.onHolidayScopeClick('vp')">
+                        <t t-esc="officeButtonLabel"/>
+                    </button>
+                    <button type="button"
+                        class="btn btn-secondary"
+                        t-att-class="{ active: holidayScopeState.scope === 'ch' }"
+                        t-on-click="() => this.onHolidayScopeClick('ch')">
+                        <t t-esc="storeButtonLabel"/>
+                    </button>
+                </div>
+            </div>
+        </xpath>
+    </t>
+
+</templates>
