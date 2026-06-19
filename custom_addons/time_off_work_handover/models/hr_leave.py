@@ -367,9 +367,12 @@ class HrLeaveHandover(models.Model):
             return
         if not self._handover_past_due_without_any_acceptance():
             return
-        # First escalation is sequential: escalate to the immediate next manager.
-        # Further steps are handled by _apply_handover_timeout_escalation_to_department_manager().
-        dept_head_user = self._get_next_manager_user_from_user(self.employee_id.user_id)
+        # Sequential: immediate next manager; direct: max configured job title on org chain.
+        # Further sequential steps are handled by _apply_handover_timeout_escalation_to_department_manager().
+        if self._handover_escalation_is_direct():
+            dept_head_user = self._get_handover_escalation_cap_user_for_max_title()
+        else:
+            dept_head_user = self._get_next_manager_user_from_user(self.employee_id.user_id)
         first_hours = self._handover_escalation_after_hours()
         if not dept_head_user:
             self.message_post(
@@ -406,6 +409,8 @@ class HrLeaveHandover(models.Model):
     def _apply_handover_timeout_escalation_to_department_manager(self):
         self.ensure_one()
         if not self.handover_escalated:
+            return
+        if self._handover_escalation_is_direct():
             return
         if self._handover_is_max_escalation_reached():
             return
@@ -1272,6 +1277,16 @@ class HrLeaveHandover(models.Model):
         if self.holiday_status_id and self.holiday_status_id.handover_escalation_after_hours:
             return self.holiday_status_id.handover_escalation_after_hours
         return _HANDOVER_ESCALATION_MINUTES / 60.0
+
+    def _handover_escalation_mode(self):
+        self.ensure_one()
+        if self.holiday_status_id and self.holiday_status_id.handover_escalation_mode:
+            return self.holiday_status_id.handover_escalation_mode
+        return "sequential"
+
+    def _handover_escalation_is_direct(self):
+        self.ensure_one()
+        return self._handover_escalation_mode() == "direct"
 
     def _handover_format_job_name_from_employee(self, emp):
         if not emp:

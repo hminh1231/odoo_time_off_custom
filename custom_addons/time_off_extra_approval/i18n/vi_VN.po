@@ -170,6 +170,123 @@ msgid "Work handover escalation"
 msgstr "Chuyển cấp bàn giao công việc"
 
 #. module: time_off_extra_approval
+msgid "Handover: escalate after (hours)"
+msgstr "Bàn giao: chuyển cấp sau (giờ)"
+
+#. module: time_off_extra_approval
+msgid "Handover: escalation progression"
+msgstr "Cách chuyển tiếp bàn giao"
+
+#. module: time_off_extra_approval
+msgid "Sequential"
+msgstr "Tuần tự"
+
+#. module: time_off_extra_approval
+msgid "Direct"
+msgstr "Trực tiếp"
+
+#. module: time_off_extra_approval
+msgid "Handover: max escalation job title"
+msgstr "Bàn giao: chức danh chuyển cấp tối đa"
+
+#. module: time_off_extra_approval
+msgid "Handover: auto-cancel at max escalation level"
+msgstr "Bàn giao: tự động hủy ở cấp chuyển cấp tối đa"
+
+#. module: time_off_extra_approval
+msgid "Approval escalation"
+msgstr "Chuyển cấp duyệt"
+
+#. module: time_off_extra_approval
+msgid "Approval: escalate after (hours)"
+msgstr "Duyệt: chuyển cấp sau (giờ)"
+
+#. module: time_off_extra_approval
+msgid "Approval: escalation progression"
+msgstr "Cách chuyển tiếp duyệt"
+
+#. module: time_off_extra_approval
+msgid "Approval: max escalation job title"
+msgstr "Duyệt: chức danh chuyển cấp tối đa"
+
+#. module: time_off_extra_approval
+msgid "Approval: auto-cancel at max escalation level"
+msgstr "Duyệt: tự động hủy ở cấp chuyển cấp tối đa"
+
+#. module: time_off_extra_approval
+msgid "Approval: escalate to next level after (hours)"
+msgstr "Duyệt: chuyển cấp tiếp theo sau (giờ)"
+
+#. module: time_off_extra_approval
+msgid "Approval: cancel after timeout at max level (hours)"
+msgstr "Duyệt: hủy sau thời gian chờ ở cấp tối đa (giờ)"
+
+#. module: time_off_extra_approval
+msgid "If nobody approves within this period, escalation starts."
+msgstr ""
+"Nếu trong khoảng thời gian này không có ai duyệt, hệ thống bắt đầu chuyển "
+"cấp."
+
+#. module: time_off_extra_approval
+msgid "Maximum job title level used for approval escalation."
+msgstr "Chức danh cao nhất mà quy trình chuyển cấp duyệt được phép leo tới."
+
+#. module: time_off_extra_approval
+msgid ""
+"If enabled, request auto-cancels when it reaches max escalation level and "
+"still has no approver action in time."
+msgstr ""
+"Nếu bật, đơn sẽ tự động hủy khi đã chuyển cấp tới mức tối đa mà vẫn chưa có "
+"người duyệt xử lý trong thời gian cho phép."
+
+#. module: time_off_extra_approval
+msgid "Handover: escalate to next level after (hours)"
+msgstr "Bàn giao: chuyển cấp tiếp theo sau (giờ)"
+
+#. module: time_off_extra_approval
+msgid "Handover: cancel after timeout at max level (hours)"
+msgstr "Bàn giao: hủy sau thời gian chờ ở cấp tối đa (giờ)"
+
+#. module: time_off_extra_approval
+msgid "If nobody accepts handover within this period, escalation starts."
+msgstr ""
+"Nếu trong khoảng thời gian này không có ai chấp nhận bàn giao, hệ thống bắt "
+"đầu chuyển cấp."
+
+#. module: time_off_extra_approval
+msgid ""
+"Sequential: escalate one management level at a time on the org chart. Direct: "
+"escalate immediately to the configured max job title on the requester's chain."
+msgstr ""
+"Tuần tự: chuyển cấp từng bậc quản lý trên sơ đồ tổ chức. Trực tiếp: chuyển "
+"ngay tới chức danh chuyển cấp tối đa đã cấu hình trên chuỗi quản lý của "
+"người xin nghỉ."
+
+#. module: time_off_extra_approval
+msgid "Maximum job title level used for handover escalation."
+msgstr "Chức danh cao nhất mà quy trình chuyển cấp bàn giao được phép leo tới."
+
+#. module: time_off_extra_approval
+msgid ""
+"If enabled, request auto-cancels when it reaches max escalation level and "
+"still has no assignee in time."
+msgstr ""
+"Nếu bật, đơn sẽ tự động hủy khi đã chuyển cấp tới mức tối đa mà vẫn chưa có "
+"người được chỉ định hoặc chấp nhận trong thời gian cho phép."
+
+#. module: time_off_extra_approval
+msgid "Used only when auto-cancel at max level is enabled."
+msgstr "Chỉ dùng khi bật tự động hủy ở cấp chuyển cấp tối đa."
+
+#. module: time_off_extra_approval
+msgid ""
+"When max level is Department Manager: wait this many hours after Department "
+"Head before escalating further."
+msgstr ""
+"Khi cấp tối đa là Trưởng phòng: chờ thêm số giờ này sau Trưởng bộ phận rồi "
+"mới chuyển cấp tiếp."
+
+#. module: time_off_extra_approval
 msgid "Multi-step approval (6 steps)"
 msgstr "Phê duyệt nhiều bước (6 bước)"
 

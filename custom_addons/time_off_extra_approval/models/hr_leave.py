@@ -522,6 +522,11 @@ class HolidaysRequest(models.Model):
             ("handover_escalation_level", "int4"),
             ("handover_escalation_user_id", "int4"),
             ("handover_last_bot_escalation_signature", "varchar"),
+            ("approval_escalated", "boolean"),
+            ("approval_escalated_at", "timestamp"),
+            ("approval_escalation_level", "int4"),
+            ("approval_escalation_user_id", "int4"),
+            ("approval_last_bot_escalation_signature", "varchar"),
             ("skip_work_handover", "boolean"),
         ):
             if sql.column_exists(cr, "hr_leave", column_name):
