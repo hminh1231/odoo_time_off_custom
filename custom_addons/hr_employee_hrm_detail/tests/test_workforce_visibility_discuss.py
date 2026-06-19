@@ -132,6 +132,26 @@ class TestWorkforceVisibilityDiscuss(TransactionCase):
         self.assertNotIn(self.ch_colleague.id, visible_ids)
         self.assertNotIn(self.ch_other_store.id, visible_ids)
 
+    def test_ma_bo_phan_policy_sees_only_same_code_and_self(self):
+        # ch_officer Mã bộ phận = NAM-A: sees NAM-A colleagues + self,
+        # but not NAM-B (same Miền) nor other Miền.
+        self.ch_user.write({"visibility_policy": "ma_bo_phan"})
+        self.env.flush_all()
+        self.ch_user.invalidate_recordset(
+            ["visibility_policy", "employee_ma_bo_phan_id"]
+        )
+        self.assertEqual(
+            self.ch_user.employee_ma_bo_phan_id.id, self.store_nam_a.id
+        )
+        visible_ids = set(
+            self.env["hr.employee"].with_user(self.ch_user).search([]).ids
+        )
+        self.assertIn(self.ch_officer.id, visible_ids)  # self / same code
+        self.assertIn(self.ch_colleague.id, visible_ids)  # code NAM-A
+        self.assertNotIn(self.ch_other_store.id, visible_ids)  # code NAM-B
+        self.assertNotIn(self.ch_bac_colleague.id, visible_ids)
+        self.assertNotIn(self.vp_colleague.id, visible_ids)
+
     def test_assigned_policy_sees_only_assigned_codes_and_self(self):
         # Assign store code NAM-B: ch_user should see employees of that code + self.
         self.ch_user.write(

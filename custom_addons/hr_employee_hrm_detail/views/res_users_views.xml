@@ -12,6 +12,7 @@
                             <field name="visibility_policy" widget="radio"/>
                         </group>
                         <group string="Thông tin tổ chức (chỉ đọc)">
+                            <field name="employee_ma_bo_phan_id" readonly="1"/>
                             <field name="employee_department_id" readonly="1"/>
                             <field name="employee_mien" readonly="1"/>
                         </group>

@@ -43,6 +43,11 @@ class HrEmployeeAccessMixin(models.AbstractModel):
         """Core domain for the selected visibility_policy (excluding self/company)."""
         user = user or self.env.user
         policy = user.visibility_policy or "self"
+        if policy == "ma_bo_phan":
+            code = user.sudo().employee_ma_bo_phan_id
+            if not code:
+                return None
+            return Domain([("ma_bo_phan_id", "=", code.id)])
         if policy == "assigned":
             code_ids = user.sudo().assigned_ma_bo_phan_ids.ids
             if not code_ids:

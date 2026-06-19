@@ -4,6 +4,7 @@ from odoo import api, fields, models
 
 VISIBILITY_POLICIES = [
     ("self", "Chỉ bản thân"),
+    ("ma_bo_phan", "Cùng mã bộ phận"),
     ("assigned", "Chỉ định mã bộ phận"),
     ("department", "Cùng phòng ban"),
     ("region", "Cùng khu vực (Miền)"),

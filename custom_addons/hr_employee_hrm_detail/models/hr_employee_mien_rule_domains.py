@@ -28,6 +28,9 @@ def _leave_branch(extra_leaf):
 
 
 def leave_peer_read_rule_domain():
+    ma_bo_phan = _leave_branch(
+        "('employee_id.ma_bo_phan_id', '=', user.employee_ma_bo_phan_id.id)"
+    )
     assigned = _leave_branch(
         "('employee_id.ma_bo_phan_id', 'in', user.assigned_ma_bo_phan_ids.ids)"
     )
@@ -39,6 +42,8 @@ def leave_peer_read_rule_domain():
     return (
         "[(1, '=', 1)] if user.has_group('hr.group_hr_manager') "
         "or (user.visibility_policy or 'self') == 'all' "
+        "else "
+        f"({ma_bo_phan}) if user.visibility_policy == 'ma_bo_phan' "
         "else "
         f"({assigned}) if user.visibility_policy == 'assigned' "
         "else "
