@@ -14,15 +14,41 @@ class HrEmployeeAccessMixin(models.AbstractModel):
 
         The leave_manager_id clause keeps the Time Off approval workflow working
         regardless of the visibility policy (a Leader must read the requester).
+        We also expose the requesters of any leave the user can currently act on
+        (approve/validate/refuse) or is a read-only notifier for, so the Time Off
+        list never hits a MissingError when a visible leave belongs to someone
+        outside the user's visibility scope (e.g. a cross-department approval).
         Field names are identical on hr.employee and hr.employee.public.
         """
         user = user or self.env.user
-        return Domain([
+        domain = Domain([
             "|", "|",
             ("user_id", "=", user.id),
             ("id", "=", user.employee_id.id),
             ("leave_manager_id", "=", user.id),
         ])
+        approval_emp_ids = self._hr_employee_leave_approval_emp_ids(user)
+        if approval_emp_ids:
+            domain |= Domain([("id", "in", approval_emp_ids)])
+        return domain
+
+    @api.model
+    def _hr_employee_leave_approval_emp_ids(self, user=None):
+        """Employee ids the user must be able to read because they can act on
+        (or are notified about) those employees' leave requests. Guarded so the
+        helper is a no-op when the approval modules are not installed."""
+        user = user or self.env.user
+        leave_fields = self.env["hr.leave"]._fields
+        clauses = []
+        if "approval_actionable_user_ids" in leave_fields:
+            clauses.append(("approval_actionable_user_ids", "in", user.id))
+        if "special_readonly_notifier_user_ids" in leave_fields:
+            clauses.append(("special_readonly_notifier_user_ids", "in", user.id))
+        if not clauses:
+            return []
+        domain = Domain.OR([Domain([clause]) for clause in clauses])
+        leaves = self.env["hr.leave"].sudo().search(domain)
+        return leaves.employee_id.ids
 
     @api.model
     def _hr_employee_company_domain(self, user=None):
