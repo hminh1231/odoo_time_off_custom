@@ -20,7 +20,7 @@
                         <field name="trang_thai_nhan_vien"/>
                         <field name="ma_bo_phan_id"
                                widget="selection"
-                               domain="mien and [('mien', '=', mien)] or []"
+                               domain="mien and ['|', ('mien', '=', False), ('mien', '=', mien)] or []"
                                options="{'no_create': True, 'no_open': True}"/>
                         <field name="ma_bo_phan" invisible="1"/>
                         <field name="ten_bo_phan"/>

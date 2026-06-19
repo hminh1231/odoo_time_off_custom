@@ -312,8 +312,10 @@ class HrEmployee(models.Model):
     )
 
     def _get_ma_bo_phan_domain(self):
+        # Codes without a configured Miền stay selectable for any employee;
+        # only codes whose Miền is set must match the employee's Miền.
         if self.mien:
-            return [('mien', '=', self.mien)]
+            return ['|', ('mien', '=', False), ('mien', '=', self.mien)]
         return []
 
     @api.onchange('mien_zone_id')
@@ -332,7 +334,12 @@ class HrEmployee(models.Model):
                 self.mien_zone_id = zone
         elif not self.mien_zone_id:
             self.mien_zone_id = False
-        if self.ma_bo_phan_id and self.mien and self.ma_bo_phan_id.mien != self.mien:
+        if (
+            self.ma_bo_phan_id
+            and self.ma_bo_phan_id.mien
+            and self.mien
+            and self.ma_bo_phan_id.mien != self.mien
+        ):
             self.ma_bo_phan_id = False
         return {'domain': {'ma_bo_phan_id': self._get_ma_bo_phan_domain()}}
 
