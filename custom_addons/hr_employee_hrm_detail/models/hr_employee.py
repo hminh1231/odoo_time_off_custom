@@ -5,7 +5,31 @@ from odoo.fields import Domain
 from odoo.tools.translate import _
 
 
-MIEN_ACCESS_FIELDS = frozenset({'mien', 'ma_bo_phan_id'})
+MIEN_ACCESS_FIELDS = frozenset({'mien', 'mien_zone_id', 'ma_bo_phan_id'})
+VISIBILITY_ACCESS_FIELDS = MIEN_ACCESS_FIELDS | frozenset({'employee_visibility'})
+
+MIEN_VP = 'VP'
+MIEN_ALL = 'Tất cả'
+VISIBILITY_OFFICE = 'office'
+VISIBILITY_STORE = 'store'
+VISIBILITY_ALL = 'all'
+STORE_MIENS = frozenset({'Bắc', 'Nam', 'ĐTT'})
+
+
+def _is_vp_mien(mien):
+    return mien == MIEN_VP
+
+
+def _is_store_mien(mien):
+    return mien in STORE_MIENS or mien == MIEN_ALL
+
+
+def _visibility_from_mien(mien):
+    if _is_vp_mien(mien):
+        return VISIBILITY_OFFICE
+    if _is_store_mien(mien):
+        return VISIBILITY_STORE
+    return False
 
 
 
@@ -42,16 +66,20 @@ class HrEmployee(models.Model):
                 **kwargs,
             )
         if self.browse().has_access("read") or bypass_access:
-            domain = self.env["hr.employee.access.mixin"]._hr_employee_apply_access_domain(
+            mixin = self.env["hr.employee.access.mixin"]
+            extra = mixin._hr_employee_access_extra_domain(model_name=self._name)
+            domain = mixin._hr_employee_apply_access_domain(
                 domain, model_name=self._name
             )
+            if domain is not None:
+                domain = list(domain)
             return super()._search(
                 domain,
                 offset=offset,
                 limit=limit,
                 order=order,
                 active_test=active_test,
-                bypass_access=bypass_access,
+                bypass_access=bypass_access or extra is not None,
                 **kwargs,
             )
         # Mirror core HR redirect; bridge context skips mixin on public._search.
@@ -144,19 +172,44 @@ class HrEmployee(models.Model):
                 },
             }
 
+    @api.model
+    def _sync_mien_zone_vals(self, vals):
+        """Keep mien and mien_zone_id aligned for access rules and sidebar."""
+        Zone = self.env["hr.mien.zone"]
+        if "mien_zone_id" in vals and "mien" not in vals:
+            zone = Zone.browse(vals["mien_zone_id"]) if vals.get("mien_zone_id") else Zone
+            vals["mien"] = zone.legacy_mien if zone else False
+        elif "mien" in vals and "mien_zone_id" not in vals:
+            zone = Zone.zone_from_legacy_mien(vals.get("mien"))
+            vals["mien_zone_id"] = zone.id if zone else False
+
+    @api.model
+    def _apply_mien_visibility_defaults(self, vals):
+        mien = vals.get('mien')
+        if not mien and vals.get('ma_bo_phan_id'):
+            store = self.env['hr.store.code'].browse(vals['ma_bo_phan_id'])
+            mien = store.mien
+        if vals.get('employee_visibility') != VISIBILITY_ALL:
+            visibility = _visibility_from_mien(mien)
+            if visibility:
+                vals['employee_visibility'] = visibility
+
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
+            self._sync_mien_zone_vals(vals)
             id_hrm = (vals.get('id_hrm') or '').strip()
             if not id_hrm:
+                self._apply_mien_visibility_defaults(vals)
                 continue
             vals['id_hrm'] = id_hrm
             duplicate = self._get_id_hrm_duplicate(id_hrm)
             if duplicate:
                 vals['id_hrm'] = False
                 self._raise_id_hrm_duplicate_error(id_hrm, duplicate)
+            self._apply_mien_visibility_defaults(vals)
         employees = super().create(vals_list)
-        if any(MIEN_ACCESS_FIELDS & set(vals) for vals in vals_list):
+        if any(VISIBILITY_ACCESS_FIELDS & set(vals) for vals in vals_list):
             self.env.registry.clear_cache()
         if any(
             {"unpaid_leave_start_date", "unpaid_leave_return_date"} & set(vals)
@@ -184,9 +237,15 @@ class HrEmployee(models.Model):
             }
         if not vals:
             return True
+        self._sync_mien_zone_vals(vals)
+        if {'mien', 'mien_zone_id', 'ma_bo_phan_id'} & set(vals) and 'employee_visibility' not in vals:
+            sync_vals = {}
+            self._apply_mien_visibility_defaults(sync_vals)
+            if sync_vals:
+                vals = dict(vals, **sync_vals)
         res = super().write(vals)
-        if MIEN_ACCESS_FIELDS & set(vals):
-            # ir.rule domains are ormcache'd per uid; refresh when Miền scope changes.
+        if VISIBILITY_ACCESS_FIELDS & set(vals):
+            # ir.rule domains are ormcache'd per uid; refresh when visibility scope changes.
             self.env.registry.clear_cache()
         if {"unpaid_leave_start_date", "unpaid_leave_return_date"} & set(vals) and hasattr(
             self, "_compute_time_off_summary"
@@ -195,12 +254,31 @@ class HrEmployee(models.Model):
         return res
 
     # Regional and ID Information
+    mien_zone_id = fields.Many2one(
+        "hr.mien.zone",
+        string="Miền",
+        domain="[('is_assignable', '=', True)]",
+        groups="hr.group_hr_user",
+        tracking=True,
+        help="Miền VP hoặc Miền CH (Nam / ĐTT / Bắc).",
+    )
     mien = fields.Selection([
         ('Bắc', 'Bắc'),
         ('Nam', 'Nam'),
         ('ĐTT', 'ĐTT'),
         ('VP', 'VP'),
-    ], string='Miền', groups='hr.group_hr_user', tracking=True)
+        (MIEN_ALL, 'Tất cả'),
+    ], string='Miền (mã)', groups='hr.group_hr_user', tracking=True)
+    employee_visibility = fields.Selection(
+        [
+            (VISIBILITY_OFFICE, 'Văn phòng'),
+            (VISIBILITY_STORE, 'Cửa hàng'),
+            (VISIBILITY_ALL, 'Tất cả'),
+        ],
+        string='Phạm vi hiển thị hồ sơ',
+        tracking=True,
+        help='Lớp hiển thị hồ sơ HR (VP/CH). Dùng cho security group EMP_OFFICE/EMP_STORE; UI vẫn giới hạn qua view.',
+    )
     id_hrm = fields.Char(string='ID HRM', groups='hr.group_hr_user', tracking=True)
 
     # Accounting and Attendance Codes
@@ -238,8 +316,22 @@ class HrEmployee(models.Model):
             return [('mien', '=', self.mien)]
         return []
 
+    @api.onchange('mien_zone_id')
+    def _onchange_mien_zone_id(self):
+        if self.mien_zone_id:
+            self.mien = self.mien_zone_id.legacy_mien
+        else:
+            self.mien = False
+        return self._onchange_mien_ma_bo_phan()
+
     @api.onchange('mien')
     def _onchange_mien_ma_bo_phan(self):
+        if self.mien:
+            zone = self.env["hr.mien.zone"].zone_from_legacy_mien(self.mien)
+            if zone:
+                self.mien_zone_id = zone
+        elif not self.mien_zone_id:
+            self.mien_zone_id = False
         if self.ma_bo_phan_id and self.mien and self.ma_bo_phan_id.mien != self.mien:
             self.ma_bo_phan_id = False
         return {'domain': {'ma_bo_phan_id': self._get_ma_bo_phan_domain()}}

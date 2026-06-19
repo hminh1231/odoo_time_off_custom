@@ -12,7 +12,15 @@ class HrEmployeePublic(models.Model):
         string="Mã bộ phận",
         readonly=True,
     )
+    mien_zone_id = fields.Many2one(
+        related="employee_id.mien_zone_id",
+        readonly=True,
+    )
     mien = fields.Selection(related="employee_id.mien", readonly=True)
+    employee_visibility = fields.Selection(
+        related="employee_id.employee_visibility",
+        readonly=True,
+    )
     # Time-off balance fields: exposed on public profile so employees without
     # HR officer rights can read their own leave counters when creating requests.
     phep_chuan = fields.Float(readonly=True)
@@ -101,18 +109,22 @@ class HrEmployeePublic(models.Model):
         # Core hr.employee._search (no ACL) delegates here; skip mixin to avoid
         # double-filter and employee_id.* sub-search recursion.
         if not self.env.context.get("hr_employee_search_bridge"):
+            mixin = self.env["hr.employee.access.mixin"]
+            extra = mixin._hr_employee_access_extra_domain(model_name=self._name)
             domain = list(
-                self.env["hr.employee.access.mixin"]._hr_employee_apply_access_domain(
+                mixin._hr_employee_apply_access_domain(
                     domain, model_name=self._name
                 )
             )
+        else:
+            extra = None
         return super()._search(
             domain,
             offset=offset,
             limit=limit,
             order=order,
             active_test=active_test,
-            bypass_access=bypass_access,
+            bypass_access=bypass_access or extra is not None,
         )
 
     @api.model

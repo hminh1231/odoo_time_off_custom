@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="view_users_form_visibility" model="ir.ui.view">
+        <field name="name">res.users.form.visibility</field>
+        <field name="model">res.users</field>
+        <field name="inherit_id" ref="base.view_users_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="Phạm vi xem nhân viên" name="employee_visibility">
+                    <group>
+                        <group string="Chính sách hiển thị">
+                            <field name="visibility_policy" widget="radio"/>
+                        </group>
+                        <group string="Thông tin tổ chức (chỉ đọc)">
+                            <field name="employee_department_id" readonly="1"/>
+                            <field name="employee_mien" readonly="1"/>
+                        </group>
+                    </group>
+                    <group string="Mã bộ phận được xem"
+                           invisible="visibility_policy != 'assigned'">
+                        <field name="assigned_ma_bo_phan_ids" nolabel="1"
+                               widget="many2many_tags"
+                               options="{'no_create': True, 'no_create_edit': True}"/>
+                    </group>
+                    <div class="text-muted">
+                        Quản trị viên (HR Administrator) luôn thấy toàn bộ nhân viên,
+                        bất kể chính sách ở đây. Chat/Discuss không bị giới hạn bởi phạm vi này.
+                    </div>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>

@@ -5,4 +5,7 @@ access_hr_employee_public_hrm_staff,hr.employee.public.hrm.staff,hr.model_hr_emp
 access_hr_store_code_user,hr.store.code.user,model_hr_store_code,hr.group_hr_user,1,0,0,0
 access_hr_store_code_staff,hr.store.code.staff,model_hr_store_code,hr_employee_hrm_detail.group_hr_employees_staff,1,0,0,0
 access_hr_store_code_manager,hr.store.code.manager,model_hr_store_code,hr.group_hr_manager,1,0,0,0
+access_hr_mien_zone_user,hr.mien.zone.user,model_hr_mien_zone,hr.group_hr_user,1,0,0,0
+access_hr_mien_zone_staff,hr.mien.zone.staff,model_hr_mien_zone,hr_employee_hrm_detail.group_hr_employees_staff,1,0,0,0
+access_hr_mien_zone_manager,hr.mien.zone.manager,model_hr_mien_zone,hr.group_hr_manager,1,1,1,1
 access_hr_version_own_read,hr.version.own.read,hr.model_hr_version,base.group_user,1,0,0,0

@@ -9,7 +9,10 @@
             <xpath expr="//page[@name='personal_information']" position="inside">
                 <group string="HRM" groups="hr.group_hr_user">
                     <group>
-                        <field name="mien"/>
+                        <field name="mien_zone_id"
+                               options="{'no_create': True, 'no_open': True}"/>
+                        <field name="mien" invisible="1"/>
+                        <field name="employee_visibility"/>
                         <field name="id_hrm"/>
                         <field name="ma_nv_ke_toan"/>
                         <field name="ma_cham_cong"/>
@@ -61,7 +64,9 @@
         <field name="inherit_id" ref="hr.view_employee_tree"/>
         <field name="arch" type="xml">
             <field name="department_id" position="after">
+                <field name="mien_zone_id" optional="hide" groups="hr.group_hr_user"/>
                 <field name="mien" optional="hide" groups="hr.group_hr_user"/>
+                <field name="employee_visibility" optional="hide" groups="hr.group_hr_user"/>
                 <field name="ma_bo_phan" optional="hide" groups="hr.group_hr_user"/>
                 <field name="id_hrm" optional="hide" groups="hr.group_hr_user"/>
                 <field name="ngay_vao_lam" optional="hide" groups="hr.group_hr_user"/>
@@ -71,19 +76,49 @@
         </field>
     </record>
 
-    <record id="hr_employee_kanban_hrm_export" model="ir.ui.view">
-        <field name="name">hr.employee.kanban.hrm.export</field>
+    <record id="view_employee_filter_inherit_hrm_mien_zone" model="ir.ui.view">
+        <field name="name">hr.employee.search.inherit.hrm.mien.zone</field>
         <field name="model">hr.employee</field>
-        <field name="inherit_id" ref="hr.hr_kanban_view_employees"/>
+        <field name="inherit_id" ref="hr.view_employee_filter"/>
         <field name="arch" type="xml">
-            <xpath expr="//templates" position="before">
-                <field name="mien" groups="hr.group_hr_user"/>
-                <field name="ma_bo_phan" groups="hr.group_hr_user"/>
-                <field name="id_hrm" groups="hr.group_hr_user"/>
-                <field name="ngay_vao_lam" groups="hr.group_hr_user"/>
-                <field name="ngay_bo_nhiem" groups="hr.group_hr_user"/>
-                <field name="ngay_nghi_viec" groups="hr.group_hr_user"/>
+            <xpath expr="//searchpanel/field[@name='department_id']" position="after">
+                <field name="mien_zone_id"
+                       string="Miền"
+                       icon="fa-map-marker"
+                       hierarchize="1"
+                       enable_counters="1"
+                       groups="hr.group_hr_user"/>
             </xpath>
+            <filter name="group_department" position="after">
+                <filter name="group_mien_zone"
+                        string="Miền"
+                        domain="[]"
+                        context="{'group_by': 'mien_zone_id'}"
+                        groups="hr.group_hr_user"/>
+            </filter>
+        </field>
+    </record>
+
+    <record id="hr_employee_public_view_search_inherit_hrm_mien_zone" model="ir.ui.view">
+        <field name="name">hr.employee.public.search.inherit.hrm.mien.zone</field>
+        <field name="model">hr.employee.public</field>
+        <field name="inherit_id" ref="hr.hr_employee_public_view_search"/>
+        <field name="arch" type="xml">
+            <xpath expr="//searchpanel/field[@name='department_id']" position="after">
+                <field name="mien_zone_id"
+                       string="Miền"
+                       icon="fa-map-marker"
+                       hierarchize="1"
+                       enable_counters="1"
+                       groups="hr.group_hr_user"/>
+            </xpath>
+            <filter name="group_department" position="after">
+                <filter name="group_mien_zone"
+                        string="Miền"
+                        domain="[]"
+                        context="{'group_by': 'mien_zone_id'}"
+                        groups="hr.group_hr_user"/>
+            </filter>
         </field>
     </record>
 </odoo>

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <record id="mien_zone_vp" model="hr.mien.zone">
+            <field name="name">Miền VP</field>
+            <field name="code">vp</field>
+            <field name="sequence">10</field>
+            <field name="legacy_mien">VP</field>
+            <field name="is_assignable" eval="True"/>
+        </record>
+
+        <record id="mien_zone_ch" model="hr.mien.zone">
+            <field name="name">Miền CH</field>
+            <field name="code">ch</field>
+            <field name="sequence">20</field>
+            <field name="is_assignable" eval="False"/>
+        </record>
+
+        <record id="mien_zone_ch_nam" model="hr.mien.zone">
+            <field name="name">Miền Nam</field>
+            <field name="code">ch_nam</field>
+            <field name="parent_id" ref="mien_zone_ch"/>
+            <field name="sequence">10</field>
+            <field name="legacy_mien">Nam</field>
+            <field name="is_assignable" eval="True"/>
+        </record>
+
+        <record id="mien_zone_ch_dtt" model="hr.mien.zone">
+            <field name="name">Miền ĐTT</field>
+            <field name="code">ch_dtt</field>
+            <field name="parent_id" ref="mien_zone_ch"/>
+            <field name="sequence">20</field>
+            <field name="legacy_mien">ĐTT</field>
+            <field name="is_assignable" eval="True"/>
+        </record>
+
+        <record id="mien_zone_ch_bac" model="hr.mien.zone">
+            <field name="name">Miền Bắc</field>
+            <field name="code">ch_bac</field>
+            <field name="parent_id" ref="mien_zone_ch"/>
+            <field name="sequence">30</field>
+            <field name="legacy_mien">Bắc</field>
+            <field name="is_assignable" eval="True"/>
+        </record>
+
+        <record id="mien_zone_all" model="hr.mien.zone">
+            <field name="name">Tất cả</field>
+            <field name="code">all</field>
+            <field name="sequence">40</field>
+            <field name="legacy_mien">Tất cả</field>
+            <field name="is_assignable" eval="True"/>
+        </record>
+    </data>
+</odoo>
