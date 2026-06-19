@@ -44,6 +44,7 @@ def leave_peer_read_rule_domain():
         "or (user.visibility_policy or 'self') == 'all' "
         "else "
         f"({ma_bo_phan}) if user.visibility_policy == 'ma_bo_phan' "
+        "and user.employee_ma_bo_phan_id "
         "else "
         f"({assigned}) if user.visibility_policy == 'assigned' "
         "else "
