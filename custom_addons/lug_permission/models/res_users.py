@@ -166,12 +166,17 @@ class ResUsers(models.Model):
     def _lug_ui_systray_flags(self):
         self.ensure_one()
         if not self._lug_permission_is_enforced():
-            return {"hide_messaging": False, "hide_activities": False}
+            return {
+                "hide_messaging": False,
+                "hide_activities": False,
+                "hide_help": False,
+            }
         perm_map = self._lug_effective_permission_map()
         hide_messaging = "view" not in perm_map.get("discuss", set())
         return {
             "hide_messaging": hide_messaging,
             "hide_activities": hide_messaging,
+            "hide_help": True,
         }
 
     def _lug_hidden_hr_submenu_ids(self):
