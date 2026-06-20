@@ -98,6 +98,17 @@ class HolidaysType(models.Model):
         default=2.0,
         help="If nobody accepts handover within this period, escalation starts.",
     )
+    handover_escalation_mode = fields.Selection(
+        selection=[
+            ("sequential", "Sequential"),
+            ("direct", "Direct"),
+        ],
+        string="Handover: escalation progression",
+        default="sequential",
+        required=True,
+        help="Sequential: escalate one management level at a time on the org chart. "
+        "Direct: escalate immediately to the configured max job title on the requester's chain.",
+    )
     handover_escalation_max_job_title = fields.Selection(
         selection=_HANDOVER_MAX_ESCALATION_JOB_TITLE_SELECTION,
         string="Handover: max escalation job title",
@@ -116,6 +127,43 @@ class HolidaysType(models.Model):
     )
     handover_cancel_after_max_hours = fields.Float(
         string="Handover: cancel after timeout at max level (hours)",
+        default=2.0,
+        help="Used only when auto-cancel at max level is enabled.",
+    )
+    approval_escalation_after_hours = fields.Float(
+        string="Approval: escalate after (hours)",
+        default=2.0,
+        help="If nobody approves within this period, escalation starts.",
+    )
+    approval_escalation_mode = fields.Selection(
+        selection=[
+            ("sequential", "Sequential"),
+            ("direct", "Direct"),
+        ],
+        string="Approval: escalation progression",
+        default="sequential",
+        required=True,
+        help="Sequential: escalate one management level at a time on the org chart. "
+        "Direct: escalate immediately to the configured max job title on the requester's chain.",
+    )
+    approval_escalation_max_job_title = fields.Selection(
+        selection=_HANDOVER_MAX_ESCALATION_JOB_TITLE_SELECTION,
+        string="Approval: max escalation job title",
+        default="trưởng bộ phận",
+        help="Maximum job title level used for approval escalation.",
+    )
+    approval_escalation_to_manager_hours = fields.Float(
+        string="Approval: escalate to next level after (hours)",
+        default=2.0,
+        help="When max level is Department Manager: wait this many hours after Department Head before escalating further.",
+    )
+    approval_cancel_if_max_unresponsive = fields.Boolean(
+        string="Approval: auto-cancel at max escalation level",
+        default=False,
+        help="If enabled, request auto-cancels when it reaches max escalation level and still has no approver action in time.",
+    )
+    approval_cancel_after_max_hours = fields.Float(
+        string="Approval: cancel after timeout at max level (hours)",
         default=2.0,
         help="Used only when auto-cancel at max level is enabled.",
     )
@@ -452,6 +500,18 @@ class HolidaysType(models.Model):
                 cr.execute(
                     "ALTER TABLE hr_leave_type ADD COLUMN handover_escalation_after_hours DOUBLE PRECISION DEFAULT 2.0"
                 )
+            if not sql.column_exists(cr, "hr_leave_type", "handover_escalation_mode"):
+                _logger.warning(
+                    "time_off_extra_approval: creating missing column hr_leave_type.handover_escalation_mode"
+                )
+                cr.execute(
+                    "ALTER TABLE hr_leave_type ADD COLUMN handover_escalation_mode VARCHAR DEFAULT 'sequential'"
+                )
+                cr.execute(
+                    "UPDATE hr_leave_type SET handover_escalation_mode = %s "
+                    "WHERE handover_escalation_mode IS NULL",
+                    ("sequential",),
+                )
             if not sql.column_exists(cr, "hr_leave_type", "handover_escalation_max_job_title"):
                 _logger.warning(
                     "time_off_extra_approval: creating missing column hr_leave_type.handover_escalation_max_job_title"
@@ -501,6 +561,36 @@ class HolidaysType(models.Model):
                 )
                 cr.execute(
                     "ALTER TABLE hr_leave_type ADD COLUMN handover_cancel_after_max_hours DOUBLE PRECISION DEFAULT 2.0"
+                )
+            approval_columns = (
+                ("approval_escalation_after_hours", "DOUBLE PRECISION DEFAULT 2.0"),
+                ("approval_escalation_mode", "VARCHAR DEFAULT 'sequential'"),
+                ("approval_escalation_max_job_title", "VARCHAR"),
+                ("approval_escalation_to_manager_hours", "DOUBLE PRECISION DEFAULT 2.0"),
+                ("approval_cancel_if_max_unresponsive", "BOOLEAN DEFAULT FALSE"),
+                ("approval_cancel_after_max_hours", "DOUBLE PRECISION DEFAULT 2.0"),
+            )
+            for column_name, column_ddl in approval_columns:
+                if sql.column_exists(cr, "hr_leave_type", column_name):
+                    continue
+                _logger.warning(
+                    "time_off_extra_approval: creating missing column hr_leave_type.%s",
+                    column_name,
+                )
+                cr.execute(
+                    f"ALTER TABLE hr_leave_type ADD COLUMN {column_name} {column_ddl}"
+                )
+            if sql.column_exists(cr, "hr_leave_type", "approval_escalation_max_job_title"):
+                cr.execute(
+                    "UPDATE hr_leave_type SET approval_escalation_max_job_title = %s "
+                    "WHERE approval_escalation_max_job_title IS NULL",
+                    ("trưởng bộ phận",),
+                )
+            if sql.column_exists(cr, "hr_leave_type", "approval_escalation_mode"):
+                cr.execute(
+                    "UPDATE hr_leave_type SET approval_escalation_mode = %s "
+                    "WHERE approval_escalation_mode IS NULL",
+                    ("sequential",),
                 )
         if sql.table_exists(cr, "hr_leave_responsible_approval") and not sql.column_exists(
             cr, "hr_leave_responsible_approval", "pending_since"
