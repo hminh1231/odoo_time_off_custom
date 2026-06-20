@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="view_lug_user_permission_list" model="ir.ui.view">
+        <field name="name">lug.user.permission.list</field>
+        <field name="model">lug.user.permission</field>
+        <field name="arch" type="xml">
+            <list editable="bottom">
+                <field name="app_id" options="{'no_create': True}"/>
+                <field name="perm_view"/>
+                <field name="perm_create"/>
+                <field name="perm_edit"/>
+                <field name="perm_delete"/>
+                <field name="perm_approve"/>
+                <field name="perm_export"/>
+                <field name="perm_import"/>
+                <field name="perm_print"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_users_form_lug_permission" model="ir.ui.view">
+        <field name="name">res.users.form.lug.permission</field>
+        <field name="model">res.users</field>
+        <field name="inherit_id" ref="base.view_users_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="LUG Permission" name="lug_permission">
+                    <group>
+                        <group string="Nhóm quyền">
+                            <field name="lug_group_ids" widget="many2many_tags"
+                                   options="{'no_create': True}"/>
+                        </group>
+                        <group string="Phạm vi dữ liệu (Data Scope)">
+                            <field name="lug_data_scope" widget="radio"/>
+                        </group>
+                    </group>
+                    <separator string="Quyền bổ sung riêng"/>
+                    <div class="text-muted mb-2">
+                        Quyền hiệu lực = Nhóm quyền + Quyền bổ sung riêng.
+                        User chưa được gán nhóm/quyền LUG vẫn dùng quyền Odoo mặc định.
+                    </div>
+                    <field name="lug_user_permission_ids" nolabel="1"/>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record model="res.groups.privilege" id="res_groups_privilege_lug_permission">
+        <field name="name">LUG Permission Center</field>
+        <field name="category_id" ref="base.module_category_administration"/>
+        <field name="sequence">95</field>
+        <field name="placeholder">Không</field>
+    </record>
+
+    <record id="group_lug_permission_user" model="res.groups">
+        <field name="name">User</field>
+        <field name="comment">Read-only access to LUG Permission Center configuration.</field>
+        <field name="privilege_id" ref="res_groups_privilege_lug_permission"/>
+    </record>
+
+    <record id="group_lug_permission_manager" model="res.groups">
+        <field name="name">Administrator</field>
+        <field name="comment">Manage groups, applications, and user permissions.</field>
+        <field name="privilege_id" ref="res_groups_privilege_lug_permission"/>
+        <field name="implied_ids" eval="[(4, ref('group_lug_permission_user'))]"/>
+        <field name="user_ids" eval="[(4, ref('base.user_admin'))]"/>
+    </record>
+</odoo>

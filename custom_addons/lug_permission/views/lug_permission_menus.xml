@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <menuitem id="menu_lug_permission_root"
+              name="LUG Permission"
+              sequence="5"
+              groups="lug_permission.group_lug_permission_user"/>
+
+    <menuitem id="menu_lug_group"
+              name="Nhóm quyền"
+              parent="menu_lug_permission_root"
+              action="action_lug_group"
+              sequence="10"
+              groups="lug_permission.group_lug_permission_manager"/>
+
+    <menuitem id="menu_lug_app"
+              name="Ứng dụng"
+              parent="menu_lug_permission_root"
+              action="action_lug_app"
+              sequence="20"
+              groups="lug_permission.group_lug_permission_manager"/>
+</odoo>

@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo noupdate="1">
+    <record id="lug_app_hr" model="lug.app">
+        <field name="name">Nhân viên</field>
+        <field name="code">hr</field>
+        <field name="sequence">5</field>
+        <field name="module_name">hr</field>
+        <field name="menu_xmlid">hr.menu_hr_root</field>
+    </record>
+
+    <record id="lug_app_leave" model="lug.app">
+        <field name="name">Nghỉ phép</field>
+        <field name="code">leave</field>
+        <field name="sequence">10</field>
+        <field name="module_name">hr_holidays</field>
+        <field name="menu_xmlid">hr_holidays.menu_hr_holidays_root</field>
+    </record>
+
+    <record id="lug_app_attendance" model="lug.app">
+        <field name="name">Chấm công</field>
+        <field name="code">attendance</field>
+        <field name="sequence">20</field>
+        <field name="module_name">hr_attendance</field>
+        <field name="menu_xmlid">hr_attendance.menu_hr_attendance_root</field>
+    </record>
+
+    <record id="lug_app_gatepass" model="lug.app">
+        <field name="name">Giấy ra cổng</field>
+        <field name="code">gatepass</field>
+        <field name="sequence">30</field>
+        <field name="module_name">hr_employee_gate_ticket</field>
+        <field name="menu_xmlid">hr_employee_gate_ticket.menu_hr_employee_gate_ticket_root</field>
+    </record>
+
+    <record id="lug_app_fleet" model="lug.app">
+        <field name="name">Đội xe</field>
+        <field name="code">fleet</field>
+        <field name="sequence">40</field>
+        <field name="module_name">fleet</field>
+        <field name="menu_xmlid">fleet.menu_root</field>
+    </record>
+
+    <record id="lug_app_expense" model="lug.app">
+        <field name="name">Chi phí</field>
+        <field name="code">expense</field>
+        <field name="sequence">50</field>
+        <field name="module_name">hr_expense</field>
+        <field name="menu_xmlid">hr_expense.menu_hr_expense_root</field>
+    </record>
+
+    <record id="lug_app_invoice" model="lug.app">
+        <field name="name">Hóa đơn / Kế toán</field>
+        <field name="code">invoice</field>
+        <field name="sequence">60</field>
+        <field name="module_name">account</field>
+        <field name="menu_xmlid">account.menu_finance</field>
+    </record>
+
+    <record id="lug_app_event" model="lug.app">
+        <field name="name">Sự kiện</field>
+        <field name="code">event</field>
+        <field name="sequence">70</field>
+        <field name="module_name">event</field>
+        <field name="menu_xmlid">event.event_main_menu</field>
+    </record>
+
+    <record id="lug_app_recruitment" model="lug.app">
+        <field name="name">Tuyển dụng</field>
+        <field name="code">recruitment</field>
+        <field name="sequence">80</field>
+        <field name="module_name">hr_recruitment</field>
+        <field name="menu_xmlid">hr_recruitment.menu_hr_recruitment_root</field>
+    </record>
+
+    <record id="lug_app_warehouse" model="lug.app">
+        <field name="name">Kho</field>
+        <field name="code">warehouse</field>
+        <field name="sequence">90</field>
+        <field name="module_name">stock</field>
+        <field name="menu_xmlid">stock.menu_stock_root</field>
+    </record>
+
+    <record id="lug_app_crm" model="lug.app">
+        <field name="name">CRM</field>
+        <field name="code">crm</field>
+        <field name="sequence">100</field>
+        <field name="module_name">crm</field>
+        <field name="menu_xmlid">crm.crm_menu_root</field>
+    </record>
+
+    <record id="lug_app_pos" model="lug.app">
+        <field name="name">POS</field>
+        <field name="code">pos</field>
+        <field name="sequence">110</field>
+        <field name="module_name">point_of_sale</field>
+        <field name="menu_xmlid">point_of_sale.menu_point_root</field>
+    </record>
+</odoo>

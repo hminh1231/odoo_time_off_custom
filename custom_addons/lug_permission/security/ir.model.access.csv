@@ -1,0 +1,9 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_lug_app_manager,lug.app manager,model_lug_app,group_lug_permission_manager,1,1,1,1
+access_lug_app_user,lug.app user,model_lug_app,group_lug_permission_user,1,0,0,0
+access_lug_group_manager,lug.group manager,model_lug_group,group_lug_permission_manager,1,1,1,1
+access_lug_group_user,lug.group user,model_lug_group,group_lug_permission_user,1,0,0,0
+access_lug_group_permission_manager,lug.group.permission manager,model_lug_group_permission,group_lug_permission_manager,1,1,1,1
+access_lug_group_permission_user,lug.group.permission user,model_lug_group_permission,group_lug_permission_user,1,0,0,0
+access_lug_user_permission_manager,lug.user.permission manager,model_lug_user_permission,group_lug_permission_manager,1,1,1,1
+access_lug_user_permission_user,lug.user.permission user,model_lug_user_permission,group_lug_permission_user,1,0,0,0
