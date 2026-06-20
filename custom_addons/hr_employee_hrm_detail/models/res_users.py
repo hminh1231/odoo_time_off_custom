@@ -72,6 +72,23 @@ ROLE_DEFAULT_SCOPE = {
     "admin": "all",
 }
 
+# App Access checkboxes -> the security group that represents "can use this app".
+# Ticking grants the group, unticking removes it. Apps whose module is not
+# installed resolve to no group (checkbox shown read-only as "chưa cài").
+# Each entry: field_name -> (primary group xmlid, module technical name).
+APP_ACCESS_DEFS = {
+    "app_access_hr": ("hr.group_hr_user", "hr"),
+    "app_access_leave": ("hr_holidays.group_hr_holidays_user", "hr_holidays"),
+    "app_access_attendance": (
+        "hr_attendance.group_hr_attendance_user",
+        "hr_attendance",
+    ),
+    "app_access_expense": ("hr_expense.group_hr_expense_user", "hr_expense"),
+    "app_access_crm": ("sales_team.group_sale_salesman", "crm"),
+    "app_access_pos": ("point_of_sale.group_pos_user", "point_of_sale"),
+    "app_access_accounting": ("account.group_account_user", "account"),
+}
+
 
 class ResUsers(models.Model):
     _inherit = "res.users"
@@ -104,6 +121,49 @@ class ResUsers(models.Model):
         help="Chỉ dùng khi Phạm vi xem = 'Chỉ định mã bộ phận'. "
         "User sẽ thấy mọi nhân viên thuộc các mã bộ phận được chọn.",
     )
+
+    # --- App Access checkboxes (compute + inverse on security groups) ---
+    app_access_hr = fields.Boolean(
+        "Hồ sơ nhân viên",
+        compute="_compute_app_access",
+        inverse="_inverse_app_access",
+    )
+    app_access_leave = fields.Boolean(
+        "Nghỉ phép",
+        compute="_compute_app_access",
+        inverse="_inverse_app_access",
+    )
+    app_access_attendance = fields.Boolean(
+        "Chấm công",
+        compute="_compute_app_access",
+        inverse="_inverse_app_access",
+    )
+    app_access_expense = fields.Boolean(
+        "Chi phí",
+        compute="_compute_app_access",
+        inverse="_inverse_app_access",
+    )
+    app_access_crm = fields.Boolean(
+        "CRM",
+        compute="_compute_app_access",
+        inverse="_inverse_app_access",
+    )
+    app_access_pos = fields.Boolean(
+        "POS",
+        compute="_compute_app_access",
+        inverse="_inverse_app_access",
+    )
+    app_access_accounting = fields.Boolean(
+        "Kế toán",
+        compute="_compute_app_access",
+        inverse="_inverse_app_access",
+    )
+
+    # Availability flags (module installed?) to drive read-only in the form.
+    app_avail_expense = fields.Boolean(compute="_compute_app_avail")
+    app_avail_crm = fields.Boolean(compute="_compute_app_avail")
+    app_avail_pos = fields.Boolean(compute="_compute_app_avail")
+    app_avail_accounting = fields.Boolean(compute="_compute_app_avail")
 
     employee_ma_bo_phan_id = fields.Many2one(
         "hr.store.code",
@@ -148,6 +208,47 @@ class ResUsers(models.Model):
                 )
             else:
                 user.employee_mien = False
+
+    @api.depends("group_ids", "group_ids.all_implied_ids")
+    def _compute_app_access(self):
+        groups = {}
+        for fname, (xmlid, _module) in APP_ACCESS_DEFS.items():
+            groups[fname] = self.env.ref(xmlid, raise_if_not_found=False)
+        for user in self:
+            for fname, group in groups.items():
+                user[fname] = bool(group) and user.has_group(
+                    APP_ACCESS_DEFS[fname][0]
+                )
+
+    def _inverse_app_access(self):
+        for user in self:
+            commands = []
+            for fname, (xmlid, _module) in APP_ACCESS_DEFS.items():
+                group = self.env.ref(xmlid, raise_if_not_found=False)
+                if not group:
+                    continue
+                wanted = bool(user[fname])
+                has = group in user.group_ids
+                if wanted and not has:
+                    commands.append((4, group.id))
+                elif not wanted and has:
+                    commands.append((3, group.id))
+            if commands:
+                super(ResUsers, user).write({"group_ids": commands})
+
+    @api.depends_context("uid")
+    def _compute_app_avail(self):
+        installed = set(
+            self.env["ir.module.module"]
+            .sudo()
+            .search([("state", "=", "installed")])
+            .mapped("name")
+        )
+        for user in self:
+            user.app_avail_expense = "hr_expense" in installed
+            user.app_avail_crm = "crm" in installed
+            user.app_avail_pos = "point_of_sale" in installed
+            user.app_avail_accounting = "account" in installed
 
     @api.model
     def _role_group(self, xmlid):
@@ -205,6 +306,12 @@ class ResUsers(models.Model):
             # Reapply scope only when role itself changed (preserve manual scope
             # overrides done in the same write).
             self._apply_user_role(set_scope="visibility_policy" not in vals)
-        if {"group_ids", "visibility_policy", "assigned_ma_bo_phan_ids", "user_role"} & set(vals):
+        cache_keys = {
+            "group_ids",
+            "visibility_policy",
+            "assigned_ma_bo_phan_ids",
+            "user_role",
+        } | set(APP_ACCESS_DEFS)
+        if cache_keys & set(vals):
             self.env.registry.clear_cache()
         return res

@@ -34,51 +34,56 @@
                                widget="many2many_tags"
                                options="{'no_create': True, 'no_create_edit': True}"/>
                     </group>
-                    <separator string="Ma trận App theo Vai trò (tham khảo)"/>
-                    <div class="o_form_label">
-                        <table class="table table-sm table-bordered o_table">
-                            <thead>
-                                <tr>
-                                    <th>Ứng dụng</th>
-                                    <th>Employee</th>
-                                    <th>ASM</th>
-                                    <th>RM</th>
-                                    <th>HR</th>
-                                    <th>Admin</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td>Hồ sơ nhân viên</td>
-                                    <td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td>
-                                </tr>
-                                <tr>
-                                    <td>Nghỉ phép</td>
-                                    <td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td>
-                                </tr>
-                                <tr>
-                                    <td>Chấm công</td>
-                                    <td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td>
-                                </tr>
-                                <tr>
-                                    <td>Chi phí <span class="text-muted">(khi cài)</span></td>
-                                    <td>✗</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td>
-                                </tr>
-                                <tr>
-                                    <td>CRM <span class="text-muted">(khi cài)</span></td>
-                                    <td>✗</td><td>✗</td><td>✓</td><td>✗</td><td>✓</td>
-                                </tr>
-                                <tr>
-                                    <td>POS <span class="text-muted">(khi cài)</span></td>
-                                    <td>✗</td><td>✗</td><td>✗</td><td>✗</td><td>✓</td>
-                                </tr>
-                                <tr>
-                                    <td>Kế toán <span class="text-muted">(khi cài)</span></td>
-                                    <td>✗</td><td>✗</td><td>✗</td><td>✓</td><td>✓</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <separator string="Quyền truy cập ứng dụng (App Access)"/>
+                    <div class="text-muted mb-2">
+                        Tích vào ứng dụng mà user được phép truy cập. Chọn Vai trò
+                        ở trên sẽ tự tích sẵn theo chuẩn; bạn có thể chỉnh tay từng ô.
                     </div>
+                    <group>
+                        <group string="Nhân sự">
+                            <field name="app_access_hr"/>
+                            <field name="app_access_leave"/>
+                            <field name="app_access_attendance"/>
+                        </group>
+                        <group string="Khác">
+                            <field name="app_avail_expense" invisible="1"/>
+                            <field name="app_avail_crm" invisible="1"/>
+                            <field name="app_avail_pos" invisible="1"/>
+                            <field name="app_avail_accounting" invisible="1"/>
+                            <label for="app_access_expense"/>
+                            <div>
+                                <field name="app_access_expense"
+                                       readonly="not app_avail_expense"
+                                       class="oe_inline"/>
+                                <span class="text-muted ms-2"
+                                      invisible="app_avail_expense">(chưa cài)</span>
+                            </div>
+                            <label for="app_access_crm"/>
+                            <div>
+                                <field name="app_access_crm"
+                                       readonly="not app_avail_crm"
+                                       class="oe_inline"/>
+                                <span class="text-muted ms-2"
+                                      invisible="app_avail_crm">(chưa cài)</span>
+                            </div>
+                            <label for="app_access_pos"/>
+                            <div>
+                                <field name="app_access_pos"
+                                       readonly="not app_avail_pos"
+                                       class="oe_inline"/>
+                                <span class="text-muted ms-2"
+                                      invisible="app_avail_pos">(chưa cài)</span>
+                            </div>
+                            <label for="app_access_accounting"/>
+                            <div>
+                                <field name="app_access_accounting"
+                                       readonly="not app_avail_accounting"
+                                       class="oe_inline"/>
+                                <span class="text-muted ms-2"
+                                      invisible="app_avail_accounting">(chưa cài)</span>
+                            </div>
+                        </group>
+                    </group>
                     <separator string="Giải thích phạm vi (Data Scope)"/>
                     <div class="o_form_label">
                         <table class="table table-sm table-bordered o_table">

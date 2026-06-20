@@ -43,12 +43,13 @@ class HrStoreCode(models.Model):
     @api.model
     @api.readonly
     def name_search(self, name='', domain=None, operator='ilike', limit=100):
+        # NOTE: the underlying SQL view exposes `name` from hr_store.name which is
+        # a translatable (jsonb) column; an ILIKE on it raises
+        # "operator does not exist: jsonb ~~*". The record is displayed by `code`,
+        # so we only search on `code` here to keep the picker working.
         search_domain = Domain(domain or Domain.TRUE)
         if name:
-            search_domain &= Domain.OR([
-                Domain('code', operator, name),
-                Domain('name', operator, name),
-            ])
+            search_domain &= Domain('code', operator, name)
         records = self.search_fetch(search_domain, ['code'], limit=limit)
         return [(store.id, store.code or '') for store in records.sudo()]
 

@@ -34,21 +34,33 @@ class HrEmployeeAccessMixin(models.AbstractModel):
 
     @api.model
     def _hr_employee_leave_approval_emp_ids(self, user=None):
-        """Employee ids the user must be able to read because they can act on
-        (or are notified about) those employees' leave requests. Guarded so the
-        helper is a no-op when the approval modules are not installed."""
+        """Employee ids the user must be able to read because those employees'
+        leave requests are visible to the user.
+
+        Leave visibility (driven by mien rules, approver/handover/notifier paths,
+        etc.) can legitimately be broader than the employee directory scope. If an
+        employee whose leave the user can see is not readable, the Time Off list
+        crashes with a MissingError while computing ``employee_id`` display names.
+        We therefore expose every employee referenced by a leave the *current user*
+        can read. Reading is done as the user (so leave record rules apply) and we
+        only pull ids, never display names, to avoid recursion.
+
+        The context guard prevents re-entrancy: hr.employee._search -> this helper
+        -> hr.leave.search (which never touches hr.employee._search, but stays safe
+        against future changes).
+        """
         user = user or self.env.user
-        leave_fields = self.env["hr.leave"]._fields
-        clauses = []
-        if "approval_actionable_user_ids" in leave_fields:
-            clauses.append(("approval_actionable_user_ids", "in", user.id))
-        if "special_readonly_notifier_user_ids" in leave_fields:
-            clauses.append(("special_readonly_notifier_user_ids", "in", user.id))
-        if not clauses:
+        Leave = self.env.get("hr.leave")
+        if Leave is None or self.env.context.get("_hr_emp_leave_scan"):
             return []
-        domain = Domain.OR([Domain([clause]) for clause in clauses])
-        leaves = self.env["hr.leave"].sudo().search(domain)
-        return leaves.employee_id.ids
+        leaves = (
+            Leave.with_user(user)
+            .with_context(_hr_emp_leave_scan=True)
+            .search([])
+        )
+        if not leaves:
+            return []
+        return leaves.sudo().employee_id.ids
 
     @api.model
     def _hr_employee_company_domain(self, user=None):
