@@ -24,7 +24,8 @@
         <field name="inherit_id" ref="base.view_users_form"/>
         <field name="arch" type="xml">
             <xpath expr="//notebook" position="inside">
-                <page string="LUG Permission" name="lug_permission">
+                <page string="LUG Permission" name="lug_permission"
+                      groups="base.group_system,hr.group_hr_manager,lug_permission.group_lug_permission_manager">
                     <group>
                         <group string="Nhóm quyền">
                             <field name="lug_group_ids" widget="many2many_tags"

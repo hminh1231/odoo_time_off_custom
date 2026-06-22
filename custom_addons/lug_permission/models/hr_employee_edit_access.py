@@ -55,11 +55,12 @@ class HrEmployee(models.Model):
             return
         if user.lug_allowed_employee_edit_legacy_miens() is None:
             return
+        if "edit" not in user._lug_effective_permission_map().get("hr", set()):
+            return
         for employee in self:
-            if employee.employee_form_force_readonly_ui:
-                continue
-            if not employee._lug_is_employee_profile_edit_allowed(user):
-                employee.employee_form_force_readonly_ui = True
+            employee.employee_form_force_readonly_ui = (
+                not employee._lug_is_employee_profile_edit_allowed(user)
+            )
 
     @api.model_create_multi
     def create(self, vals_list):

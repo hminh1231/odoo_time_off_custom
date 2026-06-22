@@ -26,6 +26,16 @@ LUG_SCOPE_TO_VISIBILITY = {
     "company": "all",
 }
 
+# Discuss submenus hidden for all employees; visible only for Administrator or
+# LUG users with Discuss Edit (or stronger) — not View/Create alone.
+LUG_DISCUSS_EMPLOYEE_HIDDEN_MENU_XMLIDS = [
+    "mail.menu_channel",
+    "mail.menu_configuration",
+]
+LUG_DISCUSS_ADMIN_MENU_PERMISSIONS = frozenset(
+    {"edit", "delete", "approve", "export", "import", "print"}
+)
+
 # HR submenus hidden when the user only has View on the HR app.
 LUG_HR_VIEW_ONLY_HIDDEN_MENU_XMLIDS = [
     "hr_skills.hr_skill_learning_menu",

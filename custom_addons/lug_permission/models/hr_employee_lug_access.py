@@ -1,0 +1,127 @@
+# -*- coding: utf-8 -*-
+"""Delegate hr.employee read access to LUG public access helpers (same employee ids)."""
+
+from odoo import SUPERUSER_ID, api, models
+
+from .hr_employee_access import _lug_filter_web_read_specification, _lug_filter_readable_field_names
+
+
+class HrEmployeeLugAccess(models.Model):
+    _inherit = "hr.employee"
+
+    def _lug_public_delegate(self):
+        return self.env["hr.employee.public"].browse(self.ids)
+
+    def _hr_employee_filter_accessible(self):
+        if (
+            self._hr_employee_read_is_restricted()
+            and self.env.user.sudo()._lug_permission_is_enforced()
+        ):
+            allowed = self._lug_public_delegate()._hr_employee_filter_accessible()
+            return self.browse(allowed.ids)
+        return super()._hr_employee_filter_accessible()
+
+    def _filtered_access(self, operation):
+        if (
+            operation == "read"
+            and self._hr_employee_read_is_restricted()
+            and self.env.user.sudo()._lug_permission_is_enforced()
+        ):
+            allowed = self._hr_employee_filter_accessible()
+            if not allowed:
+                return self.browse()
+            policy_allowed = self._lug_public_delegate()._lug_split_policy_and_ref()[0]
+            ref_only = allowed - policy_allowed
+            result = self.browse(ref_only.ids)
+            if policy_allowed:
+                result |= super(HrEmployeeLugAccess, policy_allowed)._filtered_access(
+                    operation
+                )
+            return result
+        return super()._filtered_access(operation)
+
+    def _check_access(self, operation):
+        if (
+            operation == "read"
+            and self.ids
+            and self._hr_employee_read_is_restricted()
+            and self.env.user.sudo()._lug_permission_is_enforced()
+        ):
+            return self._lug_public_delegate()._check_access(operation)
+        return super()._check_access(operation)
+
+    def fetch(self, field_names=None):
+        if not (
+            self._hr_employee_read_is_restricted()
+            and self.env.user.sudo()._lug_permission_is_enforced()
+        ):
+            return super().fetch(field_names)
+        if field_names is not None:
+            field_names = _lug_filter_readable_field_names(self, list(field_names))
+            if not field_names:
+                return
+        allowed = self._hr_employee_filter_accessible()
+        if not allowed:
+            return
+        policy_allowed = self.browse(
+            self._lug_public_delegate()._lug_split_policy_and_ref()[0].ids
+        )
+        ref_only = allowed - policy_allowed
+        if policy_allowed:
+            super(HrEmployeeLugAccess, policy_allowed).fetch(field_names)
+        if ref_only:
+            self.env["hr.employee"].with_user(SUPERUSER_ID).browse(
+                ref_only.ids
+            ).fetch(field_names)
+        return
+
+    @api.model
+    def search_fetch(self, domain, field_names=None, offset=0, limit=None, order=None):
+        if field_names:
+            field_names = _lug_filter_readable_field_names(self, list(field_names))
+        return super().search_fetch(domain, field_names, offset=offset, limit=limit, order=order)
+
+    def web_read(self, specification):
+        specification = _lug_filter_web_read_specification(self, specification)
+        if (
+            self._hr_employee_read_is_restricted()
+            and self.env.user.sudo()._lug_permission_is_enforced()
+        ):
+            allowed = self._hr_employee_filter_accessible()
+            if not allowed:
+                return []
+            target_ids = [rec_id for rec_id in self.ids if rec_id in allowed.ids]
+            if not specification:
+                return [{"id": rec_id} for rec_id in target_ids]
+            # Reuse public web_read for shared fields, map back to employee ids.
+            pub_spec = {
+                key: value
+                for key, value in specification.items()
+                if key in self.env["hr.employee.public"]._fields
+            }
+            extra_spec = {
+                key: value for key, value in specification.items() if key not in pub_spec
+            }
+            rows_by_id = {}
+            if pub_spec:
+                for row in self._lug_public_delegate().browse(allowed.ids).web_read(pub_spec):
+                    rows_by_id[row["id"]] = row
+            if extra_spec:
+                for row in super(HrEmployeeLugAccess, allowed).web_read(extra_spec):
+                    rows_by_id.setdefault(row["id"], {}).update(row)
+            if not rows_by_id:
+                return [{"id": rec_id} for rec_id in target_ids]
+            return [rows_by_id[rec_id] for rec_id in target_ids if rec_id in rows_by_id]
+        return super().web_read(specification)
+
+    @api.model
+    def web_search_read(self, domain, specification, offset=0, limit=None, order=None, count_limit=None):
+        specification = _lug_filter_web_read_specification(self, specification or {})
+        return super().web_search_read(
+            domain,
+            specification,
+            offset=offset,
+            limit=limit,
+            order=order,
+            count_limit=count_limit,
+        )

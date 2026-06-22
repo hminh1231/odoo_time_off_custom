@@ -4,7 +4,13 @@ from collections import defaultdict
 
 from odoo import api, fields, models
 
-from .lug_constants import LUG_DATA_SCOPES, LUG_HR_VIEW_ONLY_HIDDEN_MENU_XMLIDS, LUG_SCOPE_TO_VISIBILITY
+from .lug_constants import (
+    LUG_DATA_SCOPES,
+    LUG_DISCUSS_ADMIN_MENU_PERMISSIONS,
+    LUG_DISCUSS_EMPLOYEE_HIDDEN_MENU_XMLIDS,
+    LUG_HR_VIEW_ONLY_HIDDEN_MENU_XMLIDS,
+    LUG_SCOPE_TO_VISIBILITY,
+)
 from .lug_odoo_groups import (
     LUG_ALWAYS_HIDDEN_MENU_XMLIDS,
     LUG_APP_ODOO_GROUPS,
@@ -67,17 +73,23 @@ class ResUsers(models.Model):
             return None  # unrestricted
         if (user.lug_hr_employee_edit_policy or "none") != "zones":
             return None
-        return set(
+        zones = set(
             (z.legacy_mien or "").strip()
             for z in user.lug_hr_employee_edit_mien_zone_ids
             if (z.legacy_mien or "").strip()
         )
+        return zones or None
 
     @api.model
     def _lug_set_default_employee_edit_scopes(self):
         """Apply requested defaults; safe to rerun on upgrades."""
         Zone = self.env["hr.mien.zone"].sudo()
         zone_map = {z.legacy_mien: z for z in Zone.search([]) if z.legacy_mien}
+
+        scope_defaults = {
+            "admin.lug@sangtam.com": "region",
+            "anh.trinh@sangtam.com": "region",
+        }
 
         def _set_user_zones(login, legacy_miens):
             user = self.sudo().search([("login", "=", login)], limit=1)
@@ -86,12 +98,27 @@ class ResUsers(models.Model):
             zones = Zone.browse([zone_map[m].id for m in legacy_miens if m in zone_map])
             if not zones:
                 return
-            user.write(
-                {
-                    "lug_hr_employee_edit_policy": "zones",
-                    "lug_hr_employee_edit_mien_zone_ids": [(6, 0, zones.ids)],
-                }
+            edit_group = self.env.ref(
+                "hr_employee_self_only.group_hr_employee_edit_allowed",
+                raise_if_not_found=False,
             )
+            view_group = self.env.ref(
+                "hr_employee_self_only.group_hr_employee_view_personal_allowed",
+                raise_if_not_found=False,
+            )
+            extra_groups = [g for g in (edit_group, view_group) if g]
+            vals = {
+                "lug_hr_employee_edit_policy": "zones",
+                "lug_hr_employee_edit_mien_zone_ids": [(6, 0, zones.ids)],
+            }
+            scope = scope_defaults.get(login)
+            if scope:
+                vals["lug_data_scope"] = scope
+            if extra_groups:
+                vals["group_ids"] = [(4, g.id) for g in extra_groups]
+            user.with_context(skip_lug_sync=False).write(vals)
+            if user._lug_permission_is_enforced():
+                user._sync_lug_visibility_policy()
 
         _set_user_zones("admin.lug@sangtam.com", ["Nam", "ĐTT", "Bắc"])
         _set_user_zones("anh.trinh@sangtam.com", ["VP"])
@@ -236,6 +263,25 @@ class ResUsers(models.Model):
             "hide_activities": hide_messaging,
             "hide_help": True,
         }
+
+    def _lug_hidden_discuss_config_menu_ids(self):
+        """Hide Discuss > Kênh and Cấu hình for all regular users.
+
+        Visible only for Administrator or LUG Discuss Edit (or stronger).
+        """
+        self.ensure_one()
+        if self.has_group("base.group_system"):
+            return []
+        if self._lug_permission_is_enforced():
+            discuss_perms = self._lug_effective_permission_map().get("discuss", set())
+            if discuss_perms & LUG_DISCUSS_ADMIN_MENU_PERMISSIONS:
+                return []
+        hidden = []
+        for xmlid in LUG_DISCUSS_EMPLOYEE_HIDDEN_MENU_XMLIDS:
+            menu = self.env.ref(xmlid, raise_if_not_found=False)
+            if menu:
+                hidden.append(menu.id)
+        return hidden
 
     def _lug_hidden_hr_submenu_ids(self):
         self.ensure_one()

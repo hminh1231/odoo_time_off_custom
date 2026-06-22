@@ -69,9 +69,12 @@ class HrEmployeePublic(models.Model):
     def _check_access(self, operation):
         if operation == "read" and self.ids and self._hr_employee_read_is_restricted():
             allowed = self._hr_employee_filter_accessible()
+            forbidden = self - allowed
+            if forbidden:
+                return super(HrEmployeePublic, forbidden)._check_access(operation)
             if allowed:
                 return super(HrEmployeePublic, allowed)._check_access(operation)
-            return None
+            return super()._check_access(operation)
         return super()._check_access(operation)
 
     def read(self, fields=None, load="_classic_read"):
