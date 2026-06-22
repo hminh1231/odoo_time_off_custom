@@ -71,7 +71,7 @@ class HrLeaveDailyReport(models.Model):
 
     @api.depends("leave_id", "leave_id.status_display_label", "state")
     def _compute_status_display_label(self):
-        state_labels = dict(self._fields["state"].selection)
+        state_labels = dict(self._fields["state"]._description_selection(self.env))
         for report in self:
             leave = report.leave_id
             if leave and "status_display_label" in leave._fields and leave.status_display_label:

@@ -2278,7 +2278,7 @@ class HrLeaveHandover(models.Model):
         "multi_step_current",
     )
     def _compute_status_display_label(self):
-        selection = dict(self._fields["state"].selection)
+        selection = dict(self._fields["state"]._description_selection(self.env))
         for leave in self:
             label = selection.get(leave.state)
             if leave.state == "validate":

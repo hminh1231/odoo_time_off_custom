@@ -1,0 +1,45 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+# 	* hr_leave_daily_report
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 19.0\n"
+"PO-Revision-Date: 2026-06-22 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Language: vi_VN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#. module: hr_leave_daily_report
+#: model:ir.model.fields.selection,name:hr_leave_daily_report.selection__hr_leave_daily_report__state__cancel
+msgid "Cancelled"
+msgstr "Đã hủy"
+
+#. module: hr_leave_daily_report
+#: model:ir.model.fields.selection,name:hr_leave_daily_report.selection__hr_leave_daily_report__state__confirm
+msgid "To Approve"
+msgstr "Cần phê duyệt"
+
+#. module: hr_leave_daily_report
+#: model:ir.model.fields.selection,name:hr_leave_daily_report.selection__hr_leave_daily_report__state__refuse
+msgid "Refused"
+msgstr "Bị từ chối"
+
+#. module: hr_leave_daily_report
+#: model:ir.model.fields.selection,name:hr_leave_daily_report.selection__hr_leave_daily_report__state__validate1
+msgid "Second Approval"
+msgstr "Phê duyệt lần hai"
+
+#. module: hr_leave_daily_report
+#: model:ir.model.fields.selection,name:hr_leave_daily_report.selection__hr_leave_daily_report__state__validate
+msgid "Approved"
+msgstr "Đã phê duyệt"
+
+#. module: hr_leave_daily_report
+#: model:ir.model.fields,field_description:hr_leave_daily_report.field_hr_leave_daily_report__state
+msgid "Status"
+msgstr "Trạng thái"
