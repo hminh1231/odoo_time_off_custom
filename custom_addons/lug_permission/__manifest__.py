@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     "name": "LUG Permission Center",
-    "version": "19.0.1.0.19",
+    "version": "19.0.1.0.20",
     "category": "Administration",
     "summary": "Centralized application permission management for Odoo",
     "description": """
@@ -33,7 +33,7 @@ Independent permission layer: User → Group → Application → Permission → 
     "license": "LGPL-3",
     "author": "Custom",
     "installable": True,
-    "application": True,
+    "application": False,
     "auto_install": False,
     "post_init_hook": "post_init_hook",
 }

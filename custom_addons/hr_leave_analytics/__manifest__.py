@@ -4,7 +4,7 @@
 
     "name": "HR Leave Analytics",
 
-    "version": "19.0.1.1.2",
+    "version": "19.0.1.5.8",
 
     "post_init_hook": "post_init_hook",
 
@@ -25,6 +25,8 @@
         "hr_job_title_vn",
 
         "lug_permission",
+
+        "time_off_work_handover",
 
         "spreadsheet_dashboard",
 
