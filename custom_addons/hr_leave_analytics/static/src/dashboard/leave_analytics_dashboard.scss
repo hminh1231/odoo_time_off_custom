@@ -443,7 +443,40 @@
 
     // ── Staff alerts ──
     .o_staff_alerts_body {
-        padding: 0.75rem 1rem;
+        padding: 0;
+    }
+
+    .o_staff_alerts_table {
+        thead th {
+            background: #b91c1c;
+            border-color: #991b1b;
+        }
+
+        tbody td {
+            font-size: 0.82rem;
+            vertical-align: middle;
+            padding: 0.45rem 0.5rem;
+        }
+    }
+
+    .o_staff_alert_row_danger td {
+        background: #fef2f2;
+    }
+
+    .o_staff_alert_row_warning td {
+        background: #fffbeb;
+    }
+
+    .o_staff_alert_row_info td {
+        background: #f8fafc;
+    }
+
+    .o_staff_alert_empty {
+        text-align: center !important;
+        color: #166534;
+        background: #f0fdf4 !important;
+        font-weight: 600;
+        padding: 1rem !important;
     }
 
     .o_staff_alert {
@@ -502,6 +535,25 @@
     .o_status_badge_warning { background: #fef9e7; color: #b7950b; }
     .o_status_badge_secondary { background: #f4f4f5; color: #52525b; }
 
-    .o_detail_table_wrap { overflow-x: auto; max-height: 320px; overflow-y: auto; }
-    .o_detail_table { min-width: 800px; font-size: 0.78rem; }
+    .o_detail_table_wrap {
+        overflow-x: auto;
+        max-height: 320px;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .o_detail_table {
+        min-width: 800px;
+        font-size: 0.78rem;
+        border-collapse: separate;
+        border-spacing: 0;
+
+        thead th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: #4472c4;
+            box-shadow: 0 1px 0 #cbd5e1;
+        }
+    }
 }

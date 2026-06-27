@@ -258,20 +258,38 @@
                     <div class="card-header o_header_alert">
                         <i class="fa fa-exclamation-triangle me-2"/>Cảnh báo nhân sự
                     </div>
-                    <div class="card-body o_staff_alerts_body">
-                        <t t-if="staffAlerts.length">
-                            <t t-foreach="staffAlerts" t-as="alert" t-key="alert_index">
-                                <div t-att-class="alertClass(alert)">
-                                    <i t-att-class="'fa ' + alert.icon + ' me-2'"/>
-                                    <span t-esc="alert.message"/>
-                                </div>
-                            </t>
-                        </t>
-                        <t t-else="">
-                            <div class="o_staff_alert o_staff_alert_ok">
-                                <i class="fa fa-check-circle me-2"/>Không có cảnh báo nhân sự.
-                            </div>
-                        </t>
+                    <div class="card-body p-0 o_staff_alerts_body">
+                        <table class="table table-sm mb-0 o_grid_table o_staff_alerts_table">
+                            <thead>
+                                <tr>
+                                    <th>STT</th>
+                                    <th>Mã bộ phận</th>
+                                    <th>Loại</th>
+                                    <th>Chi tiết</th>
+                                    <th>Tỷ lệ</th>
+                                    <th>Mức độ</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <t t-foreach="staffAlerts" t-as="alert" t-key="alert_index">
+                                    <tr t-att-class="alertRowClass(alert)">
+                                        <td class="o_td_number" t-esc="alert.stt"/>
+                                        <td class="o_td_center fw-semibold" t-esc="alert.code"/>
+                                        <td class="o_td_center" t-esc="alert.type_label"/>
+                                        <td t-esc="alert.detail"/>
+                                        <td class="o_td_number fw-bold" t-esc="alert.rate_display"/>
+                                        <td class="o_td_center">
+                                            <span t-att-class="alertLevelBadgeClass(alert)" t-esc="alert.level_label"/>
+                                        </td>
+                                    </tr>
+                                </t>
+                                <tr t-if="!staffAlerts.length">
+                                    <td colspan="6" class="o_staff_alert_empty">
+                                        <i class="fa fa-check-circle me-2"/>Không có cảnh báo nhân sự
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
 
@@ -283,14 +301,31 @@
                             <div class="o_filter_item o_filter_item_inline">
                                 <label class="o_filter_label">Mã bộ phận</label>
                                 <select class="form-select form-select-sm o_filter_select o_filter_select_wide"
-                                        t-model.number="state.filterMaBoPhanId"
-                                        t-on-change="onFilterChange">
+                                        t-model.number="state.detailDraftMaBoPhanId">
                                     <option value="">Tất cả</option>
                                     <t t-foreach="filterOptions.ma_bo_phans || []" t-as="code" t-key="'detail_' + code.id">
                                         <option t-att-value="code.id" t-esc="code.name"/>
                                     </t>
                                 </select>
                             </div>
+                            <div class="o_filter_item o_filter_item_inline">
+                                <label class="o_filter_label">Trạng thái</label>
+                                <select class="form-select form-select-sm o_filter_select o_filter_select_wide"
+                                        t-model="state.detailDraftLeaveStatus">
+                                    <option value="">Tất cả</option>
+                                    <t t-foreach="filterOptions.leave_statuses || []" t-as="status" t-key="'detail_status_' + status.value">
+                                        <option t-att-value="status.value" t-esc="status.label"/>
+                                    </t>
+                                </select>
+                            </div>
+                            <button type="button"
+                                    class="btn btn-sm btn-light py-0 px-2 align-self-end o_detail_search_btn"
+                                    t-on-click="onDetailSearch"
+                                    t-att-disabled="state.detailLoading">
+                                <i t-if="state.detailLoading" class="fa fa-spinner fa-spin me-1"/>
+                                <i t-else="" class="fa fa-search me-1"/>
+                                Tìm kiếm
+                            </button>
                             <button class="btn btn-sm btn-outline-light py-0 px-2 align-self-end" t-on-click="() => this.openList('leave_details')">
                                 <i class="fa fa-file-excel-o me-1"/>Xuất Excel
                             </button>
@@ -305,7 +340,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                <t t-foreach="leaveDetailsPreview" t-as="row" t-key="row.leave_id">
+                                <t t-foreach="leaveDetails" t-as="row" t-key="row.leave_id">
                                     <tr class="cursor-pointer" t-on-click="() => this.openLeave(row.leave_id)">
                                         <td class="o_td_number" t-esc="row.stt"/>
                                         <td class="o_td_center" t-esc="row.employee_mien"/>

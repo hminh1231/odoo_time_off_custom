@@ -34,6 +34,13 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
 
     _STORE_ALERT_MIN_ON_LEAVE = 2
 
+    _LEAVE_STATUS_FILTERS = (
+        ("approved", "Được duyệt"),
+        ("pending_approval", "Đang chờ duyệt"),
+        ("pending_handover", "Đang chờ bàn giao"),
+        ("refused", "Bị từ chối"),
+    )
+
 
 
     @api.model
@@ -153,6 +160,18 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
 
 
     @api.model
+    def _parse_detail_filters(self, detail_filters=None):
+        detail_filters = detail_filters or {}
+        ma_bo_phan_id = detail_filters.get("ma_bo_phan_id")
+        leave_status = (detail_filters.get("leave_status") or "").strip() or False
+        return {
+            "ma_bo_phan_id": int(ma_bo_phan_id) if ma_bo_phan_id else False,
+            "leave_status": leave_status,
+        }
+
+
+
+    @api.model
 
     def _mien_domain(self, filters):
 
@@ -213,6 +232,20 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
 
             return False
 
+        return True
+
+
+
+    @api.model
+    def _employee_matches_detail_filters(self, employee, filters, detail_filters):
+        if not employee:
+            return False
+        if not self._employee_matches_mien(employee, filters.get("employee_mien")):
+            return False
+        ma_bo_phan_id = detail_filters.get("ma_bo_phan_id")
+        if ma_bo_phan_id:
+            if not employee.ma_bo_phan_id or employee.ma_bo_phan_id.id != ma_bo_phan_id:
+                return False
         return True
 
 
@@ -358,6 +391,19 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
         return f"{day.day} thg {day.month}"
 
     @api.model
+    def _leave_detail_status_bucket(self, leave):
+        if leave.state == "validate":
+            return "approved"
+        if leave.state == "refuse":
+            return "refused"
+        bucket = self._classify_leave_status_bucket(leave)
+        if bucket == "waiting_handover":
+            return "pending_handover"
+        if bucket == "waiting_approval":
+            return "pending_approval"
+        return False
+
+    @api.model
     def _leave_detail_status_label(self, leave):
         if "status_display_label" in leave._fields and leave.status_display_label:
             return leave.status_display_label
@@ -403,9 +449,10 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
         }
 
     @api.model
-    def _get_leave_details(self, filters):
-        """Chi tiết đơn nghỉ — cùng nguồn hr.leave như menu Ngày nghỉ, lọc theo tháng hiện tại."""
+    def _get_leave_details(self, filters, detail_filters=None):
+        """Chi tiết đơn nghỉ — lọc trạng thái/mã BP chỉ áp dụng qua detail_filters."""
         filters = self._parse_filters(filters)
+        detail = self._parse_detail_filters(detail_filters)
         date_from = filters["date_from"]
         date_to = filters["date_to"]
         active_mien = filters.get("employee_mien")
@@ -416,7 +463,9 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
             ("request_date_to", ">=", date_from),
         ]
         domain = self._append_leave_mien_domain(domain, active_mien)
-        domain = self._append_scope_filters(domain, filters)
+        domain = self._append_scope_filters(domain, {
+            "ma_bo_phan_id": detail.get("ma_bo_phan_id"),
+        })
 
         Leave = self.env["hr.leave"].sudo().with_context(active_test=False)
         leaves = Leave.search(
@@ -426,16 +475,23 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
         )
 
         rows = []
-        for idx, leave in enumerate(leaves, 1):
+        for leave in leaves:
             employee = leave.employee_id
             if not employee:
                 continue
             if employee.company_id.id not in self.env.companies.ids:
                 continue
-            if not self._employee_matches_filters(employee, filters):
+            if not self._employee_matches_detail_filters(employee, filters, detail):
                 continue
-            rows.append(self._serialize_leave_detail_row(leave, idx, filters))
+            if detail.get("leave_status"):
+                if self._leave_detail_status_bucket(leave) != detail["leave_status"]:
+                    continue
+            rows.append(self._serialize_leave_detail_row(leave, len(rows) + 1, filters))
         return rows
+
+    @api.model
+    def get_leave_details_data(self, filters=None, detail_filters=None):
+        return self._get_leave_details(filters, detail_filters)
 
     @api.model
     def _employee_job_title_key(self, employee):
@@ -826,6 +882,31 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
         }
 
     @api.model
+    def _staff_alert_row(self, level, alert_type, code, detail, rate=None, **extra):
+        level_labels = {
+            "danger": "Nguy hiểm",
+            "warning": "Cảnh báo",
+            "info": "Thông tin",
+        }
+        type_labels = {
+            "store_today": "Nghỉ hôm nay",
+            "store_period": "Trong kỳ",
+            "employee": "Nghỉ dài ngày",
+            "department": "Phòng ban",
+        }
+        return {
+            "level": level,
+            "level_label": level_labels.get(level, level),
+            "type": alert_type,
+            "type_label": type_labels.get(alert_type, alert_type),
+            "code": code or "—",
+            "detail": detail,
+            "rate": rate,
+            "rate_display": f"{rate}%" if rate is not None else "—",
+            **extra,
+        }
+
+    @api.model
     def _get_staff_alerts(self, filters, limit=15):
         """Cảnh báo nhân sự cho lãnh đạo."""
         filters = self._parse_filters(filters)
@@ -835,34 +916,45 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
         # Cửa hàng tỷ lệ nghỉ cao hôm nay
         for alert_row in self._get_store_alerts(filters, limit=50):
             rate = alert_row.get("on_leave_rate", 0.0)
+            code = alert_row.get("store_name") or "—"
+            on_leave = alert_row.get("on_leave_today", 0)
+            emp_count = alert_row.get("employee_count", 0)
             if rate >= 30:
-                alerts.append({
-                    "level": "danger",
-                    "icon": "fa-exclamation-triangle",
-                    "message": f"{alert_row['store_name']} nghỉ {rate}% nhân sự hôm nay.",
-                    "store_id": alert_row.get("store_id"),
-                    "type": "store",
-                })
+                alerts.append(self._staff_alert_row(
+                    "danger",
+                    "store_today",
+                    code,
+                    f"{on_leave}/{emp_count} NV nghỉ hôm nay",
+                    rate=rate,
+                    store_id=alert_row.get("store_id"),
+                    icon="fa-exclamation-triangle",
+                ))
             elif rate >= 10:
-                alerts.append({
-                    "level": "warning",
-                    "icon": "fa-warning",
-                    "message": f"{alert_row['store_name']} nghỉ {rate}% nhân sự — cần theo dõi.",
-                    "store_id": alert_row.get("store_id"),
-                    "type": "store",
-                })
+                alerts.append(self._staff_alert_row(
+                    "warning",
+                    "store_today",
+                    code,
+                    f"{on_leave}/{emp_count} NV nghỉ hôm nay — cần theo dõi",
+                    rate=rate,
+                    store_id=alert_row.get("store_id"),
+                    icon="fa-warning",
+                ))
 
         for row in self._get_top_stores(filters, limit=10):
-            if row.get("leave_rate", 0) >= 50 and not any(
-                a.get("store_id") == row.get("store_id") for a in alerts
+            leave_rate = row.get("leave_rate", 0)
+            if leave_rate >= 50 and not any(
+                a.get("store_id") == row.get("store_id") and a.get("type") == "store_period"
+                for a in alerts
             ):
-                alerts.append({
-                    "level": "warning",
-                    "icon": "fa-shopping-bag",
-                    "message": f"{row['store_name']} có {row['leave_rate']}% NV nghỉ trong kỳ.",
-                    "store_id": row.get("store_id"),
-                    "type": "store",
-                })
+                alerts.append(self._staff_alert_row(
+                    "warning",
+                    "store_period",
+                    row.get("store_name") or row.get("ma_bo_phan") or "—",
+                    f"{row.get('on_leave_count', 0)}/{row.get('employee_count', 0)} NV nghỉ trong kỳ",
+                    rate=leave_rate,
+                    store_id=row.get("store_id"),
+                    icon="fa-shopping-bag",
+                ))
 
         # Nhân viên nghỉ liên tiếp >= 5 ngày (đơn đã duyệt đang active hôm nay)
         Leave = self.env["hr.leave"].sudo().with_context(active_test=False)
@@ -878,14 +970,16 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
             if not employee or not self._employee_matches_filters(employee, filters):
                 continue
             days = int(leave.number_of_days or 0)
-            alerts.append({
-                "level": "warning",
-                "icon": "fa-user-times",
-                "message": f"{employee.name} nghỉ {days} ngày liên tiếp.",
-                "employee_id": employee.id,
-                "leave_id": leave.id,
-                "type": "employee",
-            })
+            alerts.append(self._staff_alert_row(
+                "warning",
+                "employee",
+                self._employee_ma_bo_phan_code(employee),
+                f"{employee.name} nghỉ {days} ngày liên tiếp",
+                rate=None,
+                employee_id=employee.id,
+                leave_id=leave.id,
+                icon="fa-user-times",
+            ))
 
         # Phòng ban chỉ còn <= 1 nhân sự làm việc hôm nay
         from collections import defaultdict
@@ -923,16 +1017,20 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
             working = len(member_ids) - on_leave
             if working <= 1:
                 dept = Department.browse(dept_id)
-                alerts.append({
-                    "level": "danger",
-                    "icon": "fa-building",
-                    "message": f"Phòng {dept.name} chỉ còn {working} nhân sự làm việc.",
-                    "department_id": dept_id,
-                    "type": "department",
-                })
+                alerts.append(self._staff_alert_row(
+                    "danger",
+                    "department",
+                    "—",
+                    f"Phòng {dept.name} chỉ còn {working} nhân sự làm việc",
+                    rate=round((on_leave / len(member_ids)) * 100, 1) if member_ids else None,
+                    department_id=dept_id,
+                    icon="fa-building",
+                ))
 
         level_order = {"danger": 0, "warning": 1, "info": 2}
-        alerts.sort(key=lambda row: level_order.get(row["level"], 9))
+        alerts.sort(key=lambda row: (level_order.get(row["level"], 9), -(row.get("rate") or 0)))
+        for idx, alert in enumerate(alerts[:limit], 1):
+            alert["stt"] = idx
         return alerts[:limit]
 
     @api.model
@@ -1336,6 +1434,10 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
             "years": years,
             "months": months,
             "ma_bo_phans": ma_bo_phans,
+            "leave_statuses": [
+                {"value": value, "label": label}
+                for value, label in self._LEAVE_STATUS_FILTERS
+            ],
             "departments": [{"id": d["id"], "name": d["name"]} for d in departments],
             "current_year": filters["year"],
             "current_month": filters["month"],
@@ -1343,7 +1445,7 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
 
     @api.model
 
-    def get_dashboard_data(self, filters=None):
+    def get_dashboard_data(self, filters=None, detail_filters=None):
 
         filters = self._parse_filters(filters)
 
@@ -1382,7 +1484,7 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
 
             mien_label = labels.get(active_mien, active_mien)
 
-        leave_details = self._get_leave_details(filters)
+        leave_details = self._get_leave_details(filters, detail_filters)
 
         kpi_drill = {
             drill_type: self._leaves_for_kpi_drill(drill_type, filters)
@@ -1615,9 +1717,10 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
 
     @api.model
 
-    def action_export_excel(self, export_type, filters=None):
+    def action_export_excel(self, export_type, filters=None, detail_filters=None):
 
         filters = self._parse_filters(filters)
+        detail = self._parse_detail_filters(detail_filters) if export_type == "leave_details" else {}
 
         if export_type == "mien_compare" and not filters.get("employee_mien"):
             domain = [("company_id", "in", self.env.companies.ids)]

@@ -87,6 +87,11 @@ export class LeaveAnalyticsDashboard extends Component {
             filterMonth: today.getMonth() + 1,
             filterMaBoPhanId: false,
             filterDepartmentId: false,
+            detailDraftMaBoPhanId: false,
+            detailDraftLeaveStatus: "",
+            appliedDetailMaBoPhanId: false,
+            appliedDetailLeaveStatus: "",
+            detailLoading: false,
             activeKpiDrill: null,
             kpiDrillTitle: "",
             kpiDrillRows: [],
@@ -112,6 +117,13 @@ export class LeaveAnalyticsDashboard extends Component {
             month: this.state.filterMonth,
             ma_bo_phan_id: this.state.filterMaBoPhanId || false,
             department_id: this.state.filterDepartmentId || false,
+        };
+    }
+
+    get appliedDetailFiltersPayload() {
+        return {
+            ma_bo_phan_id: this.state.appliedDetailMaBoPhanId || false,
+            leave_status: this.state.appliedDetailLeaveStatus || false,
         };
     }
 
@@ -265,6 +277,19 @@ export class LeaveAnalyticsDashboard extends Component {
         return base;
     }
 
+    alertRowClass(alert) {
+        return `o_staff_alert_row o_staff_alert_row_${alert.level || "info"}`;
+    }
+
+    alertLevelBadgeClass(alert) {
+        const map = {
+            danger: "o_status_badge o_status_badge_danger",
+            warning: "o_status_badge o_status_badge_warning",
+            info: "o_status_badge o_status_badge_secondary",
+        };
+        return map[alert.level] || map.info;
+    }
+
     alertClass(alert) {
         return `o_staff_alert o_staff_alert_${alert.level || "info"}`;
     }
@@ -295,7 +320,10 @@ export class LeaveAnalyticsDashboard extends Component {
             "hr.leave.analytics.dashboard",
             "get_dashboard_data",
             [],
-            { filters: this.filtersPayload }
+            {
+                filters: this.filtersPayload,
+                detail_filters: this.appliedDetailFiltersPayload,
+            }
         );
         const data = normalizeDashboardData(raw);
         if (data.filters) {
@@ -308,6 +336,33 @@ export class LeaveAnalyticsDashboard extends Component {
         this.state.loading = false;
     }
 
+    async loadLeaveDetails() {
+        if (!this.state.data) {
+            return;
+        }
+        this.state.detailLoading = true;
+        try {
+            const rows = await this.orm.call(
+                "hr.leave.analytics.dashboard",
+                "get_leave_details_data",
+                [],
+                {
+                    filters: this.filtersPayload,
+                    detail_filters: this.appliedDetailFiltersPayload,
+                }
+            );
+            this.state.data.leave_details = Array.isArray(rows) ? rows : [];
+        } finally {
+            this.state.detailLoading = false;
+        }
+    }
+
+    async onDetailSearch() {
+        this.state.appliedDetailMaBoPhanId = this.state.detailDraftMaBoPhanId;
+        this.state.appliedDetailLeaveStatus = this.state.detailDraftLeaveStatus;
+        await this.loadLeaveDetails();
+    }
+
     async onFilterChange() {
         await this.loadDashboard();
     }
@@ -318,6 +373,10 @@ export class LeaveAnalyticsDashboard extends Component {
         this.state.filterMonth = today.getMonth() + 1;
         this.state.filterMaBoPhanId = false;
         this.state.filterDepartmentId = false;
+        this.state.detailDraftMaBoPhanId = false;
+        this.state.detailDraftLeaveStatus = "";
+        this.state.appliedDetailMaBoPhanId = false;
+        this.state.appliedDetailLeaveStatus = "";
         await this.loadDashboard();
     }
 
@@ -520,11 +579,15 @@ export class LeaveAnalyticsDashboard extends Component {
     }
 
     async openList(exportType) {
+        const kwargs = { filters: this.filtersPayload };
+        if (exportType === "leave_details") {
+            kwargs.detail_filters = this.appliedDetailFiltersPayload;
+        }
         const action = await this.orm.call(
             "hr.leave.analytics.dashboard",
             "action_export_excel",
             [exportType],
-            { filters: this.filtersPayload }
+            kwargs
         );
         this.actionService.doAction(action);
     }
