@@ -9,28 +9,31 @@ from .hr_employee_access import _lug_filter_web_read_specification, _lug_filter_
 class HrEmployeeLugAccess(models.Model):
     _inherit = "hr.employee"
 
+    def _lug_employee_guard_active(self):
+        """LUG read caps apply to interactive users only — never block env.su()."""
+        return (
+            not self.env.su
+            and self._hr_employee_read_is_restricted()
+            and self.env.user.sudo()._lug_permission_is_enforced()
+        )
+
     def _lug_public_delegate(self):
         return self.env["hr.employee.public"].browse(self.ids)
 
     def _hr_employee_filter_accessible(self):
-        if (
-            self._hr_employee_read_is_restricted()
-            and self.env.user.sudo()._lug_permission_is_enforced()
-        ):
+        if self._lug_employee_guard_active():
             allowed = self._lug_public_delegate()._hr_employee_filter_accessible()
             return self.browse(allowed.ids)
         return super()._hr_employee_filter_accessible()
 
     def _filtered_access(self, operation):
-        if (
-            operation == "read"
-            and self._hr_employee_read_is_restricted()
-            and self.env.user.sudo()._lug_permission_is_enforced()
-        ):
+        if operation == "read" and self._lug_employee_guard_active():
             allowed = self._hr_employee_filter_accessible()
             if not allowed:
                 return self.browse()
-            policy_allowed = self._lug_public_delegate()._lug_split_policy_and_ref()[0]
+            policy_allowed = self.browse(
+                self._lug_public_delegate()._lug_split_policy_and_ref()[0].ids
+            )
             ref_only = allowed - policy_allowed
             result = self.browse(ref_only.ids)
             if policy_allowed:
@@ -41,20 +44,12 @@ class HrEmployeeLugAccess(models.Model):
         return super()._filtered_access(operation)
 
     def _check_access(self, operation):
-        if (
-            operation == "read"
-            and self.ids
-            and self._hr_employee_read_is_restricted()
-            and self.env.user.sudo()._lug_permission_is_enforced()
-        ):
+        if operation == "read" and self.ids and self._lug_employee_guard_active():
             return self._lug_public_delegate()._check_access(operation)
         return super()._check_access(operation)
 
     def fetch(self, field_names=None):
-        if not (
-            self._hr_employee_read_is_restricted()
-            and self.env.user.sudo()._lug_permission_is_enforced()
-        ):
+        if not self._lug_employee_guard_active():
             return super().fetch(field_names)
         if field_names is not None:
             field_names = _lug_filter_readable_field_names(self, list(field_names))
@@ -83,10 +78,7 @@ class HrEmployeeLugAccess(models.Model):
 
     def web_read(self, specification):
         specification = _lug_filter_web_read_specification(self, specification)
-        if (
-            self._hr_employee_read_is_restricted()
-            and self.env.user.sudo()._lug_permission_is_enforced()
-        ):
+        if self._lug_employee_guard_active():
             allowed = self._hr_employee_filter_accessible()
             if not allowed:
                 return []

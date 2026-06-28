@@ -11,6 +11,8 @@ class HrEmployee(models.Model):
 
     def _hr_employee_read_is_restricted(self):
         """True when HR scope rules limit which employee rows may be read."""
+        if self.env.su:
+            return False
         if (
             self.env.context.get("_allow_read_hr_employee")
             is _ALLOW_READ_HR_EMPLOYEE

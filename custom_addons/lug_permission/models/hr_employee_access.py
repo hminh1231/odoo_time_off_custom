@@ -112,23 +112,54 @@ class HrEmployeeAccessMixin(models.AbstractModel):
         ]
 
     @api.model
+    def _lug_sql_employee_ids_from_leaves(self, leave_ids):
+        if not leave_ids:
+            return []
+        self.env.cr.execute(
+            """
+            SELECT DISTINCT employee_id
+            FROM hr_leave
+            WHERE id IN %s AND employee_id IS NOT NULL
+            """,
+            (tuple(leave_ids),),
+        )
+        return [row[0] for row in self.env.cr.fetchall()]
+
+    @api.model
     def _hr_employee_access_leave_reference_readable_ids(self, user=None):
-        """Employee ids from leave rows visible to the user (Time Off list)."""
+        """Employee ids from visible leaves and pending approvals (display name only)."""
         user = user or self.env.user
         if not user.sudo()._lug_permission_is_enforced():
             return []
         if self.env.context.get("_hr_emp_leave_scan"):
             return []
-        Leave = self.env.get("hr.leave")
-        if not Leave:
+        if "hr.leave" not in self.env:
             return []
-        leaves = (
+        Leave = self.env["hr.leave"]
+        emp_ids = set()
+        visible = (
             Leave.with_user(user)
             .with_context(_hr_emp_leave_scan=True)
             .search([])
-            .sudo()
         )
-        return [i for i in leaves.employee_id.ids if i]
+        emp_ids.update(self._lug_sql_employee_ids_from_leaves(visible.ids))
+
+        pending_domain = [("state", "in", ("confirm", "validate1"))]
+        if "approval_actionable_user_ids" in Leave._fields:
+            actionable = Leave.sudo().search(
+                pending_domain + [("approval_actionable_user_ids", "in", user.id)]
+            )
+            emp_ids.update(self._lug_sql_employee_ids_from_leaves(actionable.ids))
+        if "extra_approver_user_ids" in Leave._fields:
+            extra = Leave.sudo().search(
+                pending_domain + [("extra_approver_user_ids", "in", user.id)]
+            )
+            emp_ids.update(self._lug_sql_employee_ids_from_leaves(extra.ids))
+        managed = Leave.sudo().search(
+            pending_domain + [("employee_id.leave_manager_id", "=", user.id)]
+        )
+        emp_ids.update(self._lug_sql_employee_ids_from_leaves(managed.ids))
+        return list(emp_ids)
 
     @api.model
     def _hr_employee_access_reference_readable_ids(self, user=None):
@@ -136,6 +167,7 @@ class HrEmployeeAccessMixin(models.AbstractModel):
         ids = set(self._hr_employee_access_org_reference_readable_ids(user))
         ids.update(self._hr_employee_access_zone_parent_reference_readable_ids(user))
         ids.update(self._hr_employee_access_user_linked_reference_readable_ids(user))
+        ids.update(self._hr_employee_access_leave_reference_readable_ids(user))
         return list(ids)
 
     @api.model
@@ -143,7 +175,7 @@ class HrEmployeeAccessMixin(models.AbstractModel):
         user = user or self.env.user
         if not user.sudo()._lug_permission_is_enforced():
             return super()._hr_employee_leave_approval_emp_ids(user)
-        return []
+        return self._hr_employee_access_leave_reference_readable_ids(user)
 
 
 def _lug_employee_access_denied(recordset, operation):

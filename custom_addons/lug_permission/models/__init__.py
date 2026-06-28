@@ -11,4 +11,5 @@ from . import hr_employee_access
 from . import hr_employee_public_access
 from . import hr_employee_lug_access
 from . import hr_employee_edit_access
+from . import hr_leave_lug_access
 from . import ir_http

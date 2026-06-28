@@ -10,6 +10,8 @@ from .lug_constants import (
     LUG_DISCUSS_EMPLOYEE_HIDDEN_MENU_XMLIDS,
     LUG_HR_VIEW_ONLY_HIDDEN_MENU_XMLIDS,
     LUG_SCOPE_TO_VISIBILITY,
+    ROLE_TO_LUG_SCOPE,
+    VISIBILITY_TO_LUG_SCOPE,
 )
 from .lug_odoo_groups import (
     LUG_ALWAYS_HIDDEN_MENU_XMLIDS,
@@ -159,6 +161,13 @@ class ResUsers(models.Model):
             group = self.env.ref(xmlid, raise_if_not_found=False)
             if group:
                 ids.add(group.id)
+        for xmlid in (
+            "hr_leave_type_mien.group_leave_mien_vp",
+            "hr_leave_type_mien.group_leave_mien_store",
+        ):
+            group = self.env.ref(xmlid, raise_if_not_found=False)
+            if group:
+                ids.add(group.id)
         return ids
 
     def _lug_effective_permission_map(self):
@@ -177,6 +186,28 @@ class ResUsers(models.Model):
             result[line.app_id.code].update(line._active_permission_codes())
         return result
 
+    def _lug_leave_mien_scope_group_ids(self):
+        """Map VP-only / store-only edit zones to Time Off Miền scope groups."""
+        self.ensure_one()
+        user = self._lug_sudo()
+        if (user.lug_hr_employee_edit_policy or "none") != "zones":
+            return set()
+        zones = {
+            (z.legacy_mien or "").strip()
+            for z in user.lug_hr_employee_edit_mien_zone_ids
+            if (z.legacy_mien or "").strip()
+        }
+        ids = set()
+        vp = self.env.ref("hr_leave_type_mien.group_leave_mien_vp", raise_if_not_found=False)
+        store = self.env.ref(
+            "hr_leave_type_mien.group_leave_mien_store", raise_if_not_found=False
+        )
+        if zones == {"VP"} and vp:
+            ids.add(vp.id)
+        elif zones and zones <= {"Bắc", "Nam", "ĐTT"} and store:
+            ids.add(store.id)
+        return ids
+
     def _lug_target_group_ids(self):
         self.ensure_one()
         user = self._lug_sudo()
@@ -192,16 +223,22 @@ class ResUsers(models.Model):
                     group = self.env.ref(xmlid, raise_if_not_found=False)
                     if group:
                         target.add(group.id)
+        target.update(user._lug_leave_mien_scope_group_ids())
         return target
 
     def _sync_lug_odoo_groups(self):
         managed = self._lug_managed_group_ids()
+        holidays_user = self.env.ref(
+            "hr_holidays.group_hr_holidays_user", raise_if_not_found=False
+        )
         for user in self:
             if not user._lug_permission_is_enforced():
                 continue
             target = user._lug_target_group_ids()
             keep = user.group_ids.filtered(lambda g: g.id not in managed)
             new_groups = keep | self.env["res.groups"].browse(list(target))
+            if holidays_user:
+                new_groups -= holidays_user
             if set(new_groups.ids) != set(user.group_ids.ids):
                 super(
                     ResUsers,
@@ -211,7 +248,16 @@ class ResUsers(models.Model):
     def _apply_user_role(self, set_scope=True):
         role_users = self.filtered(lambda u: not u._lug_permission_is_enforced())
         if role_users:
-            return super(ResUsers, role_users)._apply_user_role(set_scope=set_scope)
+            super(ResUsers, role_users)._apply_user_role(set_scope=set_scope)
+            if set_scope:
+                for user in role_users:
+                    lug_scope = ROLE_TO_LUG_SCOPE.get(user.user_role)
+                    if lug_scope and user.lug_data_scope != lug_scope:
+                        super(
+                            ResUsers,
+                            user.with_context(skip_lug_sync=True, skip_role_apply=True),
+                        ).write({"lug_data_scope": lug_scope})
+                role_users._sync_lug_visibility_policy()
         return True
 
     def has_lug_permission(self, app_code, permission_code="view"):
@@ -239,14 +285,29 @@ class ResUsers(models.Model):
 
     def _sync_lug_visibility_policy(self):
         for user in self:
-            if not user._lug_permission_is_enforced():
-                continue
             policy = user._lug_visibility_policy_from_scope()
             if user.visibility_policy != policy:
                 super(
                     ResUsers,
                     user.with_context(skip_lug_sync=True, skip_role_apply=True),
                 ).write({"visibility_policy": policy})
+
+    @api.model
+    def _lug_backfill_data_scope_from_visibility(self):
+        """One-time alignment: map legacy visibility_policy to lug_data_scope."""
+        all_users = self.sudo().search([])
+        for user in all_users:
+            if user._lug_permission_bypass():
+                continue
+            expected = VISIBILITY_TO_LUG_SCOPE.get(user.visibility_policy or "self", "self")
+            if user.lug_data_scope == expected:
+                continue
+            if user.lug_data_scope == "self" or user._lug_permission_is_enforced():
+                super(
+                    ResUsers,
+                    user.with_context(skip_lug_sync=True, skip_role_apply=True),
+                ).write({"lug_data_scope": expected})
+        all_users._sync_lug_visibility_policy()
 
     def _lug_ui_systray_flags(self):
         self.ensure_one()
@@ -345,8 +406,13 @@ class ResUsers(models.Model):
             "lug_data_scope",
             "user_role",
             "assigned_ma_bo_phan_ids",
+            "lug_hr_employee_edit_policy",
+            "lug_hr_employee_edit_mien_zone_ids",
         }
+        scope_fields = {"lug_data_scope", "assigned_ma_bo_phan_ids"}
         should_sync = bool(lug_fields & set(vals))
+        if scope_fields & set(vals):
+            self._sync_lug_visibility_policy()
         if "group_ids" in vals:
             should_sync = should_sync or bool(
                 self.filtered(lambda u: u._lug_permission_is_enforced())
@@ -355,7 +421,6 @@ class ResUsers(models.Model):
             enforced = self.filtered(lambda u: u._lug_permission_is_enforced())
             if enforced:
                 enforced._sync_lug_odoo_groups()
-                enforced._sync_lug_visibility_policy()
             self._lug_clear_menu_cache()
         return res
 
@@ -365,7 +430,7 @@ class ResUsers(models.Model):
         enforced = users.filtered(lambda u: u._lug_permission_is_enforced())
         if enforced:
             enforced._sync_lug_odoo_groups()
-            enforced._sync_lug_visibility_policy()
+        users._sync_lug_visibility_policy()
         if any(
             {"lug_group_ids", "lug_user_permission_ids", "lug_data_scope", "user_role"}
             & set(vals)
@@ -373,3 +438,13 @@ class ResUsers(models.Model):
         ):
             users._lug_clear_menu_cache()
         return users
+
+    @api.model
+    def _lug_cleanup_legacy_visibility_views(self):
+        """Remove stale 'Phạm vi xem nhân viên' tab views from the database."""
+        legacy = self.env["ir.ui.view"].search([("model", "=", "res.users")]).filtered(
+            lambda view: 'name="employee_visibility"' in (view.arch_db or view.arch or "")
+        )
+        if legacy:
+            legacy.unlink()
+            self.env.registry.clear_cache()

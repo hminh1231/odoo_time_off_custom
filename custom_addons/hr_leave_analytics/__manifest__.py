@@ -4,7 +4,7 @@
 
     "name": "HR Leave Analytics",
 
-    "version": "19.0.1.6.7",
+    "version": "19.0.1.6.9",
 
     "post_init_hook": "post_init_hook",
 

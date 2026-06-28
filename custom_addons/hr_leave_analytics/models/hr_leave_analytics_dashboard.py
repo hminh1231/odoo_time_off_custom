@@ -194,7 +194,63 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
             domain.append(("employee_id.ma_bo_phan_id.store_id", "=", filters["store_id"]))
         if filters.get("department_id"):
             domain.append(("employee_id.department_id", "=", filters["department_id"]))
+        return self._append_lug_employee_visibility(domain)
+
+    @api.model
+    def _append_lug_employee_visibility(self, domain, field_name="employee_id"):
+        """Cap leave/employee analytics to LUG-visible staff for VP-only users."""
+        try:
+            from odoo.addons.lug_permission.models.hr_leave_lug_access import (
+                _lug_leave_scope_active,
+                _lug_visible_employee_ids,
+            )
+        except ImportError:
+            return domain
+        if not _lug_leave_scope_active(self.env):
+            return domain
+        visible = _lug_visible_employee_ids(self.env) or [0]
+        return list(domain) + [(field_name, "in", visible)]
+
+    @api.model
+    def _analytics_employee_domain(self, base_domain=None):
+        domain = list(base_domain or [])
+        domain += [("active", "=", True), ("company_id", "in", self.env.companies.ids)]
+        try:
+            from odoo.addons.lug_permission.models.hr_leave_lug_access import (
+                _lug_leave_scope_active,
+                _lug_visible_employee_ids,
+            )
+        except ImportError:
+            return domain
+        if _lug_leave_scope_active(self.env):
+            domain.append(("id", "in", _lug_visible_employee_ids(self.env) or [0]))
         return domain
+
+    @api.model
+    def _analytics_leave_env(self):
+        """Use the interactive user for LUG-scoped leave reads; sudo for HR managers."""
+        try:
+            from odoo.addons.lug_permission.models.hr_leave_lug_access import (
+                _lug_leave_scope_active,
+            )
+            if _lug_leave_scope_active(self.env):
+                return self.env["hr.leave"].with_context(active_test=False)
+        except ImportError:
+            pass
+        return self._analytics_leave_env()
+
+    @api.model
+    def _analytics_employee_env(self):
+        """Use the interactive user for LUG-scoped employee reads; sudo for HR managers."""
+        try:
+            from odoo.addons.lug_permission.models.hr_leave_lug_access import (
+                _lug_leave_scope_active,
+            )
+            if _lug_leave_scope_active(self.env):
+                return self.env["hr.employee"].with_context(active_test=False)
+        except ImportError:
+            pass
+        return self.env["hr.employee"].sudo().with_context(active_test=False)
 
 
 
@@ -337,17 +393,20 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
         date_from = filters["date_from"]
         date_to = filters["date_to"]
 
-        Leave = self.env["hr.leave"].sudo().with_context(active_test=False)
+        Leave = self._analytics_leave_env()
         leaves = Leave.search(
-            [
-                "|",
-                ("state", "in", ("confirm", "validate1")),
-                "&",
-                "&",
-                ("state", "=", "refuse"),
-                ("request_date_from", "<=", date_to),
-                ("request_date_to", ">=", date_from),
-            ],
+            self._append_scope_filters(
+                [
+                    "|",
+                    ("state", "in", ("confirm", "validate1")),
+                    "&",
+                    "&",
+                    ("state", "=", "refuse"),
+                    ("request_date_from", "<=", date_to),
+                    ("request_date_to", ">=", date_from),
+                ],
+                filters,
+            ),
             order="create_date desc, id desc",
         )
         info = {mien: self._empty_mien_status_info() for mien in mien_list}
@@ -467,7 +526,7 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
             "ma_bo_phan_id": detail.get("ma_bo_phan_id"),
         })
 
-        Leave = self.env["hr.leave"].sudo().with_context(active_test=False)
+        Leave = self._analytics_leave_env()
         leaves = Leave.search(
             domain,
             order="request_date_from desc, employee_id, id",
@@ -557,7 +616,7 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
         domain = self._append_leave_mien_domain(domain, active_mien)
         domain = self._append_scope_filters(domain, filters)
 
-        Leave = self.env["hr.leave"].sudo().with_context(active_test=False)
+        Leave = self._analytics_leave_env()
         leaves = Leave.search(domain)
         company_ids = set(self.env.companies.ids)
         result = []
@@ -588,7 +647,7 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
         period_domain = self._append_leave_mien_domain(period_domain, active_mien)
         period_domain = self._append_scope_filters(period_domain, filters)
 
-        Leave = self.env["hr.leave"].sudo().with_context(active_test=False)
+        Leave = self._analytics_leave_env()
         period_leaves = Leave.search(period_domain)
 
         approved = refused = pending_in_period = 0
@@ -628,11 +687,7 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
         today = fields.Date.context_today(self)
         status = self._get_request_status_summary(filters)
 
-        Employee = self.env["hr.employee"].sudo().with_context(active_test=False)
-        employees = Employee.search([
-            ("active", "=", True),
-            ("company_id", "in", self.env.companies.ids),
-        ])
+        employees = self._analytics_employee_env().search(self._analytics_employee_domain())
         total_employees = sum(
             1 for employee in employees if self._employee_matches_filters(employee, filters)
         )
@@ -645,7 +700,7 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
         on_leave_domain = self._append_leave_mien_domain(on_leave_domain, filters.get("employee_mien"))
         on_leave_domain = self._append_scope_filters(on_leave_domain, filters)
 
-        Leave = self.env["hr.leave"].sudo().with_context(active_test=False)
+        Leave = self._analytics_leave_env()
         on_leave_employee_ids = set()
         for leave in Leave.search(on_leave_domain):
             employee = leave.employee_id
@@ -700,7 +755,7 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
     def _search_leaves_for_drill(self, drill_type, filters):
         filters = self._parse_filters(filters)
         today = fields.Date.context_today(self)
-        Leave = self.env["hr.leave"].sudo().with_context(active_test=False)
+        Leave = self._analytics_leave_env()
 
         if drill_type == "on_leave_today":
             domain = [
@@ -818,16 +873,12 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
     def _get_monthly_trend(self, filters, months=12):
         filters = self._parse_filters(filters)
         ref_date = filters["date_to"].replace(day=1)
-        Employee = self.env["hr.employee"].sudo().with_context(active_test=False)
-        employees = Employee.search([
-            ("active", "=", True),
-            ("company_id", "in", self.env.companies.ids),
-        ])
+        employees = self._analytics_employee_env().search(self._analytics_employee_domain())
         total_employees = sum(
             1 for employee in employees if self._employee_matches_filters(employee, filters)
         )
 
-        Leave = self.env["hr.leave"].sudo().with_context(active_test=False)
+        Leave = self._analytics_leave_env()
         trend = []
         for offset in range(months - 1, -1, -1):
             month_start = ref_date - relativedelta(months=offset)
@@ -957,7 +1008,7 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
                 ))
 
         # Nhân viên nghỉ liên tiếp >= 5 ngày (đơn đã duyệt đang active hôm nay)
-        Leave = self.env["hr.leave"].sudo().with_context(active_test=False)
+        Leave = self._analytics_leave_env()
         consecutive_domain = [
             ("state", "=", "validate"),
             ("request_date_from", "<=", today),
@@ -985,12 +1036,10 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
         from collections import defaultdict
         dept_total = defaultdict(set)
         dept_on_leave = defaultdict(set)
-        Employee = self.env["hr.employee"].sudo().with_context(active_test=False)
-        for employee in Employee.search([
-            ("active", "=", True),
-            ("company_id", "in", self.env.companies.ids),
-            ("department_id", "!=", False),
-        ]):
+        Employee = self._analytics_employee_env()
+        for employee in Employee.search(
+            self._analytics_employee_domain([("department_id", "!=", False)])
+        ):
             if not self._employee_matches_filters(employee, filters):
                 continue
             dept_total[employee.department_id.id].add(employee.id)
@@ -1094,7 +1143,7 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
                 top_row["job_title"] = self._employee_job_title_key(employee)
 
         employee_count_by_group = defaultdict(set)
-        Employee = self.env["hr.employee"].sudo().with_context(active_test=False)
+        Employee = self._analytics_employee_env()
         emp_domain = [("active", "=", True), ("company_id", "in", self.env.companies.ids)]
         for employee in Employee.search(emp_domain):
             if not self._employee_matches_filters(employee, filters):
@@ -1149,7 +1198,7 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
 
         on_leave_by_store = defaultdict(set)
         on_leave_titles_by_store = defaultdict(set)
-        Leave = self.env["hr.leave"].sudo().with_context(active_test=False)
+        Leave = self._analytics_leave_env()
         on_leave_domain = [
             ("state", "=", "validate"),
             ("request_date_from", "<=", today),
@@ -1173,11 +1222,8 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
 
         employee_count_by_store = defaultdict(set)
         store_meta = {}
-        Employee = self.env["hr.employee"].sudo().with_context(active_test=False)
-        for employee in Employee.search([
-            ("active", "=", True),
-            ("company_id", "in", self.env.companies.ids),
-        ]):
+        Employee = self._analytics_employee_env()
+        for employee in Employee.search(self._analytics_employee_domain()):
             if not self._employee_matches_mien(employee, active_mien):
                 continue
             store = self._employee_store_info(employee)
@@ -1259,11 +1305,8 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
         )
         totals = {mien: {"employee_count": 0, "leave_days": 0.0} for mien in mien_list}
 
-        Employee = self.env["hr.employee"].sudo().with_context(active_test=False)
-        for employee in Employee.search([
-            ("active", "=", True),
-            ("company_id", "in", self.env.companies.ids),
-        ]):
+        Employee = self._analytics_employee_env()
+        for employee in Employee.search(self._analytics_employee_domain()):
             mien = employee.mien or False
             if not mien and employee.ma_bo_phan_id:
                 mien = employee.ma_bo_phan_id.mien or False
@@ -1407,11 +1450,8 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
             if row.get("code")
         }
 
-        Employee = self.env["hr.employee"].sudo().with_context(active_test=False)
-        for employee in Employee.search([
-            ("active", "=", True),
-            ("company_id", "in", self.env.companies.ids),
-        ]):
+        Employee = self._analytics_employee_env()
+        for employee in Employee.search(self._analytics_employee_domain()):
             if active_mien and not self._employee_matches_mien(employee, active_mien):
                 continue
             if employee.ma_bo_phan_id:
@@ -1640,7 +1680,7 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
     def _action_open_hr_leaves(self, filters, pending_type="approval"):
         filters = self._parse_filters(filters)
         today = fields.Date.context_today(self)
-        Leave = self.env["hr.leave"].sudo().with_context(active_test=False)
+        Leave = self._analytics_leave_env()
         domain = [("state", "!=", "cancel")]
         name = "Đơn nghỉ phép"
 

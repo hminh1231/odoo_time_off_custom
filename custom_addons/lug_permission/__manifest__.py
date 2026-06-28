@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     "name": "LUG Permission Center",
-    "version": "19.0.1.0.20",
+    "version": "19.0.1.0.29",
     "category": "Administration",
     "summary": "Centralized application permission management for Odoo",
     "description": """
@@ -14,12 +14,24 @@ Independent permission layer: User → Group → Application → Permission → 
 - Hide application menus based on effective View permission
 - Does not modify existing business tables (hr_employee, account_move, etc.)
     """,
-    "depends": ["base", "hr", "hr_employee_self_only", "hr_employee_hrm_detail", "hr_holidays", "mail"],
+    "depends": [
+        "base",
+        "hr",
+        "hr_employee_self_only",
+        "hr_employee_hrm_detail",
+        "hr_holidays",
+        "hr_leave_type_mien",
+        "time_off_responsible_approval",
+        "time_off_work_handover",
+        "mail",
+    ],
     "data": [
         "security/lug_permission_security.xml",
+        "security/hr_leave_lug_scope_security.xml",
         "security/ir.model.access.csv",
         "data/lug_app_data.xml",
         "data/employee_edit_defaults.xml",
+        "data/res_users_views_cleanup.xml",
         "views/lug_app_views.xml",
         "views/lug_group_views.xml",
         "views/res_users_views.xml",

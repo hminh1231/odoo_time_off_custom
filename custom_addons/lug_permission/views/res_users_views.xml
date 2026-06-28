@@ -26,20 +26,36 @@
             <xpath expr="//notebook" position="inside">
                 <page string="LUG Permission" name="lug_permission"
                       groups="base.group_system,hr.group_hr_manager,lug_permission.group_lug_permission_manager">
+                    <field name="lug_permission_enforced" invisible="1"/>
+
                     <group>
-                        <group string="Nhóm quyền">
+                        <group string="Nhóm quyền LUG">
                             <field name="lug_group_ids" widget="many2many_tags"
                                    options="{'no_create': True}"/>
+                            <div class="text-muted" colspan="2">
+                                Quyền hiệu lực = Nhóm quyền + Quyền bổ sung riêng bên dưới.
+                                Khi user có cấu hình LUG, vai trò và App Access legacy sẽ không
+                                còn áp dụng.
+                            </div>
                         </group>
                         <group string="Phạm vi dữ liệu (Data Scope)">
                             <field name="lug_data_scope" widget="radio"/>
                             <div class="text-muted" colspan="2">
-                                Tự đồng bộ sang tab <b>Phạm vi xem nhân viên</b>
-                                (visibility_policy). User không dùng LUG vẫn cấu hình
-                                phạm vi ở tab đó như cũ.
+                                Phạm vi xem nhân viên và đơn nghỉ phép. Tự đồng bộ nội bộ
+                                (visibility_policy) — không cần tab riêng.
                             </div>
                         </group>
                     </group>
+
+                    <group string="Vai trò nhanh (chỉ khi chưa dùng LUG)"
+                           invisible="lug_permission_enforced">
+                        <field name="user_role" widget="radio"/>
+                        <div class="text-muted" colspan="2">
+                            Gán nhanh quyền app và phạm vi mặc định. Chỉ dùng khi user
+                            <b>chưa</b> có Nhóm quyền LUG hoặc Quyền bổ sung riêng.
+                        </div>
+                    </group>
+
                     <group string="Mã bộ phận được xem (STORE)"
                            invisible="lug_data_scope != 'store'">
                         <field name="assigned_ma_bo_phan_ids" nolabel="1"
@@ -50,13 +66,14 @@
                             Để trống = chỉ xem cùng mã bộ phận với nhân viên của user.
                         </div>
                     </group>
+
                     <group string="Thông tin tổ chức (chỉ đọc)">
                         <field name="employee_ma_bo_phan_id" readonly="1"/>
                         <field name="employee_department_id" readonly="1"/>
                         <field name="employee_mien" readonly="1"/>
-                        <field name="visibility_policy" readonly="1"
-                               string="Phạm vi xem (đồng bộ)"/>
+                        <field name="visibility_policy" invisible="1"/>
                     </group>
+
                     <separator string="Quyền sửa hồ sơ nhân viên"/>
                     <group>
                         <field name="lug_hr_employee_edit_policy" widget="radio"/>
@@ -70,13 +87,73 @@
                             </div>
                         </group>
                     </group>
-                    <separator string="Quyền bổ sung riêng"/>
+
+                    <separator string="Quyền bổ sung riêng (LUG)"/>
                     <div class="text-muted mb-2">
-                        Quyền hiệu lực = Nhóm quyền + Quyền bổ sung riêng.
                         Chỉ xem HR → ẩn menu Học hỏi, Báo cáo, Phòng ban.
                         Không có quyền Thảo luận → ẩn biểu tượng thông báo trên thanh menu.
                     </div>
                     <field name="lug_user_permission_ids" nolabel="1"/>
+
+                    <separator string="Quyền truy cập ứng dụng (Legacy)"
+                               invisible="lug_permission_enforced"/>
+                    <div class="text-muted mb-2" invisible="lug_permission_enforced">
+                        Chỉ dùng khi user chưa có cấu hình LUG. Khi đã có Nhóm quyền LUG,
+                        phần này bị bỏ qua.
+                    </div>
+                    <group invisible="lug_permission_enforced">
+                        <group string="Nhân sự">
+                            <field name="app_access_hr"/>
+                            <field name="app_access_leave"/>
+                            <field name="app_access_attendance"/>
+                        </group>
+                        <group string="Khác">
+                            <field name="app_avail_expense" invisible="1"/>
+                            <field name="app_avail_crm" invisible="1"/>
+                            <field name="app_avail_pos" invisible="1"/>
+                            <field name="app_avail_accounting" invisible="1"/>
+                            <label for="app_access_expense"/>
+                            <div>
+                                <field name="app_access_expense"
+                                       readonly="not app_avail_expense"
+                                       class="oe_inline"/>
+                                <span class="text-muted ms-2"
+                                      invisible="app_avail_expense">(chưa cài)</span>
+                            </div>
+                            <label for="app_access_crm"/>
+                            <div>
+                                <field name="app_access_crm"
+                                       readonly="not app_avail_crm"
+                                       class="oe_inline"/>
+                                <span class="text-muted ms-2"
+                                      invisible="app_avail_crm">(chưa cài)</span>
+                            </div>
+                            <label for="app_access_pos"/>
+                            <div>
+                                <field name="app_access_pos"
+                                       readonly="not app_avail_pos"
+                                       class="oe_inline"/>
+                                <span class="text-muted ms-2"
+                                      invisible="app_avail_pos">(chưa cài)</span>
+                            </div>
+                            <label for="app_access_accounting"/>
+                            <div>
+                                <field name="app_access_accounting"
+                                       readonly="not app_avail_accounting"
+                                       class="oe_inline"/>
+                                <span class="text-muted ms-2"
+                                      invisible="app_avail_accounting">(chưa cài)</span>
+                            </div>
+                        </group>
+                    </group>
+
+                    <div class="alert alert-info mt-3" role="alert">
+                        <ul class="mb-0">
+                            <li>User <b>luôn thấy</b> hồ sơ của chính mình và người được gán duyệt phép (trừ khi LUG đang bật — khi đó áp dụng chính sách LUG nghiêm ngặt hơn).</li>
+                            <li><b>Quản trị viên (Administrator)</b> không bị giới hạn bởi LUG Permission.</li>
+                            <li>Phạm vi dữ liệu áp cho <b>Hồ sơ nhân viên</b> và <b>Đơn nghỉ phép</b>. Quyền app và thao tác (Xem/Tạo/Sửa/Duyệt) do LUG quản lý.</li>
+                        </ul>
+                    </div>
                 </page>
             </xpath>
         </field>

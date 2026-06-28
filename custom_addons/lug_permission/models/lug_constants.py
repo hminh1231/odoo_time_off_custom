@@ -14,6 +14,7 @@ LUG_PERMISSION_FIELDS = [
 LUG_DATA_SCOPES = [
     ("self", "SELF - Chỉ bản thân"),
     ("store", "STORE - Cửa hàng / mã bộ phận"),
+    ("department", "DEPARTMENT - Cùng phòng ban"),
     ("region", "REGION - Khu vực (Miền)"),
     ("company", "COMPANY - Toàn công ty"),
 ]
@@ -22,9 +23,42 @@ LUG_DATA_SCOPES = [
 LUG_SCOPE_TO_VISIBILITY = {
     "self": "self",
     "store": "ma_bo_phan",
+    "department": "department",
     "region": "region",
     "company": "all",
 }
+
+# Reverse mapping for backfill / role quick-setup.
+VISIBILITY_TO_LUG_SCOPE = {
+    "self": "self",
+    "ma_bo_phan": "store",
+    "assigned": "store",
+    "department": "department",
+    "region": "region",
+    "all": "company",
+}
+
+ROLE_TO_LUG_SCOPE = {
+    "employee": "self",
+    "asm": "store",
+    "rm": "region",
+    "hr": "company",
+    "admin": "company",
+}
+
+# ir.rule domain_force for lug_permission.hr_leave_lug_scope_rule (synced in hooks).
+def lug_leave_lug_scope_rule_domain():
+    from odoo.addons.hr_employee_hrm_detail.models.hr_employee_mien_rule_domains import (
+        leave_peer_read_rule_domain,
+    )
+
+    peer = leave_peer_read_rule_domain()
+    return (
+        "[(1, '=', 1)] if user.has_group('base.group_system') "
+        "or user.has_group('hr.group_hr_manager') "
+        "or not (user.lug_group_ids or user.lug_user_permission_ids) "
+        f"else {peer}"
+    )
 
 # Discuss submenus hidden for all employees; visible only for Administrator or
 # LUG users with Discuss Edit (or stronger) — not View/Create alone.
