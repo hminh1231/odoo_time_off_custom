@@ -269,6 +269,30 @@
     pointer-events: none;
 }
 
+.o_lug_row_count {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #6b7280;
+}
+
+.o_lug_status_badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.o_lug_status_online {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.o_lug_status_offline {
+    background: #f3f4f6;
+    color: #4b5563;
+}
+
 .o_lug_table_wrap {
     overflow-x: auto;
     border: 1px solid #adb5bd;

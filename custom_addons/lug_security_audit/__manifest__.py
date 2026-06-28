@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     "name": "Lug Security",
-    "version": "19.0.1.0.15",
+    "version": "19.0.1.0.16",
     "post_init_hook": "post_init_hook",
     "category": "Administration",
     "summary": "Security Audit — phiên đăng nhập, thiết bị, tổng hợp và báo cáo",
@@ -23,6 +23,7 @@ thiết bị, tổng hợp ngày/tháng và báo cáo. Menu: Cài đặt → Lug
         "views/lug_user_daily_summary_views.xml",
         "views/lug_user_month_summary_views.xml",
         "views/lug_security_dashboard_views.xml",
+        "views/lug_security_session_list_views.xml",
         "views/lug_security_menus.xml",
     ],
     "assets": {
@@ -32,6 +33,8 @@ thiết bị, tổng hợp ngày/tháng và báo cáo. Menu: Cài đặt → Lug
             "lug_security_audit/static/src/dashboard/lug_donut_card.js",
             "lug_security_audit/static/src/dashboard/lug_security_dashboard.xml",
             "lug_security_audit/static/src/dashboard/lug_security_dashboard.js",
+            "lug_security_audit/static/src/session_list/lug_session_list.xml",
+            "lug_security_audit/static/src/session_list/lug_session_list.js",
         ],
     },
     "license": "LGPL-3",

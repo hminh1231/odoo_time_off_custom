@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates xml:space="preserve">
+    <t t-name="user_menu_reset_password.SwitchCompanyMenu" t-inherit="web.SwitchCompanyMenu" t-inherit-mode="extension">
+        <xpath expr="//span[hasclass('oe_topbar_name')]" position="replace">
+            <span class="d-none d-lg-flex flex-column text-start oe_topbar_identity lh-sm">
+                <span class="oe_topbar_name text-truncate" t-esc="user.activeCompany.name"/>
+                <small class="oe_topbar_user_name text-truncate" t-esc="user.name"/>
+            </span>
+        </xpath>
+    </t>
+
     <t t-name="user_menu_reset_password.UserMenuIdentity">
         <div>
             <div class="o_user_menu_identity d-flex align-items-center gap-3 px-3 py-3">

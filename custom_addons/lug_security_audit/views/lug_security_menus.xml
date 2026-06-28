@@ -16,7 +16,7 @@
     <menuitem id="menu_lug_security_sessions"
               name="Phiên đăng nhập"
               parent="menu_lug_security_root"
-              action="action_lug_user_session"
+              action="action_lug_security_session_list"
               sequence="20"
               groups="base.group_system,lug_security_audit.group_lug_security_user"/>
 

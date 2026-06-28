@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="action_lug_security_session_list" model="ir.actions.client">
+        <field name="name">Phiên đăng nhập</field>
+        <field name="tag">lug_security_session_list</field>
+        <field name="target">current</field>
+    </record>
+</odoo>

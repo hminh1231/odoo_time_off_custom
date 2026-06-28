@@ -486,14 +486,47 @@ class LugSecurityDashboard(models.TransientModel):
                 "selected_mien": filters.get("selected_mien") or "",
             },
             "filter_options": {
-                "years": list(range(today.year - 2, today.year + 2)),
-                "months": [
-                    {"value": m, "label": f"Tháng {m:02d}"}
-                    for m in range(1, 13)
-                ],
-                "days": list(range(1, 32)),
+                **self._filter_options_payload(),
                 "miens": [{"value": m, "label": m} for m in MIEN_ORDER if mien_users.get(m)],
             },
+        }
+
+    @api.model
+    def _filter_options_payload(self):
+        today = fields.Date.context_today(self)
+        return {
+            "years": list(range(today.year - 2, today.year + 2)),
+            "months": [
+                {"value": m, "label": f"Tháng {m:02d}"}
+                for m in range(1, 13)
+            ],
+            "days": list(range(1, 32)),
+        }
+
+    @api.model
+    def _get_session_table_rows(self, filters):
+        Session = self.env["lug.user.session"].sudo()
+        base_domain = self._session_domain(filters)
+        sessions = Session.search(base_domain, order="login_time desc, id desc")
+        search_user_ids = self._search_employee_user_ids(filters["search"])
+        sessions = self._sessions_for_users(sessions, search_user_ids)
+        rows = [self._session_row(session) for session in sessions]
+        return self._filter_rows(rows, filters["search"], search_user_ids)
+
+    @api.model
+    def get_session_list_data(self, filters=None):
+        filters = self._parse_filters(filters)
+        rows = self._get_session_table_rows(filters)
+        return {
+            "rows": rows,
+            "total": len(rows),
+            "filters": {
+                "year": filters["year"],
+                "month": filters["month"],
+                "day": filters["day"],
+                "search": filters["search"],
+            },
+            "filter_options": self._filter_options_payload(),
         }
 
     @api.model
@@ -512,6 +545,20 @@ class LugSecurityDashboard(models.TransientModel):
         filters = self._parse_filters(filters)
         action = self.env.ref("lug_security_audit.action_lug_user_session_online").read()[0]
         domain = self._session_domain(filters) + [("is_online", "=", True)]
+        search_user_ids = self._search_employee_user_ids(filters["search"])
+        if search_user_ids is not None:
+            if not search_user_ids:
+                domain.append(("user_id", "=", False))
+            else:
+                domain.append(("user_id", "in", list(search_user_ids)))
+        action["domain"] = domain
+        return action
+
+    @api.model
+    def action_export_sessions(self, filters=None):
+        filters = self._parse_filters(filters)
+        action = self.env.ref("lug_security_audit.action_lug_user_session").read()[0]
+        domain = list(self._session_domain(filters))
         search_user_ids = self._search_employee_user_ids(filters["search"])
         if search_user_ids is not None:
             if not search_user_ids:

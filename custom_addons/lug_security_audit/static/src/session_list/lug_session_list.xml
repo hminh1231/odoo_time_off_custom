@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="lug_security_audit.LugSessionList">
+        <div class="o_lug_security_dashboard o_action">
+            <div class="o_lug_dashboard_header">
+                <div class="o_lug_title_row">
+                    <h2 class="o_lug_main_title">Phiên đăng nhập</h2>
+                    <button type="button" class="btn btn-sm btn-outline-success" t-on-click="exportExcel">
+                        <i class="fa fa-file-excel-o me-1"/>Xuất Excel
+                    </button>
+                </div>
+            </div>
+
+            <div class="o_lug_dashboard_body">
+                <t t-if="state.loading">
+                    <div class="text-center p-5"><i class="fa fa-spinner fa-spin fa-2x"/></div>
+                </t>
+                <t t-else="">
+                    <div class="o_lug_table_section">
+                        <div class="o_lug_table_toolbar">
+                            <div class="o_lug_filter_item">
+                                <label class="o_lug_filter_label">Ngày</label>
+                                <select class="form-select form-select-sm" t-model.number="state.filterDay" t-on-change="onFilterChange">
+                                    <t t-foreach="state.data?.filter_options?.days || []" t-as="day" t-key="day">
+                                        <option t-att-value="day" t-esc="day"/>
+                                    </t>
+                                </select>
+                            </div>
+                            <div class="o_lug_filter_item">
+                                <label class="o_lug_filter_label">Tháng</label>
+                                <select class="form-select form-select-sm" t-model.number="state.filterMonth" t-on-change="onFilterChange">
+                                    <t t-foreach="state.data?.filter_options?.months || []" t-as="month" t-key="month.value">
+                                        <option t-att-value="month.value" t-esc="month.label"/>
+                                    </t>
+                                </select>
+                            </div>
+                            <div class="o_lug_filter_item">
+                                <label class="o_lug_filter_label">Năm</label>
+                                <select class="form-select form-select-sm" t-model.number="state.filterYear" t-on-change="onFilterChange">
+                                    <t t-foreach="state.data?.filter_options?.years || []" t-as="year" t-key="year">
+                                        <option t-att-value="year" t-esc="year"/>
+                                    </t>
+                                </select>
+                            </div>
+                            <div class="o_lug_table_search">
+                                <label class="o_lug_filter_label">Tìm kiếm</label>
+                                <div class="o_lug_table_search_inputs">
+                                    <input type="text"
+                                           class="form-control form-control-sm"
+                                           placeholder="Tên, login, mã HRM, phòng ban, chức danh..."
+                                           t-model="state.searchText"
+                                           t-on-keydown="onSearchKeydown"/>
+                                    <button type="button" class="btn btn-sm btn-primary" t-on-click="loadSessions">
+                                        <i class="fa fa-search me-1"/>Tìm
+                                    </button>
+                                    <button type="button"
+                                            class="btn btn-sm btn-light"
+                                            t-if="state.searchText"
+                                            t-on-click="clearSearch">
+                                        Xóa
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-light" t-on-click="resetFilters" title="Đặt lại">
+                                        <i class="fa fa-refresh"/>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <h3 class="o_lug_section_title">
+                            Chi tiết Phiên đăng nhập
+                            <span class="o_lug_row_count" t-if="state.data?.total !== undefined">
+                                (<t t-esc="state.data.total"/> phiên)
+                            </span>
+                        </h3>
+                        <div class="o_lug_table_wrap">
+                            <table class="o_lug_data_table">
+                                <thead>
+                                    <tr>
+                                        <th>Ngày</th>
+                                        <th>Miền</th>
+                                        <th>User</th>
+                                        <th>Phòng ban</th>
+                                        <th>Chức danh</th>
+                                        <th>Login</th>
+                                        <th>Logout</th>
+                                        <th>Tổng thời gian</th>
+                                        <th>Thiết bị</th>
+                                        <th>IP</th>
+                                        <th>Trạng thái</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <t t-if="!state.data?.rows?.length">
+                                        <tr>
+                                            <td colspan="11" class="o_lug_empty">Không có phiên đăng nhập theo bộ lọc.</td>
+                                        </tr>
+                                    </t>
+                                    <t t-foreach="state.data?.rows || []" t-as="row" t-key="row.id">
+                                        <tr>
+                                            <td t-esc="row.login_date_display"/>
+                                            <td t-esc="row.mien_label"/>
+                                            <td t-esc="row.user_name"/>
+                                            <td t-esc="row.department_name"/>
+                                            <td t-esc="row.job_title_label"/>
+                                            <td t-esc="row.login_time_display"/>
+                                            <td t-esc="row.logout_time_display"/>
+                                            <td t-esc="row.duration_display"/>
+                                            <td t-esc="row.device_category"/>
+                                            <td t-esc="row.ip_display"/>
+                                            <td>
+                                                <span t-att-class="'o_lug_status_badge ' + (row.is_online ? 'o_lug_status_online' : 'o_lug_status_offline')"
+                                                      t-esc="row.status_label"/>
+                                            </td>
+                                        </tr>
+                                    </t>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </t>
+            </div>
+        </div>
+    </t>
+</templates>

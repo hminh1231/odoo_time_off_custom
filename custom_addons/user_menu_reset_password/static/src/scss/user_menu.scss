@@ -27,3 +27,23 @@
     font-size: 0.72rem;
     line-height: 1.2;
 }
+
+.o_switch_company_menu {
+    .oe_topbar_identity {
+        max-width: 15rem;
+    }
+
+    .oe_topbar_name {
+        max-width: 15rem;
+        font-size: inherit;
+        line-height: 1.2;
+    }
+
+    .oe_topbar_user_name {
+        max-width: 15rem;
+        margin-top: 0.1rem;
+        font-size: 0.75rem;
+        line-height: 1.15;
+        opacity: 0.85;
+    }
+}
