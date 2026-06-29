@@ -158,3 +158,33 @@
         }
     }
 }
+
+// Desktop / tablet: keep "Ngày" range + duration on one row (avoid stacked digits).
+@media (min-width: 768px) {
+    .modal .o_hr_leave_form,
+    .o_hr_leave_form {
+        #full_date {
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.35rem;
+            width: auto !important;
+            max-width: 100%;
+
+            > .o_field_widget:first-child {
+                order: 0;
+                flex: 0 1 auto !important;
+                width: auto !important;
+            }
+
+            > .o_hr_leave_duration_display,
+            > div:last-child {
+                order: 1;
+                flex: 0 0 auto !important;
+                width: auto !important;
+                margin-top: 0 !important;
+            }
+        }
+    }
+}

@@ -3,6 +3,8 @@
 from odoo import api, fields, models
 from odoo.fields import Domain
 
+from odoo.addons.hr.models.hr_employee import _ALLOW_READ_HR_EMPLOYEE
+
 
 class HrEmployeePublic(models.Model):
     _inherit = "hr.employee.public"
@@ -39,6 +41,11 @@ class HrEmployeePublic(models.Model):
     )
 
     def _hr_employee_read_is_restricted(self):
+        if (
+            self.env.context.get("_allow_read_hr_employee")
+            is _ALLOW_READ_HR_EMPLOYEE
+        ):
+            return False
         return (
             self.env["hr.employee.access.mixin"]._hr_employee_access_extra_domain(
                 model_name="hr.employee.public"
@@ -67,6 +74,12 @@ class HrEmployeePublic(models.Model):
         return records
 
     def _check_access(self, operation):
+        if (
+            operation == "read"
+            and self.env.context.get("_allow_read_hr_employee")
+            is _ALLOW_READ_HR_EMPLOYEE
+        ):
+            return None
         if operation == "read" and self.ids and self._hr_employee_read_is_restricted():
             allowed = self._hr_employee_filter_accessible()
             forbidden = self - allowed
@@ -109,6 +122,19 @@ class HrEmployeePublic(models.Model):
         active_test=True,
         bypass_access=False,
     ):
+        if (
+            self.env.context.get("_allow_read_hr_employee")
+            is _ALLOW_READ_HR_EMPLOYEE
+        ):
+            return super()._search(
+                domain,
+                offset=offset,
+                limit=limit,
+                order=order,
+                active_test=active_test,
+                bypass_access=True,
+                **{},
+            )
         # Core hr.employee._search (no ACL) delegates here; skip mixin to avoid
         # double-filter and employee_id.* sub-search recursion.
         if not self.env.context.get("hr_employee_search_bridge"):

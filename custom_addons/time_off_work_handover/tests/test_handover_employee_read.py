@@ -70,7 +70,7 @@ class TestHandoverEmployeeRead(TransactionCase):
         self.assertTrue(
             Leave._needs_handover_read_context(
                 [],
-                {"unavailable_handover_employee_ids": {"fields": {}}},
+                {"handover_acceptance_ids": {"fields": {}}},
             )
         )
         self.assertFalse(
@@ -108,7 +108,6 @@ class TestHandoverEmployeeRead(TransactionCase):
         Leave = self.env["hr.leave"]
         original = {
             "handover_employee_ids": {"fields": {"display_name": {}}},
-            "unavailable_handover_employee_ids": {"fields": {"display_name": {}}},
             "handover_acceptance_ids": {
                 "fields": {
                     "employee_id": {"fields": {"display_name": {}}},
@@ -120,12 +119,6 @@ class TestHandoverEmployeeRead(TransactionCase):
 
         prepared = Leave._handover_onchange_fields_spec(original)
 
-        self.assertIs(
-            prepared["unavailable_handover_employee_ids"]["context"][
-                "_allow_read_hr_employee"
-            ],
-            _ALLOW_READ_HR_EMPLOYEE,
-        )
         self.assertIs(
             prepared["handover_employee_ids"]["context"][
                 "_allow_read_hr_employee"
@@ -264,13 +257,66 @@ class TestHandoverEmployeeRead(TransactionCase):
                 Employee.search([("id", "=", self.recipient.id)])
             )
 
-            draft._compute_unavailable_handover_employee_ids()
-            unavailable = draft.unavailable_handover_employee_ids
+            draft._compute_unavailable_handover_employee_id_list()
+            unavailable = draft._unavailable_handover_employees()
             self.assertIn(self.recipient.id, unavailable.ids)
             self.assertEqual(
                 unavailable.mapped("name"),
                 [self.recipient.name],
             )
+
+    def test_unavailable_handover_onchange_allows_handover_selection(self):
+        overlap_day = date(2026, 6, 29)
+        start_dt = datetime.combine(overlap_day, time(7, 0))
+        end_dt = datetime.combine(overlap_day, time(19, 0))
+
+        self.env["hr.leave"].sudo().create(
+            {
+                "name": "Out-of-scope colleague leave",
+                "employee_id": self.recipient.id,
+                "holiday_status_id": self.leave_type.id,
+                "request_date_from": overlap_day,
+                "request_date_to": overlap_day,
+                "date_from": start_dt,
+                "date_to": end_dt,
+                "state": "validate",
+            }
+        )
+
+        Leave = self.env["hr.leave"].with_user(self.user)
+        values = {
+            "employee_id": self.requester_employee.id,
+            "holiday_status_id": self.leave_type.id,
+            "request_date_from": overlap_day.isoformat(),
+            "request_date_to": overlap_day.isoformat(),
+            "date_from": start_dt.strftime("%Y-%m-%d %H:%M:%S"),
+            "date_to": end_dt.strftime("%Y-%m-%d %H:%M:%S"),
+            "handover_acceptance_ids": [
+                Command.create(
+                    {
+                        "employee_id": self.handover_employee.id,
+                        "handover_work_content": "Coverage",
+                    }
+                ),
+            ],
+        }
+        fields_spec = {
+            "handover_acceptance_ids": {
+                "fields": {
+                    "employee_id": {"fields": {"display_name": {}}},
+                    "handover_work_content": {},
+                }
+            },
+            "unavailable_handover_employee_id_list": {},
+        }
+        access_mixin_type = type(self.env["hr.employee.access.mixin"])
+        with patch.object(
+            access_mixin_type,
+            "_hr_employee_access_extra_domain",
+            autospec=True,
+            return_value=Domain.FALSE,
+        ):
+            Leave.onchange(values, ["handover_acceptance_ids"], fields_spec)
 
     def test_asm_rsm_leave_auto_skips_work_handover(self):
         leave_day = date(2026, 7, 6)

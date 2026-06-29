@@ -28,10 +28,18 @@ def _lug_visible_employee_ids(env):
 def _lug_leave_employee_ids_for_records(recordset):
     if not recordset:
         return {}
+    ids = [rid for rid in recordset.ids if isinstance(rid, int)]
+    if not ids:
+        # Onchange/new records have no DB id yet; read employee from cache.
+        return {
+            rec.id: rec.employee_id.id
+            for rec in recordset
+            if rec.employee_id
+        }
     table = recordset._table
     recordset.env.cr.execute(
         f"SELECT id, employee_id FROM {table} WHERE id IN %s",
-        (tuple(recordset.ids),),
+        (tuple(ids),),
     )
     return {row[0]: row[1] for row in recordset.env.cr.fetchall()}
 

@@ -29,6 +29,7 @@
     "assets": {
         "web.assets_backend": [
             "time_off_work_handover/static/src/scss/handover_replacement.scss",
+            "time_off_work_handover/static/src/scss/handover_acceptance.scss",
             "time_off_work_handover/static/src/scss/hr_leave_list_handover.scss",
         ],
     },

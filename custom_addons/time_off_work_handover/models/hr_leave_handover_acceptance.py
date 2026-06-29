@@ -9,7 +9,7 @@ class HrLeaveHandoverAcceptance(models.Model):
     _description = "Work handover acceptance"
     _order = "sequence, id"
 
-    sequence = fields.Integer(string="No.", default=1)
+    sequence = fields.Integer(string="STT", default=1)
 
     leave_id = fields.Many2one(
         comodel_name="hr.leave",
@@ -20,12 +20,12 @@ class HrLeaveHandoverAcceptance(models.Model):
     )
     employee_id = fields.Many2one(
         comodel_name="hr.employee",
-        string="Handover recipient",
+        string="Chọn người bàn giao",
         required=True,
         ondelete="cascade",
         index=True,
     )
-    handover_work_content = fields.Text(string="Work content")
+    handover_work_content = fields.Text(string="Nội dung CV cần bàn giao")
     state = fields.Selection(
         selection=[
             ("pending", "Pending"),

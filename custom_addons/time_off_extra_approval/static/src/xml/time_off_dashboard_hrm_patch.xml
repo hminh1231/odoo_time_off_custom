@@ -1,6 +1,9 @@
 ﻿<?xml version="1.0" encoding="UTF-8" ?>
 <templates xml:space="preserve">
     <t t-inherit="hr_holidays.TimeOffDashboard" t-inherit-mode="extension">
+        <!-- Hide per-leave-type allocation balance cards (e.g. "11 days available"). -->
+        <xpath expr="//t[@t-foreach='state.holidays']" position="replace"/>
+
         <xpath expr="//div[hasclass('o_timeoff_card')]/div[strong[@class='o_timeoff_name']]" position="replace">
             <div class="d-flex w-100 h-100" style="flex-direction:row!important;">
                 <div class="d-flex flex-column justify-content-center align-items-center flex-grow-1">

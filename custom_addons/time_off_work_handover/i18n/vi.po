@@ -45,6 +45,29 @@ msgid "Work Handover To"
 msgstr "Bàn giao công việc cho"
 
 #. module: time_off_work_handover
+#: model_terms:ir.ui.view,arch_db:time_off_work_handover.hr_leave_view_form_handover_recipients
+msgid "Bàn giao công việc"
+msgstr "Bàn giao công việc"
+
+#. module: time_off_work_handover
+#: model:ir.model.fields,field_description:time_off_work_handover.field_hr_leave_handover_acceptance__sequence
+#: model_terms:ir.ui.view,arch_db:time_off_work_handover.hr_leave_view_form_handover_recipients
+msgid "STT"
+msgstr "STT"
+
+#. module: time_off_work_handover
+#: model:ir.model.fields,field_description:time_off_work_handover.field_hr_leave_handover_acceptance__employee_id
+#: model_terms:ir.ui.view,arch_db:time_off_work_handover.hr_leave_view_form_handover_recipients
+msgid "Chọn người bàn giao"
+msgstr "Chọn người bàn giao"
+
+#. module: time_off_work_handover
+#: model:ir.model.fields,field_description:time_off_work_handover.field_hr_leave_handover_acceptance__handover_work_content
+#: model_terms:ir.ui.view,arch_db:time_off_work_handover.hr_leave_view_form_handover_recipients
+msgid "Nội dung CV cần bàn giao"
+msgstr "Nội dung CV cần bàn giao"
+
+#. module: time_off_work_handover
 #: model_terms:ir.ui.view,arch_db:time_off_work_handover.hr_leave_view_form_dashboard_handover_actions
 #: model_terms:ir.ui.view,arch_db:time_off_work_handover.hr_leave_view_form_handover_recipients
 msgid "Work handover refusal details"

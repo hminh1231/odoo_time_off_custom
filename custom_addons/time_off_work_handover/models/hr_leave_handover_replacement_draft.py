@@ -1,5 +1,4 @@
 from odoo import _, api, fields, models
-from odoo.addons.hr.models.hr_employee import _ALLOW_READ_HR_EMPLOYEE
 from odoo.exceptions import UserError
 
 
@@ -45,7 +44,7 @@ class HrLeaveHandoverReplacementDraft(models.Model):
         "leave_id",
         "leave_id.handover_employee_ids",
         "leave_id.employee_id",
-        "leave_id.unavailable_handover_employee_ids",
+        "leave_id.unavailable_handover_employee_id_list",
         "replace_employee_id",
     )
     def _compute_allowed_new_employee_ids(self):
@@ -64,9 +63,7 @@ class HrLeaveHandoverReplacementDraft(models.Model):
                     ("user_id", "!=", False),
                 ]
             )
-            unavailable = leave.with_context(
-                _allow_read_hr_employee=_ALLOW_READ_HR_EMPLOYEE
-            ).unavailable_handover_employee_ids
+            unavailable = leave._unavailable_handover_employees()
             line.allowed_new_employee_ids = candidates - blocked - unavailable
 
     @api.onchange("replace_employee_id")

@@ -1564,6 +1564,28 @@ class HrLeaveResponsibleApproval(models.Model):
                 self._notify_responsible_current_turn_via_approval_bot(observer)
         self._notify_special_readonly_notifiers()
 
+    def _notify_multi_step_current_turn_via_approval_bot(self):
+        """Discuss DM from approval bot to current multi-step approver(s)."""
+        self.ensure_one()
+        if self.validation_type != "multi_step_6" or self.state != "confirm":
+            return
+        if not self._handover_ready_for_approval():
+            _logger.info(
+                "time_off_extra_approval: skip multi-step bot notify leave_id=%s reason=handover_not_ready",
+                self.id,
+            )
+            return
+        approvers = self._get_multi_step_approvers().filtered(lambda u: u and not u.share)
+        if not approvers:
+            _logger.info(
+                "time_off_extra_approval: skip multi-step bot notify leave_id=%s reason=no_approver step=%s",
+                self.id,
+                self.multi_step_current,
+            )
+            return
+        for approver in approvers:
+            self._notify_responsible_current_turn_via_approval_bot(approver)
+
     @api.model
     def _notify_responsible_current_turn_via_approval_bot(self, approver_user):
         """Send Discuss DM from approval bot to current responsible approver."""
@@ -1721,6 +1743,7 @@ class HrLeaveResponsibleApproval(models.Model):
         if self.multi_step_current < max_seq:
             self.write({"multi_step_current": self.multi_step_current + 1})
             self.sudo().activity_update()
+            self._notify_multi_step_current_turn_via_approval_bot()
             return True
 
         return self._action_validate(check_state=False)
@@ -2113,6 +2136,13 @@ class HrLeaveResponsibleApproval(models.Model):
             subset._ensure_responsible_approval_lines()
             subset._responsible_backfill_pending_since_if_missing()
             subset._split_group_notify_submission_for_records()
+        multi_step_subset = self.with_context(**{_SKIP_RESPONSIBLE_SUBMIT_NOTIFY_CTX: False}).filtered(
+            lambda l: l.validation_type == "multi_step_6"
+            and l.state == "confirm"
+            and l._handover_ready_for_approval()
+        )
+        if multi_step_subset:
+            multi_step_subset._notify_multi_step_current_turn_via_approval_bot()
         return res
 
     @api.model_create_multi

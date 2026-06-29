@@ -1,0 +1,33 @@
+// Work handover recipient table on Time Off form (label above, bordered grid).
+
+.o_handover_acceptance_group {
+    width: 100%;
+
+    .o_horizontal_separator {
+        font-weight: 600;
+    }
+
+    .o_field_one2many {
+        width: 100%;
+    }
+
+    .o_list_renderer .o_list_table,
+    .o_handover_acceptance_table .o_list_table {
+        border-collapse: collapse;
+
+        thead th,
+        tbody td,
+        tfoot td {
+            border: 1px solid #cbd5e0 !important;
+        }
+
+        thead th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+
+        tbody tr:hover td {
+            background-color: #fafbfc;
+        }
+    }
+}

@@ -76,7 +76,7 @@ _HANDOVER_ONCHANGE_TRIGGER_FIELDS = frozenset(
 _HANDOVER_ONCHANGE_SPEC_FIELDS = frozenset(
     {
         "handover_employee_ids",
-        "unavailable_handover_employee_ids",
+        "unavailable_handover_employee_id_list",
         "handover_refused_recipient_ids",
         "handover_replaceable_recipient_ids",
         "handover_acceptance_ids",
@@ -172,11 +172,10 @@ class HrLeaveHandover(models.Model):
         string="Work Handover To",
         help="Colleagues who receive work handover while this employee is on leave (max 5).",
     )
-    unavailable_handover_employee_ids = fields.Many2many(
-        comodel_name="hr.employee",
-        compute="_compute_unavailable_handover_employee_ids",
-        string="Unavailable handover recipients",
-        help="Employees already on time off during this leave period.",
+    unavailable_handover_employee_id_list = fields.Json(
+        compute="_compute_unavailable_handover_employee_id_list",
+        string="Unavailable handover recipient ids",
+        help="Employee ids already on time off during this leave period (for form domains).",
     )
     handover_acceptance_ids = fields.One2many(
         comodel_name="hr.leave.handover.acceptance",
@@ -865,11 +864,11 @@ class HrLeaveHandover(models.Model):
         "handover_acceptance_ids.refusal_reason",
     )
     def _compute_handover_refused_recipient_ids(self):
-        for leave in self:
+        for leave in self._with_handover_employee_read_context():
             refused = leave.handover_acceptance_ids.filtered(lambda l: l.state == "refused").mapped(
                 "employee_id"
             )
-            leave.handover_refused_recipient_ids = refused
+            leave.handover_refused_recipient_ids = leave._handover_employee_browse(refused.ids)
 
     @api.depends(
         "handover_acceptance_ids.state",
@@ -878,12 +877,14 @@ class HrLeaveHandover(models.Model):
         "handover_employee_ids",
     )
     def _compute_handover_replaceable_recipient_ids(self):
-        for leave in self:
+        for leave in self._with_handover_employee_read_context():
             if leave.handover_escalated:
                 replaceable = leave.handover_acceptance_ids.filtered(
                     lambda l: l.state in ("pending", "refused")
                 ).mapped("employee_id")
-                leave.handover_replaceable_recipient_ids = replaceable
+                leave.handover_replaceable_recipient_ids = leave._handover_employee_browse(
+                    replaceable.ids
+                )
             else:
                 leave.handover_replaceable_recipient_ids = leave.handover_refused_recipient_ids
 
@@ -984,20 +985,25 @@ class HrLeaveHandover(models.Model):
                 and bool(leave._get_handover_blocking_employees())
             )
 
+    def _unavailable_handover_employees(self):
+        """Colleagues on leave in this period (trusted read for handover logic)."""
+        self.ensure_one()
+        ids = self.unavailable_handover_employee_id_list or []
+        return self._handover_employee_browse(ids)
+
     @api.depends(
         "request_date_from",
         "request_date_to",
         "date_from",
         "date_to",
     )
-    def _compute_unavailable_handover_employee_ids(self):
-        Employee = self._with_handover_employee_read_context().env["hr.employee"]
+    def _compute_unavailable_handover_employee_id_list(self):
         for leave in self:
             start_dt, end_dt = leave._get_requested_interval()
             if not start_dt or not end_dt:
-                leave.unavailable_handover_employee_ids = Employee
+                leave.unavailable_handover_employee_id_list = []
                 continue
-            overlapping = self.env["hr.leave"].sudo().search(
+            overlapping = leave.env["hr.leave"].sudo().search(
                 [
                     ("id", "!=", leave.id or 0),
                     ("state", "in", ("confirm", "validate1", "validate")),
@@ -1005,10 +1011,9 @@ class HrLeaveHandover(models.Model):
                     ("date_to", ">", start_dt),
                 ]
             )
-            unavailable_ids = overlapping.mapped("employee_id").ids
-            leave.unavailable_handover_employee_ids = leave._handover_employee_browse(
-                unavailable_ids
-            )
+            leave.unavailable_handover_employee_id_list = overlapping.mapped(
+                "employee_id"
+            ).ids
 
     def _current_user_escalation_assigned_handover_recipient_line(self):
         """Acceptance row for current user if they were designated by handover_escalation_user_id (e.g. trưởng BP)."""
@@ -2005,6 +2010,8 @@ class HrLeaveHandover(models.Model):
                     self._get_split_group_primary_leave()._notify_split_group_approval_after_handover_if_needed()
                 else:
                     self._notify_responsible_current_turn()
+            elif self.validation_type == "multi_step_6" and self.state in ("confirm", "validate1"):
+                self._notify_multi_step_current_turn_via_approval_bot()
         return True
 
     def action_handover_apply_replacement(self):
@@ -2406,14 +2413,19 @@ class HrLeaveHandover(models.Model):
                         )
                     )
 
-    def _handover_write_after(self, vals, handover_lines_changed, submit_notify_target):
+    def _handover_write_after(self, vals, handover_lines_changed):
         if handover_lines_changed:
             self._sync_handover_employees_from_acceptance()
         if not self.env.context.get("leave_fast_create"):
             if vals.get("state") in ("confirm", "validate1"):
                 self._mark_handover_requested_at()
-            if vals.get("state") == "confirm" and submit_notify_target:
-                submit_notify_target._notify_handover_recipients_submit_via_bot()
+            if (
+                vals.get("state") == "confirm"
+                and not self.env.context.get(_SKIP_SUBMIT_BOT_NOTIFY_CTX)
+            ):
+                self.filtered(
+                    lambda l: l.state == "confirm" and not l._should_skip_work_handover()
+                ).with_context(**{_SKIP_SUBMIT_BOT_NOTIFY_CTX: False})._dispatch_handover_submit_bot_after_confirm()
             if vals.get("state") in ("validate", "refuse", "cancel"):
                 self._feedback_all_work_handover_activities()
             elif "handover_employee_ids" in vals:
@@ -2429,21 +2441,9 @@ class HrLeaveHandover(models.Model):
         handover_lines_changed = bool(
             vals.get("handover_acceptance_ids") is not None and not self.env.context.get("skip_handover_line_sync")
         )
-        submit_notify_target = self.env["hr.leave"]
-        if (
-            vals.get("state") == "confirm"
-            and not self.env.context.get("leave_fast_create")
-            and not self.env.context.get(_SKIP_SUBMIT_BOT_NOTIFY_CTX)
-        ):
-            submit_notify_target = self.filtered(
-                lambda l: l.state != "confirm"
-                and not l._should_skip_work_handover()
-                and l.handover_employee_ids
-                and not l.split_group_id
-            )
         self._handover_write_before(vals)
         res = super(HrLeaveHandover, self._with_timeoff_self_service_write_context()).write(vals)
-        self._handover_write_after(vals, handover_lines_changed, submit_notify_target)
+        self._handover_write_after(vals, handover_lines_changed)
         return res
 
     def _collect_handover_submit_notify_primaries(self):

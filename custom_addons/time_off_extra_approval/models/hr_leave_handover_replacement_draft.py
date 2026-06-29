@@ -44,7 +44,7 @@ class HrLeaveHandoverReplacementDraft(models.Model):
         "leave_id",
         "leave_id.handover_employee_ids",
         "leave_id.employee_id",
-        "leave_id.unavailable_handover_employee_ids",
+        "leave_id.unavailable_handover_employee_id_list",
         "replace_employee_id",
     )
     def _compute_allowed_new_employee_ids(self):
@@ -63,7 +63,7 @@ class HrLeaveHandoverReplacementDraft(models.Model):
                     ("user_id", "!=", False),
                 ]
             )
-            unavailable = leave.unavailable_handover_employee_ids
+            unavailable = leave._unavailable_handover_employees()
             line.allowed_new_employee_ids = candidates - blocked - unavailable
 
     @api.onchange("replace_employee_id")
