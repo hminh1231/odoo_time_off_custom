@@ -22,7 +22,7 @@
                 <attribute name="js_class">public_holiday_mien_list</attribute>
             </xpath>
             <xpath expr="//field[@name='name']" position="after">
-                <field name="holiday_scope" column_invisible="1"/>
+                <field name="holiday_scope" column_invisible="1" force_save="1" optional="hide"/>
             </xpath>
         </field>
     </record>

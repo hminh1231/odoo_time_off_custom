@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
 {
     "name": "Ngày lễ theo miền",
-    "version": "19.0.1.1.2",
+    "version": "19.0.1.1.4",
     "category": "Human Resources/Time Off",
     "summary": "Phân ngày lễ Văn Phòng và Cửa Hàng theo miền nhân viên",
     "description": """
         Cho phép cấu hình ngày lễ riêng cho Văn Phòng (miền VP) và Cửa Hàng
-        (miền Bắc, Nam, ĐTT). Nhân viên VP chỉ thấy ngày lễ VP.
+        (miền Bắc, Nam, ĐTT). Lịch nghỉ phép của mọi Miền hiển thị ngày lễ VP
+        (ngày lễ chung). Tab Cửa Hàng dùng cấu hình riêng, không trộn vào lịch NV.
 
         Nhân viên cửa hàng (miền Bắc, Nam, ĐTT) làm việc cả tuần (7 ngày):
-        ngày lễ vẫn hiển thị trên lịch nghỉ phép nhưng không trừ vào số ngày phép.
+        ngày lễ VP vẫn hiển thị tham khảo nhưng không trừ vào số ngày phép.
     """,
     "depends": [
         "hr_holidays",

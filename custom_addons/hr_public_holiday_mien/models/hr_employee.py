@@ -66,16 +66,13 @@ class HrEmployee(models.Model):
         ]
 
     def _filter_public_holidays_by_mien(self, holidays):
+        """Time-off calendar shows national VP holidays for every Miền.
+
+        CH-scoped rows are configured separately (Cửa Hàng tab) and are not
+        mixed into the employee calendar sidebar.
+        """
         self.ensure_one()
-        scope = self._public_holiday_scope_for_employee()
-        if not scope:
-            return holidays
-        scoped = holidays.filtered(lambda leave: leave.holiday_scope == scope)
-        if scope == HOLIDAY_SCOPE_CH and not scoped:
-            # Holidays are usually configured as VP; show them to CH staff until
-            # dedicated CH entries exist.
-            scoped = holidays.filtered(lambda leave: leave.holiday_scope == HOLIDAY_SCOPE_VP)
-        return scoped
+        return holidays.filtered(lambda leave: leave.holiday_scope == HOLIDAY_SCOPE_VP)
 
     def _get_public_holidays(self, date_start, date_end):
         """Return public holidays for sidebar / overlap rules, scoped by Miền.

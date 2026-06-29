@@ -98,6 +98,11 @@ export class PublicHolidayMienListController extends ListController {
         this._updateDefaultScopeContext();
         return super.createRecord({ group });
     }
+
+    async beforeExecuteActionButton(clickParams) {
+        this._updateDefaultScopeContext();
+        return super.beforeExecuteActionButton(clickParams);
+    }
 }
 
 export const publicHolidayMienListView = {
