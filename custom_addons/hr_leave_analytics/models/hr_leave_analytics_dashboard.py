@@ -237,7 +237,7 @@ class HrLeaveAnalyticsDashboard(models.AbstractModel):
                 return self.env["hr.leave"].with_context(active_test=False)
         except ImportError:
             pass
-        return self._analytics_leave_env()
+        return self.env["hr.leave"].sudo().with_context(active_test=False)
 
     @api.model
     def _analytics_employee_env(self):

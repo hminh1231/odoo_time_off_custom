@@ -44,12 +44,26 @@ def _lug_leave_employee_ids_for_records(recordset):
     return {row[0]: row[1] for row in recordset.env.cr.fetchall()}
 
 
+def _lug_leave_employee_web_spec_fields(emp_spec):
+    """Flatten relational web_read spec (``{'fields': {...}}``) to field keys."""
+    if not isinstance(emp_spec, dict):
+        return {}
+    inner = emp_spec.get("fields")
+    if isinstance(inner, dict):
+        return inner
+    return {key: value for key, value in emp_spec.items() if key != "fields"}
+
+
 def _lug_leave_employee_web_value(env, emp_id, emp_spec, public_model):
     public = public_model.browse(emp_id)
+    field_spec = _lug_leave_employee_web_spec_fields(emp_spec)
     try:
         public.check_access("read")
-        if emp_spec:
-            return public.web_read(emp_spec)[0]
+        if field_spec:
+            data = dict(public.web_read(field_spec)[0])
+            if "display_name" not in data:
+                data["display_name"] = data.get("name") or public.display_name
+            return data
         return {"id": emp_id, "display_name": public.display_name}
     except (MissingError, AccessError):
         pass
@@ -57,15 +71,11 @@ def _lug_leave_employee_web_value(env, emp_id, emp_spec, public_model):
     if not sudo_emp.exists():
         return False
     display = sudo_emp.display_name
-    if emp_spec:
-        inner = (
-            emp_spec.get("fields") if isinstance(emp_spec.get("fields"), dict) else {}
-        )
-        if inner:
-            data = {"id": emp_id, "display_name": display}
-            if "name" in inner:
-                data["name"] = sudo_emp.name
-            return data
+    if field_spec:
+        data = {"id": emp_id, "display_name": display}
+        if "name" in field_spec:
+            data["name"] = sudo_emp.name
+        return data
     return {"id": emp_id, "display_name": display}
 
 
