@@ -89,6 +89,17 @@
                         </group>
                     </group>
 
+                    <separator string="Báo cáo hoạt động nghỉ phép (LUG)"/>
+                    <group>
+                        <field name="lug_leave_full_activity_report"/>
+                        <div class="text-muted" colspan="2">
+                            Bật cho user có vai trò quản lý/giám sát duyệt phép: biểu tượng
+                            <b>hoạt động (đồng hồ)</b> sẽ hiện <b>tất cả</b> đơn nghỉ phép đang chờ
+                            mà user có mặt trong <b>bất kỳ bước duyệt</b> nào — kể cả khi chưa tới
+                            lượt của họ — để nắm số đơn đang chờ và nhắc người ở bước hiện tại.
+                        </div>
+                    </group>
+
                     <separator string="Quyền bổ sung riêng (LUG)"/>
                     <div class="text-muted mb-2">
                         Chỉ xem HR → ẩn menu Học hỏi, Báo cáo, Phòng ban.

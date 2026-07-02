@@ -66,6 +66,16 @@ class ResUsers(models.Model):
         string="Miền được sửa hồ sơ",
         help="Chỉ áp dụng khi 'Quyền sửa hồ sơ nhân viên' = 'Giới hạn theo Miền'.",
     )
+    lug_leave_full_activity_report = fields.Boolean(
+        string="Báo cáo toàn bộ hoạt động nghỉ phép",
+        default=False,
+        help=(
+            "Khi bật, biểu tượng hoạt động (đồng hồ) sẽ hiển thị TẤT CẢ đơn nghỉ phép "
+            "đang chờ mà user này có mặt trong bất kỳ bước duyệt nào — kể cả khi hiện tại "
+            "chưa tới lượt duyệt của họ. Giúp người quản lý nắm được có bao nhiêu đơn đang "
+            "chờ và đang ở bước nào để nhắc người phụ trách bước đó."
+        ),
+    )
 
     def lug_allowed_employee_edit_legacy_miens(self):
         """Return a set of allowed legacy_mien strings for employee profile edits."""
@@ -417,6 +427,8 @@ class ResUsers(models.Model):
             if enforced:
                 enforced._sync_lug_odoo_groups()
             self._lug_clear_menu_cache()
+        if "lug_leave_full_activity_report" in vals:
+            self.env["hr.leave"]._lug_resync_full_activities_for_users(self)
         return res
 
     @api.model_create_multi
