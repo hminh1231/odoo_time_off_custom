@@ -362,22 +362,23 @@ class HrLeaveResponsibleApproval(models.Model):
                 if not pending:
                     continue
                 mode = leave._responsible_approval_mode()
-                # Compute with sudo so the step count is identical for every viewer
-                # (a non-HR approver such as ASM must not read a truncated chain and
-                # see "Bước 1 / 1" instead of the real "Bước 1 / 3").
-                expected_users = leave.sudo()._get_responsible_approval_users()
-                total = max(len(leave.sudo().responsible_approval_line_ids), len(expected_users))
                 if mode == "sequential":
                     wave = leave._responsible_pending_current_wave()
                     if not wave:
                         continue
+                    lines = leave.sudo().responsible_approval_line_ids
                     step_num = wave[0].sequence
-                    if expected_users and wave[0].user_id:
-                        try:
-                            step_num = expected_users.ids.index(wave[0].user_id.id) + 1
-                        except ValueError:
-                            pass
-                    total = len(expected_users) or total
+                    if lines:
+                        # Submitted requests: show the persisted approval log (stable for every viewer).
+                        total = len(lines)
+                    else:
+                        expected_users = leave.sudo()._get_responsible_approval_users()
+                        total = len(expected_users)
+                        if expected_users and wave[0].user_id:
+                            try:
+                                step_num = expected_users.ids.index(wave[0].user_id.id) + 1
+                            except ValueError:
+                                pass
                     names = ", ".join(n for n in wave.mapped("user_id.name") if n)
                     leave.approval_current_step_label = _("Bước %(step)d / %(total)d · %(name)s") % {
                         "step": step_num,
@@ -1007,7 +1008,7 @@ class HrLeaveResponsibleApproval(models.Model):
                     seen.add(uid)
                 if (mgr.job_id.name or "").strip().casefold() in stop_positions:
                     break
-            cur_id = mgr.parent_id.id
+            cur_id = self._org_chart_sql_parent_id(cur_id)
         return self.env["res.users"].browse(user_ids)
 
     def _get_responsible_approval_users(self):
@@ -1230,7 +1231,7 @@ class HrLeaveResponsibleApproval(models.Model):
             if user and user.id in selected_ids:
                 ordered_ids.append(user.id)
                 selected_ids.remove(user.id)
-            current_id = manager.parent_id.id
+            current_id = self._org_chart_sql_parent_id(current_id)
         remaining = users.filtered(lambda user: user.id in selected_ids)
         remaining = self._sort_responsible_users_by_job_title(remaining)
         return self.env["res.users"].browse(ordered_ids + remaining.ids)
