@@ -8,6 +8,13 @@ LUG_APP_ODOO_GROUPS = {
     "dashboards": {
         "view": ["spreadsheet_dashboard.group_dashboard_manager"],
     },
+    "daily_work": {
+        "view": ["daily_work_task.group_daily_work_user"],
+        "create": ["daily_work_task.group_daily_work_assigner"],
+        "edit": ["daily_work_task.group_daily_work_assigner"],
+        "delete": ["daily_work_task.group_daily_work_manager"],
+        "admin": ["daily_work_task.group_daily_work_manager"],
+    },
     "project": {
         "view": ["project.group_project_user"],
         "edit": ["project.group_project_user"],

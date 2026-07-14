@@ -2,7 +2,7 @@
 set -eu
 
 DB_NAME="${DB_NAME:-odoo_db}"
-MODULES="${MODULES:-hr_employee_multi_responsible,hr_employee_hrm_detail,hr_leave_mien_tenure_unpaid,time_off_extra_approval,time_off_responsible_approval,hr_job_title_vn,hr_employee_cccd_scan,hr_employee_self_only,business_discuss_bots}"
+MODULES="${MODULES:-hr_employee_multi_responsible,hr_employee_hrm_detail,hr_leave_mien_tenure_unpaid,time_off_extra_approval,time_off_responsible_approval,hr_job_title_vn,hr_employee_cccd_scan,hr_employee_self_only,business_discuss_bots,lug_permission}"
 
 echo "Updating modules on database: ${DB_NAME}"
 echo "IMPORTANT: hr_employee_hrm_detail must upgrade after every pull (visibility_policy schema)."

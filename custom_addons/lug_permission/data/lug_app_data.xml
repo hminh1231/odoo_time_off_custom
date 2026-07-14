@@ -128,6 +128,14 @@
         <field name="menu_xmlid">spreadsheet_dashboard.spreadsheet_dashboard_menu_root</field>
     </record>
 
+    <record id="lug_app_daily_work" model="lug.app">
+        <field name="name">Công việc hàng ngày</field>
+        <field name="code">daily_work</field>
+        <field name="sequence">6</field>
+        <field name="module_name">daily_work_task</field>
+        <field name="menu_xmlid">daily_work_task.menu_daily_work_root</field>
+    </record>
+
     <record id="lug_app_project" model="lug.app">
         <field name="name">Dự án</field>
         <field name="code">project</field>
