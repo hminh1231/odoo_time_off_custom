@@ -33,6 +33,8 @@ mail_discuss_mobile_links
 user_menu_reset_password
 vn_language_switch
 vn_translations_custom
+lug_permission
+lug_app_center
 "
 
 get_manifest_version() {
