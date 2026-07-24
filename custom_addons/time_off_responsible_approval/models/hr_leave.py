@@ -941,10 +941,13 @@ class HrLeaveResponsibleApproval(models.Model):
         dept = self._get_leave_employee_department_for_approval()
         if not dept:
             return self.env["res.users"]
-        mgr = dept.manager_id.sudo()
-        if not mgr or not mgr.user_id or mgr.user_id.share:
+        # Resolve under sudo from the department record so visibility rules on
+        # hr.employee do not block reading the configured department manager.
+        mgr = dept.sudo().manager_id
+        user = mgr.sudo().user_id
+        if not mgr or not user or user.share:
             return self.env["res.users"]
-        return mgr.user_id
+        return user
 
     def _get_leave_employee_department_for_approval(self):
         """Department the request belongs to (same source as computed ``department_id`` on leave)."""
