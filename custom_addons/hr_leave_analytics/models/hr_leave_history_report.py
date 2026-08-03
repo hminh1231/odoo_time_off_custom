@@ -100,7 +100,7 @@ class HrLeaveHistoryReport(models.Model):
                     l.employee_id AS employee_id,
                     COALESCE(e.name, '') AS employee_name,
                     COALESCE(NULLIF(TRIM(e.id_hrm), ''), '') AS employee_id_hrm,
-                    COALESCE(v.department_id, e.department_id) AS department_id,
+                    COALESCE(v.department_id, NULL) AS department_id,
                     COALESCE(l.employee_leave_mien, e.mien) AS employee_mien,
                     COALESCE(e.employee_visibility, 'all') AS workforce_block,
                     sc.store_id AS store_id,
