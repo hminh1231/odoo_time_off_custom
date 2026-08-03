@@ -507,15 +507,17 @@ class HrLeaveHandover(models.Model):
 
     def _should_skip_work_handover(self):
         self.ensure_one()
+        if self.skip_work_handover:
+            return True
+        if self.handover_employee_ids:
+            return False
         employee = self._get_effective_employee_for_skip_handover()
-        return bool(
-            self.skip_work_handover
-            or self._is_work_handover_exempt_job_title(employee)
-        )
+        return self._is_work_handover_exempt_job_title(employee)
 
     def _apply_job_title_work_handover_exemption(self):
         exempt_leaves = self.filtered(
             lambda leave: not leave.skip_work_handover
+            and not leave.handover_employee_ids
             and leave._is_work_handover_exempt_job_title(
                 leave._get_effective_employee_for_skip_handover()
             )

@@ -434,3 +434,63 @@ class TestHandoverEmployeeRead(TransactionCase):
             self.assertFalse(leave.skip_work_handover)
             self.assertFalse(leave._should_skip_work_handover())
             self.assertFalse(leave.can_skip_work_handover)
+
+    def test_exempt_employee_can_override_skip_with_handover_recipients(self):
+        leave_day = date(2026, 7, 10)
+        start_dt = datetime.combine(leave_day, time(7, 0))
+        end_dt = datetime.combine(leave_day, time(19, 0))
+        employee = self.env["hr.employee"].create(
+            {
+                "name": "Exempt Override",
+                "company_id": self.user.company_id.id,
+                "mien": "Bắc",
+                "job_title": "nhân viên ch",
+            }
+        )
+        recipient = self.env["hr.employee"].create(
+            {
+                "name": "Handover Recipient",
+                "company_id": self.user.company_id.id,
+            }
+        )
+        leave = self.env["hr.leave"].create(
+            {
+                "name": "Exempt override with handover",
+                "employee_id": employee.id,
+                "holiday_status_id": self.leave_type.id,
+                "request_date_from": leave_day,
+                "request_date_to": leave_day,
+                "date_from": start_dt,
+                "date_to": end_dt,
+                "skip_work_handover": False,
+                "handover_employee_ids": [Command.set([recipient.id])],
+            }
+        )
+        self.assertFalse(leave.skip_work_handover)
+        self.assertFalse(leave._should_skip_work_handover())
+
+    def test_exempt_employee_auto_skip_without_handover_recipients(self):
+        leave_day = date(2026, 7, 11)
+        start_dt = datetime.combine(leave_day, time(7, 0))
+        end_dt = datetime.combine(leave_day, time(19, 0))
+        employee = self.env["hr.employee"].create(
+            {
+                "name": "Exempt Auto Skip",
+                "company_id": self.user.company_id.id,
+                "mien": "Bắc",
+                "job_title": "nhân viên ch",
+            }
+        )
+        leave = self.env["hr.leave"].create(
+            {
+                "name": "Exempt auto skip",
+                "employee_id": employee.id,
+                "holiday_status_id": self.leave_type.id,
+                "request_date_from": leave_day,
+                "request_date_to": leave_day,
+                "date_from": start_dt,
+                "date_to": end_dt,
+            }
+        )
+        self.assertTrue(leave.skip_work_handover)
+        self.assertTrue(leave._should_skip_work_handover())
