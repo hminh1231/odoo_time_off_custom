@@ -65,10 +65,11 @@ class HrEmployee(models.Model):
                 bypass_access=True,
                 **kwargs,
             )
-        # sudo() must not re-apply the interactive user's visibility domain:
-        # approval/org-chart code resolves department managers and chain
-        # superiors via sudo(), and Model.fetch() uses _search internally.
-        if self.env.su:
+        # sudo() / ORM bypass_access (e.g. domain operator any!) must not
+        # re-apply the interactive user's visibility domain, and must keep
+        # Domain objects intact — list(domain) serializes internal any! and
+        # Domain() rejects them on re-parse.
+        if self.env.su or bypass_access:
             return super()._search(
                 domain,
                 offset=offset,
@@ -78,21 +79,19 @@ class HrEmployee(models.Model):
                 bypass_access=True,
                 **kwargs,
             )
-        if self.browse().has_access("read") or bypass_access:
+        if self.browse().has_access("read"):
             mixin = self.env["hr.employee.access.mixin"]
             extra = mixin._hr_employee_access_extra_domain(model_name=self._name)
             domain = mixin._hr_employee_apply_access_domain(
                 domain, model_name=self._name
             )
-            if domain is not None:
-                domain = list(domain)
             return super()._search(
                 domain,
                 offset=offset,
                 limit=limit,
                 order=order,
                 active_test=active_test,
-                bypass_access=bypass_access or extra is not None,
+                bypass_access=extra is not None,
                 **kwargs,
             )
         # Mirror core HR redirect; bridge context skips mixin on public._search.

@@ -149,10 +149,9 @@ class HrEmployeePublic(models.Model):
         ):
             mixin = self.env["hr.employee.access.mixin"]
             extra = mixin._hr_employee_access_extra_domain(model_name=self._name)
-            domain = list(
-                mixin._hr_employee_apply_access_domain(
-                    domain, model_name=self._name
-                )
+            # Keep Domain objects — list() breaks internal operators (any!).
+            domain = mixin._hr_employee_apply_access_domain(
+                domain, model_name=self._name
             )
         else:
             extra = None
