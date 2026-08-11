@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     "name": "LUG Permission Center",
-    "version": "19.0.1.0.33",
+    "version": "19.0.1.0.37",
     "category": "Administration",
     "summary": "Centralized application permission management for Odoo",
     "description": """
@@ -40,6 +40,7 @@ Independent permission layer: User → Group → Application → Permission → 
     "assets": {
         "web.assets_backend": [
             "lug_permission/static/src/lug_systray_patch.js",
+            "lug_permission/static/src/users_export_all_patch.js",
         ],
     },
     "license": "LGPL-3",

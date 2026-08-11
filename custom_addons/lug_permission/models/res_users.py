@@ -9,6 +9,7 @@ from .lug_constants import (
     LUG_DISCUSS_ADMIN_MENU_PERMISSIONS,
     LUG_DISCUSS_EMPLOYEE_HIDDEN_MENU_XMLIDS,
     LUG_HR_VIEW_ONLY_HIDDEN_MENU_XMLIDS,
+    LUG_PERMISSION_FIELDS,
     LUG_SCOPE_TO_VISIBILITY,
     ROLE_TO_LUG_SCOPE,
     VISIBILITY_TO_LUG_SCOPE,
@@ -585,3 +586,158 @@ class ResUsers(models.Model):
         if legacy:
             legacy.unlink()
             self.env.registry.clear_cache()
+
+    @api.model
+    def _migration_export_field_paths(self):
+        """Import-compatible field paths for Users 'Export All' (machine migration)."""
+        perm_fields = [name for name, _code in LUG_PERMISSION_FIELDS]
+        return [
+            # Core
+            "name",
+            "login",
+            "email",
+            "phone",
+            "active",
+            "lang",
+            "tz",
+            "notification_type",
+            "signature",
+            "role",
+            # Company & groups
+            "company_id/id",
+            "company_ids/id",
+            "group_ids/id",
+            # Legacy role / app access (hr_employee_hrm_detail)
+            "user_role",
+            "visibility_policy",
+            # hr.store.code is a SQL view (_auto=False) → cannot export /id
+            "assigned_ma_bo_phan_ids/code",
+            "app_access_hr",
+            "app_access_leave",
+            "app_access_attendance",
+            "app_access_expense",
+            "app_access_crm",
+            "app_access_pos",
+            "app_access_accounting",
+            # LUG Permission
+            "lug_group_ids/id",
+            "lug_data_scope",
+            "lug_time_off_role",
+            "lug_leave_mien_scope_group_ids/id",
+            "lug_hr_employee_edit_policy",
+            "lug_hr_employee_edit_mien_zone_ids/id",
+            "lug_leave_full_activity_report",
+            # LUG extra permissions (one2many)
+            "lug_user_permission_ids/id",
+            "lug_user_permission_ids/app_id/id",
+            *[f"lug_user_permission_ids/{name}" for name in perm_fields],
+        ]
+
+    @api.model
+    def _migration_safe_export_path(self, path):
+        """Rewrite .../id to a name field when the related model is not an ordinary table."""
+        parts = path.split("/")
+        if len(parts) < 2 or parts[-1] != "id":
+            return path
+
+        # Traverse relational fields until the model that would receive /id
+        model = self
+        for part in parts[:-1]:
+            field = model._fields.get(part)
+            if not field or not getattr(field, "comodel_name", None):
+                return path
+            model = self.env[field.comodel_name]
+
+        if model._is_an_ordinary_table():
+            return path
+
+        # Prefer rec_name (e.g. hr.store.code → code) for import matching
+        rec_name = model._rec_name_fallback()
+        if rec_name and rec_name in model._fields:
+            return "/".join(parts[:-1] + [rec_name])
+        return "/".join(parts[:-1])
+
+    @api.model
+    def get_migration_export_fields(self):
+        """Return export field descriptors for full Users export (import-compatible).
+
+        Used by the patched 'Export All' cog menu on res.users so migration
+        files include more than the few list-view columns.
+        """
+        paths = [
+            self._migration_safe_export_path(path)
+            for path in self._migration_export_field_paths()
+        ]
+        # de-dupe while preserving order
+        seen = set()
+        paths = [p for p in paths if not (p in seen or seen.add(p))]
+
+        root_names = sorted(
+            {
+                path.split("/", 1)[0]
+                for path in paths
+                if path and path.split("/", 1)[0] in self._fields
+            }
+        )
+        fields_info = self.fields_get(
+            root_names,
+            attributes=["type", "string", "store"],
+        )
+        # Nested labels for lug.user.permission lines
+        line_info = {}
+        if "lug.user.permission" in self.env:
+            line_names = ["app_id"] + [name for name, _code in LUG_PERMISSION_FIELDS]
+            line_info = self.env["lug.user.permission"].fields_get(
+                line_names,
+                attributes=["type", "string", "store"],
+            )
+
+        result = []
+        for path in paths:
+            parts = path.split("/")
+            root = parts[0]
+            if root not in fields_info:
+                continue
+            root_meta = fields_info[root]
+            if len(parts) == 1:
+                label = root_meta["string"]
+                ftype = root_meta["type"]
+                store = root_meta.get("store", True)
+            elif parts[1] == "id" and len(parts) == 2:
+                label = f"{root_meta['string']} / External ID"
+                ftype = root_meta["type"]
+                store = root_meta.get("store", True)
+            elif root == "assigned_ma_bo_phan_ids" and len(parts) == 2:
+                label = f"{root_meta['string']} / {parts[1]}"
+                ftype = root_meta["type"]
+                store = root_meta.get("store", True)
+            elif root == "lug_user_permission_ids":
+                # lug_user_permission_ids/id | .../app_id/id | .../perm_*
+                if parts[1] == "id" and len(parts) == 2:
+                    label = f"{root_meta['string']} / External ID"
+                    ftype = "one2many"
+                    store = True
+                elif parts[1] == "app_id":
+                    app_meta = line_info.get("app_id", {})
+                    label = (
+                        f"{root_meta['string']} / {app_meta.get('string', 'App')} / External ID"
+                    )
+                    ftype = app_meta.get("type", "many2one")
+                    store = app_meta.get("store", True)
+                else:
+                    sub = line_info.get(parts[1], {})
+                    label = f"{root_meta['string']} / {sub.get('string', parts[1])}"
+                    ftype = sub.get("type", "boolean")
+                    store = sub.get("store", True)
+            else:
+                continue
+
+            result.append(
+                {
+                    "name": path,
+                    "label": label,
+                    "type": ftype,
+                    "store": bool(store),
+                }
+            )
+        return result
