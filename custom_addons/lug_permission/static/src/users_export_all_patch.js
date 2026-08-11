@@ -55,7 +55,10 @@ patch(ExportAll.prototype, {
                 data: {
                     data: JSON.stringify({
                         import_compat: true,
-                        context,
+                        context: {
+                            ...context,
+                            lug_migration_export: true,
+                        },
                         domain,
                         fields: exportedFields,
                         groupby,

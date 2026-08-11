@@ -741,3 +741,42 @@ class ResUsers(models.Model):
                 }
             )
         return result
+
+    def export_data(self, fields_to_export):
+        """Fill empty required-ish values so import on another DB does not fail.
+
+        Odoo import treats an empty cell as an explicit empty value (not "use
+        default"). Empty ``tz`` then fails because related resources require it.
+        """
+        result = super().export_data(fields_to_export)
+        if not self.env.context.get("lug_migration_export"):
+            return result
+
+        datas = result.get("datas") or []
+        if not datas:
+            return result
+
+        defaults = {
+            "tz": self.env.user.tz or self.env.context.get("tz") or "Asia/Ho_Chi_Minh",
+            "lang": self.env.user.lang or "vi_VN",
+            "notification_type": "email",
+        }
+        identity_indexes = [
+            fields_to_export.index(name)
+            for name in ("login", "id", "name")
+            if name in fields_to_export
+        ]
+        for field_name, default in defaults.items():
+            if field_name not in fields_to_export:
+                continue
+            idx = fields_to_export.index(field_name)
+            for row in datas:
+                # Skip one2many continuation rows (parent columns intentionally blank)
+                if identity_indexes and not any(
+                    idx_id < len(row) and row[idx_id] for idx_id in identity_indexes
+                ):
+                    continue
+                if idx < len(row) and not row[idx]:
+                    row[idx] = default
+        return result
+
