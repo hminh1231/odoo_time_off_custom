@@ -14,7 +14,7 @@
                 <field name="can_manage_handover_replacement" invisible="1"/>
                 <button
                     name="action_handover_accept"
-                    string="Accept work handover"
+                    string="Chấp nhận bàn giao"
                     type="object"
                     class="btn-primary"
                     data-hotkey="y"
@@ -22,7 +22,7 @@
                 />
                 <button
                     name="action_handover_refuse"
-                    string="Refuse work handover"
+                    string="Từ chối bàn giao"
                     type="object"
                     class="btn-secondary"
                     data-hotkey="n"
@@ -255,7 +255,7 @@
                     </p>
                     <button
                         name="action_handover_accept"
-                        string="Accept work handover"
+                        string="Chấp nhận bàn giao"
                         type="object"
                         class="btn btn-primary me-2"
                         data-hotkey="y"
@@ -263,7 +263,7 @@
                     />
                     <button
                         name="action_handover_refuse"
-                        string="Refuse work handover"
+                        string="Từ chối bàn giao"
                         type="object"
                         class="btn btn-secondary"
                         data-hotkey="n"

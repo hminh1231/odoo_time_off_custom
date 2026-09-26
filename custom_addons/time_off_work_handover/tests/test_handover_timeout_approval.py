@@ -157,8 +157,8 @@ class TestHandoverTimeoutApproval(TransactionCase):
         self.assertEqual(line.refusal_reason, "Busy with project deadline")
         self.assertFalse(leave.with_user(self.handover_user).can_respond_handover)
 
-    def test_handover_escalation_owner_can_approve(self):
-        """Escalation owner has approval rights and can approve after handover timeout."""
+    def test_handover_escalation_owner_can_accept_handover(self):
+        """Escalation owner has can_respond_handover and can accept pending handover, but does not have can_responsible_approve."""
         leave = self._create_leave_with_handover(state="confirm")
         past_time = fields.Datetime.now() - timedelta(hours=3)
         leave.sudo().write({
@@ -168,17 +168,24 @@ class TestHandoverTimeoutApproval(TransactionCase):
         })
 
         leave_as_esc = leave.with_user(self.escalation_user)
-        self.assertTrue(leave_as_esc.can_approve or leave_as_esc.can_responsible_approve)
-        self.assertIn(self.escalation_user, leave.approval_actionable_user_ids)
+        # Escalation owner can respond to handover (Chấp nhận bàn giao / Từ chối bàn giao)
+        self.assertTrue(leave_as_esc.can_respond_handover)
+        # Escalation owner does NOT have leave approval buttons (Phê duyệt / Từ chối)
+        self.assertFalse(leave_as_esc.can_approve)
+        if hasattr(leave_as_esc, "can_responsible_approve"):
+            self.assertFalse(leave_as_esc.can_responsible_approve)
 
-        if leave_as_esc.can_approve:
-            leave_as_esc.action_approve()
-        else:
-            leave_as_esc.action_responsible_approve()
-        self.assertEqual(leave.state, "validate")
+        # Escalation owner accepts handover
+        leave_as_esc.action_handover_accept()
+        # Handover is now accepted
+        line = leave.handover_acceptance_ids.filtered(lambda l: l.employee_id == self.handover_employee)
+        self.assertEqual(line.state, "accepted")
+        self.assertFalse(leave.with_user(self.escalation_user).can_respond_handover)
+        # After acceptance, leave is ready for approval by the actual approver
+        self.assertTrue(leave._handover_ready_for_approval())
 
-    def test_handover_escalation_owner_can_refuse(self):
-        """Escalation owner can refuse leave request after handover timeout."""
+    def test_handover_escalation_owner_can_refuse_handover(self):
+        """Escalation owner can refuse handover after timeout."""
         leave = self._create_leave_with_handover(state="confirm")
         past_time = fields.Datetime.now() - timedelta(hours=3)
         leave.sudo().write({
@@ -188,11 +195,12 @@ class TestHandoverTimeoutApproval(TransactionCase):
         })
 
         leave_as_esc = leave.with_user(self.escalation_user)
-        self.assertTrue(leave_as_esc.can_refuse or leave_as_esc.can_responsible_approve)
+        self.assertTrue(leave_as_esc.can_respond_handover)
 
-        if leave_as_esc.can_refuse:
-            leave_as_esc.action_refuse(reason="Handover could not be resolved")
-        else:
-            leave_as_esc.action_responsible_refuse(reason="Handover could not be resolved")
-        self.assertEqual(leave.state, "refuse")
+        leave_as_esc.action_handover_refuse_with_reason("Escalation owner refused handover")
+        line = leave.handover_acceptance_ids.filtered(lambda l: l.employee_id == self.handover_employee)
+        self.assertEqual(line.state, "refused")
+        self.assertEqual(line.refusal_reason, "Escalation owner refused handover")
+        self.assertFalse(leave.with_user(self.escalation_user).can_respond_handover)
+
 
