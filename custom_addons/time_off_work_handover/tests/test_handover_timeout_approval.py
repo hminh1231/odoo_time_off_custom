@@ -26,6 +26,11 @@ class TestHandoverTimeoutApproval(TransactionCase):
             login="handover-recipient-user",
             groups="base.group_user",
         )
+        cls.escalation_user = new_test_user(
+            cls.env,
+            login="handover-escalation-owner",
+            groups="base.group_user",
+        )
         cls.requester_employee = cls.env["hr.employee"].create(
             {
                 "name": "Requester Employee",
@@ -151,3 +156,43 @@ class TestHandoverTimeoutApproval(TransactionCase):
         self.assertEqual(line.state, "refused")
         self.assertEqual(line.refusal_reason, "Busy with project deadline")
         self.assertFalse(leave.with_user(self.handover_user).can_respond_handover)
+
+    def test_handover_escalation_owner_can_approve(self):
+        """Escalation owner has approval rights and can approve after handover timeout."""
+        leave = self._create_leave_with_handover(state="confirm")
+        past_time = fields.Datetime.now() - timedelta(hours=3)
+        leave.sudo().write({
+            "handover_requested_at": past_time,
+            "handover_escalated": True,
+            "handover_escalation_user_id": self.escalation_user.id,
+        })
+
+        leave_as_esc = leave.with_user(self.escalation_user)
+        self.assertTrue(leave_as_esc.can_approve or leave_as_esc.can_responsible_approve)
+        self.assertIn(self.escalation_user, leave.approval_actionable_user_ids)
+
+        if leave_as_esc.can_approve:
+            leave_as_esc.action_approve()
+        else:
+            leave_as_esc.action_responsible_approve()
+        self.assertEqual(leave.state, "validate")
+
+    def test_handover_escalation_owner_can_refuse(self):
+        """Escalation owner can refuse leave request after handover timeout."""
+        leave = self._create_leave_with_handover(state="confirm")
+        past_time = fields.Datetime.now() - timedelta(hours=3)
+        leave.sudo().write({
+            "handover_requested_at": past_time,
+            "handover_escalated": True,
+            "handover_escalation_user_id": self.escalation_user.id,
+        })
+
+        leave_as_esc = leave.with_user(self.escalation_user)
+        self.assertTrue(leave_as_esc.can_refuse or leave_as_esc.can_responsible_approve)
+
+        if leave_as_esc.can_refuse:
+            leave_as_esc.action_refuse(reason="Handover could not be resolved")
+        else:
+            leave_as_esc.action_responsible_refuse(reason="Handover could not be resolved")
+        self.assertEqual(leave.state, "refuse")
+
