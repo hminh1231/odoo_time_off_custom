@@ -364,7 +364,7 @@ class HrLeaveHandover(models.Model):
         self.ensure_one()
         if self.handover_escalated:
             return
-        if not self._handover_past_due_without_any_acceptance():
+        if not self._handover_past_due_for_approval():
             return
         # Sequential: jump to max title on chain when present; direct: max title only.
         # Further sequential steps are handled by _apply_handover_timeout_escalation_to_department_manager().
@@ -374,6 +374,13 @@ class HrLeaveHandover(models.Model):
             dept_head_user = self._get_handover_sequential_escalation_target_user(self.employee_id.user_id)
         first_hours = self._handover_escalation_after_hours()
         if not dept_head_user:
+            self.sudo().write(
+                {
+                    "handover_escalated": True,
+                    "handover_escalated_at": fields.Datetime.now(),
+                    "handover_escalation_level": 1,
+                }
+            )
             self.message_post(
                 body=_(
                     "Handover timeout reached (%(hours)s h), but no manager user was found in org chart."
@@ -667,20 +674,26 @@ class HrLeaveHandover(models.Model):
                 or escalation_owner_can
             )
 
+    @api.depends_context("uid")
     @api.depends(
+        "state",
+        "handover_employee_ids",
         "handover_acceptance_ids.state",
         "handover_acceptance_ids.employee_id",
     )
     def _compute_can_respond_handover(self):
         for leave in self:
             leave.can_respond_handover = False
-            if leave.state != "confirm":
+            if leave.state not in ("confirm", "validate1"):
                 continue
-            emp = leave.env.user.employee_id
-            if not emp or emp not in leave.handover_employee_ids:
+            user_employees = leave.env.user.sudo().employee_ids | leave.env.user.sudo().employee_id
+            matching_emps = user_employees & leave.handover_employee_ids
+            if not matching_emps:
                 continue
-            line = leave.handover_acceptance_ids.filtered(lambda l: l.employee_id == emp)[:1]
-            leave.can_respond_handover = bool(line and line.state == "pending")
+            line = leave.handover_acceptance_ids.sudo().filtered(
+                lambda l: l.employee_id in matching_emps and l.state == "pending"
+            )[:1]
+            leave.can_respond_handover = bool(line)
 
     @api.depends(
         "state",
@@ -712,22 +725,31 @@ class HrLeaveHandover(models.Model):
             ):
                 leave.skip_work_handover = False
 
+    @api.depends_context("uid")
+    @api.depends(
+        "state",
+        "employee_id",
+        "employee_id.name",
+        "handover_employee_ids",
+        "handover_acceptance_ids.state",
+        "handover_acceptance_ids.employee_id",
+    )
     def _compute_handover_assigned_recipient_banner(self):
         """Handover colleague (not the applicant): who picked them + applicant name."""
         for leave in self:
             leave.handover_assigned_recipient_banner = False
             if leave.state not in ("confirm", "validate1"):
                 continue
-            viewer_emp = leave.env.user.sudo().employee_id
-            if (
-                not viewer_emp
-                or not leave.employee_id
-                or viewer_emp == leave.employee_id
-                or viewer_emp not in leave.handover_employee_ids
-            ):
+            viewer_emps = leave.env.user.sudo().employee_ids | leave.env.user.sudo().employee_id
+            matching_emps = viewer_emps & leave.handover_employee_ids
+            if not matching_emps:
                 continue
-            line = leave.handover_acceptance_ids.filtered(lambda l: l.employee_id == viewer_emp)[:1]
-            if not line or line.state != "pending":
+            if leave.employee_id and leave.employee_id in matching_emps and len(matching_emps) == 1:
+                continue
+            line = leave.handover_acceptance_ids.sudo().filtered(
+                lambda l: l.employee_id in matching_emps and l.state == "pending"
+            )[:1]
+            if not line:
                 continue
             who = leave._handover_who_label_for_line(line)
             applicant = leave.employee_id.name if leave.employee_id else ""
@@ -920,6 +942,8 @@ class HrLeaveHandover(models.Model):
         "handover_employee_ids",
         "handover_acceptance_ids.state",
         "handover_acceptance_ids.employee_id",
+        "handover_escalated",
+        "handover_requested_at",
     )
     def _compute_handover_waiting_label(self):
         for leave in self:
@@ -927,10 +951,12 @@ class HrLeaveHandover(models.Model):
             if leave.state not in ("confirm", "validate1") or not leave.handover_employee_ids:
                 continue
             waiting = leave._get_handover_blocking_employees()
-            if waiting:
-                leave.handover_waiting_label = _("Đang chờ bàn giao: %s") % ", ".join(waiting.mapped("name"))
-            else:
+            if not waiting:
                 leave.handover_waiting_label = _("Tất cả người nhận bàn giao đã chấp nhận")
+            elif leave._handover_past_due_for_approval():
+                leave.handover_waiting_label = _("Quá hạn phản hồi bàn giao công việc (%s) — Cho phép duyệt đơn") % ", ".join(waiting.mapped("name"))
+            else:
+                leave.handover_waiting_label = _("Đang chờ bàn giao: %s") % ", ".join(waiting.mapped("name"))
 
     @api.depends("handover_employee_ids", "handover_employee_ids.name")
     def _compute_handover_recipient_display(self):
@@ -979,12 +1005,14 @@ class HrLeaveHandover(models.Model):
         "validation_type",
         "responsible_approval_line_ids.state",
         "multi_step_current",
+        "handover_escalated",
+        "handover_requested_at",
     )
     def _compute_handover_status_waiting(self):
         for leave in self:
             leave.handover_status_waiting = (
                 leave.state in ("confirm", "validate1")
-                and bool(leave._get_handover_blocking_employees())
+                and not leave._handover_ready_for_approval()
             )
 
     def _unavailable_handover_employees(self):
@@ -1034,16 +1062,19 @@ class HrLeaveHandover(models.Model):
     def _current_user_is_pending_handover_recipient(self):
         """True if the logged-in user is a handover colleague who still must accept or refuse."""
         self.ensure_one()
-        emp = self.env.user.sudo().employee_id
-        if not emp or emp not in self.handover_employee_ids:
+        user_employees = self.env.user.sudo().employee_ids | self.env.user.sudo().employee_id
+        matching_emps = user_employees & self.handover_employee_ids
+        if not matching_emps:
             return False
-        line = self.handover_acceptance_ids.filtered(lambda l: l.employee_id == emp)[:1]
-        return bool(line and line.state == "pending")
+        line = self.handover_acceptance_ids.sudo().filtered(
+            lambda l: l.employee_id in matching_emps and l.state == "pending"
+        )[:1]
+        return bool(line)
 
     def _ensure_handover_ready_for_approval(self, raise_if_not_ready=True):
         blocked = self.env["hr.leave"]
         for leave in self:
-            if leave._get_handover_blocking_employees():
+            if not leave._handover_ready_for_approval():
                 blocked |= leave
         if not blocked:
             return True
@@ -1446,9 +1477,29 @@ class HrLeaveHandover(models.Model):
         threshold = fields.Datetime.now() - timedelta(hours=self._handover_escalation_after_hours())
         return requested_at <= threshold
 
+    def _handover_past_due_for_approval(self):
+        """Check if handover response timeout has elapsed or escalation has occurred.
+
+        When true, handover no longer blocks approval of the leave request.
+        """
+        self.ensure_one()
+        if (
+            self.state not in ("confirm", "validate1")
+            or self._should_skip_work_handover()
+            or not self.handover_employee_ids
+        ):
+            return False
+        if self.handover_escalated:
+            return True
+        requested_at = self.handover_requested_at or self.create_date
+        if not requested_at:
+            return False
+        threshold = fields.Datetime.now() - timedelta(hours=self._handover_escalation_after_hours())
+        return requested_at <= threshold
+
     def _handover_ready_for_approval(self):
         self.ensure_one()
-        return not self._get_handover_blocking_employees()
+        return not self._get_handover_blocking_employees() or self._handover_past_due_for_approval()
 
     def _handover_second_escalation_hours(self):
         self.ensure_one()
@@ -1980,14 +2031,31 @@ class HrLeaveHandover(models.Model):
             return not self.handover_escalated
         return False
 
+    def _notify_approval_ready_after_handover(self):
+        """Notify responsible approver or multi-step approver that leave is now ready for approval."""
+        self.ensure_one()
+        if not self._handover_ready_for_approval():
+            return
+        if self.validation_type == "employee_hr_responsibles" and self.state in ("confirm", "validate1"):
+            if getattr(self, "_split_group_is_multi_segment", None) and self._split_group_is_multi_segment():
+                self._get_split_group_primary_leave()._notify_split_group_approval_after_handover_if_needed()
+            else:
+                self._notify_responsible_current_turn()
+        elif self.validation_type == "multi_step_6" and self.state in ("confirm", "validate1"):
+            self._notify_multi_step_current_turn_via_approval_bot()
+
     def action_handover_accept(self):
         self.ensure_one()
-        emp = self.env.user.sudo().employee_id
-        if not emp or emp not in self.handover_employee_ids:
+        user_employees = self.env.user.sudo().employee_ids | self.env.user.sudo().employee_id
+        matching_emps = user_employees & self.handover_employee_ids
+        if not matching_emps:
             raise UserError(_("Chỉ những người nhận bàn giao đã chọn mới có thể phản hồi tại đây."))
-        line = self.handover_acceptance_ids.sudo().filtered(lambda l: l.employee_id == emp)[:1]
-        if not line or line.state != "pending":
+        line = self.handover_acceptance_ids.sudo().filtered(
+            lambda l: l.employee_id in matching_emps and l.state == "pending"
+        )[:1]
+        if not line:
             raise UserError(_("Bạn đã phản hồi yêu cầu bàn giao công việc này rồi."))
+        emp = line.employee_id
         line.write(
             {
                 "state": "accepted",
@@ -2007,13 +2075,7 @@ class HrLeaveHandover(models.Model):
         )
         if self._handover_ready_for_approval():
             self._notify_requester_handover_complete_via_bot()
-            if self.validation_type == "employee_hr_responsibles" and self.state in ("confirm", "validate1"):
-                if getattr(self, "_split_group_is_multi_segment", None) and self._split_group_is_multi_segment():
-                    self._get_split_group_primary_leave()._notify_split_group_approval_after_handover_if_needed()
-                else:
-                    self._notify_responsible_current_turn()
-            elif self.validation_type == "multi_step_6" and self.state in ("confirm", "validate1"):
-                self._notify_multi_step_current_turn_via_approval_bot()
+            self._notify_approval_ready_after_handover()
         return True
 
     def action_handover_apply_replacement(self):
@@ -2110,11 +2172,14 @@ class HrLeaveHandover(models.Model):
 
     def action_handover_refuse(self):
         self.ensure_one()
-        emp = self.env.user.sudo().employee_id
-        if not emp or emp not in self.handover_employee_ids:
+        user_employees = self.env.user.sudo().employee_ids | self.env.user.sudo().employee_id
+        matching_emps = user_employees & self.handover_employee_ids
+        if not matching_emps:
             raise UserError(_("Chỉ những người nhận bàn giao đã chọn mới có thể phản hồi tại đây."))
-        line = self.handover_acceptance_ids.sudo().filtered(lambda l: l.employee_id == emp)[:1]
-        if not line or line.state != "pending":
+        line = self.handover_acceptance_ids.sudo().filtered(
+            lambda l: l.employee_id in matching_emps and l.state == "pending"
+        )[:1]
+        if not line:
             raise UserError(_("Bạn đã phản hồi yêu cầu bàn giao công việc này rồi."))
         return {
             "name": _("Từ chối bàn giao công việc"),
@@ -2132,12 +2197,16 @@ class HrLeaveHandover(models.Model):
     def action_handover_refuse_with_reason(self, reason):
         self.ensure_one()
         reason = (reason or "").strip()
-        emp = self.env.user.sudo().employee_id
-        if not emp or emp not in self.handover_employee_ids:
+        user_employees = self.env.user.sudo().employee_ids | self.env.user.sudo().employee_id
+        matching_emps = user_employees & self.handover_employee_ids
+        if not matching_emps:
             raise UserError(_("Chỉ những người nhận bàn giao đã chọn mới có thể phản hồi tại đây."))
-        line = self.handover_acceptance_ids.sudo().filtered(lambda l: l.employee_id == emp)[:1]
-        if not line or line.state != "pending":
+        line = self.handover_acceptance_ids.sudo().filtered(
+            lambda l: l.employee_id in matching_emps and l.state == "pending"
+        )[:1]
+        if not line:
             raise UserError(_("Bạn đã phản hồi yêu cầu bàn giao công việc này rồi."))
+        emp = line.employee_id
         line.write(
             {
                 "state": "refused",
@@ -2232,6 +2301,8 @@ class HrLeaveHandover(models.Model):
             else:
                 leave._apply_handover_timeout_escalation_to_department_manager()
             leave._apply_handover_timeout_cancel_at_max_level()
+            if leave._handover_ready_for_approval():
+                leave._notify_approval_ready_after_handover()
 
 
     @api.depends(
@@ -2285,6 +2356,8 @@ class HrLeaveHandover(models.Model):
         "handover_acceptance_ids.state",
         "responsible_approval_line_ids.state",
         "multi_step_current",
+        "handover_escalated",
+        "handover_requested_at",
     )
     def _compute_status_display_label(self):
         selection = dict(self._fields["state"]._description_selection(self.env))
@@ -2293,7 +2366,7 @@ class HrLeaveHandover(models.Model):
             if leave.state == "validate":
                 label = _("Được duyệt")
             elif leave.state in ("confirm", "validate1"):
-                if leave._get_handover_blocking_employees():
+                if not leave._handover_ready_for_approval():
                     label = _("Đang chờ bàn giao công việc")
                 elif leave.validation_type == "employee_hr_responsibles" and leave.responsible_approval_line_ids.filtered(
                     lambda line: line.state == "pending"
@@ -2321,12 +2394,24 @@ class HrLeaveHandover(models.Model):
                     duration = int(duration)
                 leave.duration_display = _("%g ngày") % duration
 
+    @api.depends(
+        "handover_escalated",
+        "handover_requested_at",
+        "handover_employee_ids",
+        "handover_acceptance_ids.state",
+    )
     def _compute_can_multi_step_approve(self):
         super()._compute_can_multi_step_approve()
         for leave in self:
             if leave.can_multi_step_approve and not leave._handover_ready_for_approval():
                 leave.can_multi_step_approve = False
 
+    @api.depends(
+        "handover_escalated",
+        "handover_requested_at",
+        "handover_employee_ids",
+        "handover_acceptance_ids.state",
+    )
     def _compute_can_responsible_approve(self):
         super()._compute_can_responsible_approve()
         for leave in self:
@@ -2337,19 +2422,25 @@ class HrLeaveHandover(models.Model):
     def _check_approval_update(self, state, raise_if_not_possible=True):
         for holiday in self:
             if state in ("validate1", "validate", "refuse"):
-                blocking = holiday._get_handover_blocking_employees()
-                if blocking:
+                if not holiday._handover_ready_for_approval():
                     if raise_if_not_possible:
+                        names = ", ".join(holiday._get_handover_blocking_employees().mapped("name"))
                         raise UserError(
                             _(
                                 "Duyệt đơn đang bị khóa cho đến khi tất cả người nhận bàn giao chấp nhận. "
                                 "Hiện vẫn đang chờ: %(names)s."
                             )
-                            % {"names": ", ".join(blocking.mapped("name"))}
+                            % {"names": names}
                         )
                     return False
         return super()._check_approval_update(state, raise_if_not_possible=raise_if_not_possible)
 
+    @api.depends(
+        "handover_escalated",
+        "handover_requested_at",
+        "handover_employee_ids",
+        "handover_acceptance_ids.state",
+    )
     def _compute_can_approve(self):
         super()._compute_can_approve()
         for leave in self.filtered(
@@ -2366,6 +2457,8 @@ class HrLeaveHandover(models.Model):
         "department_id",
         "holiday_status_id",
         "handover_employee_ids",
+        "handover_escalated",
+        "handover_requested_at",
         "handover_acceptance_ids.state",
         "handover_acceptance_ids.employee_id",
     )
@@ -2379,6 +2472,12 @@ class HrLeaveHandover(models.Model):
             if leave.can_refuse and not leave._handover_ready_for_approval():
                 leave.can_refuse = False
 
+    @api.depends(
+        "handover_escalated",
+        "handover_requested_at",
+        "handover_employee_ids",
+        "handover_acceptance_ids.state",
+    )
     def _compute_can_validate(self):
         super()._compute_can_validate()
         for leave in self.filtered(
