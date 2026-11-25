@@ -23,6 +23,7 @@
                             <group>
                                 <field name="code"/>
                                 <field name="mien"/>
+                                <field name="store_place"/>
                                 <field name="manager_id" widget="many2one_avatar_employee"/>
                                 <field name="phone"/>
                                 <field name="color" widget="color_picker"/>
@@ -52,6 +53,7 @@
                     <field name="name"/>
                     <field name="code"/>
                     <field name="mien"/>
+                    <field name="store_place" optional="show"/>
                     <field name="manager_id" widget="many2one_avatar_employee"/>
                     <field name="city"/>
                     <field name="total_employee" string="Employees"/>
@@ -98,12 +100,14 @@
                     <field name="name" string="Store"/>
                     <field name="code"/>
                     <field name="mien"/>
+                    <field name="store_place"/>
                     <field name="manager_id"/>
                     <field name="city"/>
                     <separator/>
                     <filter string="Archived" name="inactive" domain="[('active', '=', False)]"/>
                     <group>
                         <filter string="Miền" name="group_mien" context="{'group_by': 'mien'}"/>
+                        <filter string="Store Place" name="group_store_place" context="{'group_by': 'store_place'}"/>
                         <filter string="Manager" name="group_manager" context="{'group_by': 'manager_id'}"/>
                         <filter string="City" name="group_city" context="{'group_by': 'city'}"/>
                         <filter string="Company" name="group_company" context="{'group_by': 'company_id'}" groups="base.group_multi_company"/>
