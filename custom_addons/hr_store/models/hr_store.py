@@ -118,24 +118,65 @@ class HrStore(models.Model):
         super().init()
         # Backfill store_place_id from legacy store_place string values if present
         self.env.cr.execute("""
-            UPDATE hr_store s
-            SET store_place_id = p.id
-            FROM hr_store_place p
-            WHERE s.store_place_id IS NULL
-              AND s.store_place IS NOT NULL
-              AND (s.store_place = p.name OR s.store_place = p.code)
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables 
+                WHERE table_name = 'hr_store_place'
+            ) AND EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name = 'hr_store' AND column_name = 'store_place'
+            );
         """)
+        if self.env.cr.fetchone()[0]:
+            self.env.cr.execute("""
+                SELECT data_type 
+                FROM information_schema.columns 
+                WHERE table_name = 'hr_store_place' AND column_name = 'name';
+            """)
+            row = self.env.cr.fetchone()
+            if row and row[0] == 'jsonb':
+                self.env.cr.execute("""
+                    UPDATE hr_store s
+                    SET store_place_id = p.id
+                    FROM hr_store_place p
+                    WHERE s.store_place_id IS NULL
+                      AND s.store_place IS NOT NULL
+                      AND (
+                          s.store_place = COALESCE(p.name->>'vi_VN', p.name->>'en_US', p.name->>'default')
+                          OR EXISTS (SELECT 1 FROM jsonb_each_text(p.name) AS kv WHERE kv.value = s.store_place)
+                          OR s.store_place = p.code
+                      )
+                """)
+            else:
+                self.env.cr.execute("""
+                    UPDATE hr_store s
+                    SET store_place_id = p.id
+                    FROM hr_store_place p
+                    WHERE s.store_place_id IS NULL
+                      AND s.store_place IS NOT NULL
+                      AND (s.store_place = p.name OR s.store_place = p.code)
+                """)
+
         # Backfill hr_employee_managed_store_rel from legacy manager_id if present
         self.env.cr.execute("""
-            INSERT INTO hr_employee_managed_store_rel (store_id, employee_id)
-            SELECT s.id, s.manager_id
-            FROM hr_store s
-            WHERE s.manager_id IS NOT NULL
-              AND NOT EXISTS (
-                  SELECT 1 FROM hr_employee_managed_store_rel rel
-                  WHERE rel.store_id = s.id AND rel.employee_id = s.manager_id
-              )
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables 
+                WHERE table_name = 'hr_employee_managed_store_rel'
+            ) AND EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name = 'hr_store' AND column_name = 'manager_id'
+            );
         """)
+        if self.env.cr.fetchone()[0]:
+            self.env.cr.execute("""
+                INSERT INTO hr_employee_managed_store_rel (store_id, employee_id)
+                SELECT s.id, s.manager_id
+                FROM hr_store s
+                WHERE s.manager_id IS NOT NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM hr_employee_managed_store_rel rel
+                      WHERE rel.store_id = s.id AND rel.employee_id = s.manager_id
+                  )
+            """)
 
     @api.depends('member_ids')
     def _compute_total_employee(self):

@@ -120,3 +120,8 @@ class TestHrStore(TransactionCase):
         res = store.web_read(spec)
         self.assertTrue(res)
         self.assertEqual(res[0]['name'], 'Store Web Read Test')
+
+    def test_store_init_safe_backfill(self):
+        """Test init() execution runs cleanly without UndefinedTable or jsonb operator errors."""
+        self.Store.init()
+
