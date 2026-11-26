@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <record id="view_hr_store_place_form" model="ir.ui.view">
+            <field name="name">hr.store.place.form</field>
+            <field name="model">hr.store.place</field>
+            <field name="arch" type="xml">
+                <form string="Store Place">
+                    <sheet>
+                        <div class="oe_button_box" name="button_box" invisible="not id">
+                            <button class="oe_stat_button" name="action_view_stores" type="object" icon="fa-shopping-cart">
+                                <field string="Cửa hàng" name="store_count" widget="statinfo"/>
+                            </button>
+                        </div>
+                        <widget name="web_ribbon" title="Archived" bg_color="text-bg-danger" invisible="active"/>
+                        <field name="active" invisible="1"/>
+                        <div class="oe_title">
+                            <label for="name" string="Tên Store Place"/>
+                            <h1>
+                                <field name="name" placeholder="e.g. GO, TTTM, AEON..."/>
+                            </h1>
+                        </div>
+                        <group>
+                            <group>
+                                <field name="code" placeholder="e.g. GO, TTTM..."/>
+                                <field name="sequence"/>
+                            </group>
+                            <group>
+                                <field name="description" placeholder="Ghi chú thêm..."/>
+                            </group>
+                        </group>
+                    </sheet>
+                </form>
+            </field>
+        </record>
+
+        <record id="view_hr_store_place_tree" model="ir.ui.view">
+            <field name="name">hr.store.place.list</field>
+            <field name="model">hr.store.place</field>
+            <field name="arch" type="xml">
+                <list string="Store Places" editable="bottom">
+                    <field name="sequence" widget="handle"/>
+                    <field name="name"/>
+                    <field name="code"/>
+                    <field name="store_count" string="Số cửa hàng" readonly="1"/>
+                    <field name="description"/>
+                    <field name="active" widget="boolean_toggle"/>
+                </list>
+            </field>
+        </record>
+
+        <record id="view_hr_store_place_search" model="ir.ui.view">
+            <field name="name">hr.store.place.search</field>
+            <field name="model">hr.store.place</field>
+            <field name="arch" type="xml">
+                <search string="Store Places">
+                    <field name="name" string="Store Place"/>
+                    <field name="code"/>
+                    <separator/>
+                    <filter string="Đã lưu trữ" name="inactive" domain="[('active', '=', False)]"/>
+                </search>
+            </field>
+        </record>
+
+        <record id="hr_store_place_action" model="ir.actions.act_window">
+            <field name="name">Store Places</field>
+            <field name="res_model">hr.store.place</field>
+            <field name="view_mode">list,form</field>
+            <field name="search_view_id" ref="view_hr_store_place_search"/>
+            <field name="help" type="html">
+                <p class="o_view_nocontent_smiling_face">
+                    Tạo Store Place mới
+                </p>
+                <p>
+                    Quản lý danh mục vị trí / loại mặt bằng cửa hàng (nguồn cấu hình chuẩn cho Store).
+                </p>
+            </field>
+        </record>
+    </data>
+</odoo>

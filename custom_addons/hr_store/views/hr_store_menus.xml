@@ -8,5 +8,13 @@
             parent="hr.menu_config_employee"
             groups="hr.group_hr_manager"
             sequence="4"/>
+
+        <menuitem
+            id="menu_hr_store_place"
+            name="Store Places"
+            action="hr_store_place_action"
+            parent="hr.menu_config_employee"
+            groups="hr.group_hr_manager"
+            sequence="5"/>
     </data>
 </odoo>

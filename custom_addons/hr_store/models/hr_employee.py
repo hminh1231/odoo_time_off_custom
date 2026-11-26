@@ -22,3 +22,12 @@ class HrEmployee(models.Model):
         tracking=True,
         help='Các cửa hàng mà nhân viên này quản lí.',
     )
+    accountant_store_ids = fields.Many2many(
+        'hr.store',
+        'hr_store_accountant_rel',
+        'employee_id',
+        'store_id',
+        string='Cửa hàng kế toán',
+        readonly=True,
+        help='Các cửa hàng mà nhân viên này phụ trách kế toán.',
+    )

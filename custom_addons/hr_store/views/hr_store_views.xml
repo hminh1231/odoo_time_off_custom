@@ -23,8 +23,9 @@
                             <group>
                                 <field name="code"/>
                                 <field name="mien"/>
-                                <field name="store_place"/>
-                                <field name="manager_id" widget="many2one_avatar_employee"/>
+                                <field name="store_place_id" options="{'no_create_edit': False}"/>
+                                <field name="manager_ids" widget="many2many_avatar_employee" options="{'no_create_edit': True}"/>
+                                <field name="accountant_ids" widget="many2many_avatar_employee" options="{'no_create_edit': True}"/>
                                 <field name="phone"/>
                                 <field name="color" widget="color_picker"/>
                             </group>
@@ -53,8 +54,9 @@
                     <field name="name"/>
                     <field name="code"/>
                     <field name="mien"/>
-                    <field name="store_place" optional="show"/>
-                    <field name="manager_id" widget="many2one_avatar_employee"/>
+                    <field name="store_place_id" optional="show"/>
+                    <field name="manager_ids" widget="many2many_tags" optional="show"/>
+                    <field name="accountant_ids" widget="many2many_tags" optional="show"/>
                     <field name="city"/>
                     <field name="total_employee" string="Employees"/>
                     <field name="company_id" groups="base.group_multi_company"/>
@@ -75,7 +77,8 @@
                             <div class="text-muted ms-2" t-if="record.code.raw_value">
                                 <i class="fa fa-barcode" title="Code"/> <field name="code"/>
                             </div>
-                            <field name="manager_id" widget="many2one_avatar_employee" options="{'display_avatar_name': True}" readonly="1" class="text-muted ms-2"/>
+                            <field name="manager_ids" widget="many2many_avatar_employee" readonly="1" class="text-muted ms-2"/>
+                            <field name="accountant_ids" widget="many2many_avatar_employee" readonly="1" class="ms-2"/>
                             <div class="small mt-1 ms-2" groups="base.group_multi_company">
                                 <i class="fa fa-building-o" title="Company"/> <field name="company_id"/>
                             </div>
@@ -100,15 +103,15 @@
                     <field name="name" string="Store"/>
                     <field name="code"/>
                     <field name="mien"/>
-                    <field name="store_place"/>
-                    <field name="manager_id"/>
+                    <field name="store_place_id"/>
+                    <field name="manager_ids"/>
+                    <field name="accountant_ids"/>
                     <field name="city"/>
                     <separator/>
                     <filter string="Archived" name="inactive" domain="[('active', '=', False)]"/>
                     <group>
                         <filter string="Miền" name="group_mien" context="{'group_by': 'mien'}"/>
-                        <filter string="Store Place" name="group_store_place" context="{'group_by': 'store_place'}"/>
-                        <filter string="Manager" name="group_manager" context="{'group_by': 'manager_id'}"/>
+                        <filter string="Store Place" name="group_store_place" context="{'group_by': 'store_place_id'}"/>
                         <filter string="City" name="group_city" context="{'group_by': 'city'}"/>
                         <filter string="Company" name="group_company" context="{'group_by': 'company_id'}" groups="base.group_multi_company"/>
                     </group>
